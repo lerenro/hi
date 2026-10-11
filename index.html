@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Причудливая Жизнь</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Rubik:wght@400;500;700;900&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="labels"></div>
+<div id="ui"></div>
+
+<div id="title" class="screen" hidden>
+  <div class="title-inner">
+    <div class="t-gogo" aria-hidden="true"><span>ゴ</span><span>ゴ</span><span>ゴ</span></div>
+    <h1 class="logo"><span class="l1">Причудливая</span><span class="l2">Жизнь</span></h1>
+    <p class="t-sub">Фанатская 3D-игра по мотивам JoJo's Bizarre Adventure</p>
+    <ul class="t-feats">
+      <li>Огромный мир: Морио, Неаполь, Каир, Лондон, пустыня Аризоны и ещё 13 мест</li>
+      <li>78 стендов с эволюциями и Реквиемами: Стрела, диски, Святой Труп, Дьявольская ладонь</li>
+      <li>Хамон, вампиризм, Вращение, Совершенная форма жизни</li>
+      <li>Обычная жизнь и случайная судьба: шесть сюжетных глав в новом порядке каждый раз</li>
+    </ul>
+    <div class="t-btns">
+      <button class="btn gold big" id="t-new">Новая жизнь</button>
+      <button class="btn big" id="t-continue" hidden>Продолжить</button>
+      <button class="btn" id="t-help">Управление</button>
+    </div>
+    <div id="t-helpbox" hidden>
+      <p><b>WASD</b> — ходьба · <b>Мышь</b> — камера (клик — захват) · <b>ЛКМ</b> — удар · <b>ПКМ/X</b> — тяжёлый удар · <b>Пробел</b> — рывок · <b>Shift</b> — бег</p>
+      <p><b>G</b> — призвать стенд · <b>Q E R</b> — способности стенда · <b>1 2 3</b> — хамон/вампир/вращение · <b>V</b> — дыхание · <b>T</b> — стиль · <b>H</b> — лошадь</p>
+      <p><b>F</b> — говорить / войти · <b>I</b> инвентарь · <b>P</b> персонаж · <b>C</b> стенд · <b>L</b> журнал · <b>M</b> карта · <b>K</b> стендопедия · <b>Esc</b> меню</p>
+      <p>На телефоне — джойстик слева, кнопки справа, камера — свайпом.</p>
+    </div>
+  </div>
+</div>
+
+<div id="creator" class="screen" hidden>
+  <div class="cr-wrap">
+    <div class="cr-left">
+      <h2 class="cr-h">Создай своего персонажа</h2>
+      <canvas id="cr-preview"></canvas>
+      <div class="row">
+        <button class="btn" id="cr-back">Назад</button>
+        <button class="btn" id="cr-rand">Случайно</button>
+        <button class="btn gold" id="cr-go">Начать жизнь</button>
+      </div>
+    </div>
+    <div class="cr-right" id="cr-form"></div>
+  </div>
+</div>
+
+<div id="loading" hidden><div class="spin"></div><span>Загрузка…</span></div>
+
+<script src="vendor/three.min.js"></script>
+<script src="js/util.js"></script>
+<script src="js/data_stands.js"></script>
+<script src="js/data_items.js"></script>
+<script src="js/data_world.js"></script>
+<script src="js/world.js"></script>
+<script src="js/render3d.js"></script>
+<script src="js/models.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/abilities.js"></script>
+<script src="js/player.js"></script>
+<script src="js/story.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
