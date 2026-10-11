@@ -720,22 +720,25 @@
         <label class="opt"><span>Чувствительность мыши</span><input type="range" id="o-sens" min="0.3" max="2.5" step="0.1"></label>
         <label class="opt"><span>Звук</span><input type="checkbox" id="o-snd"></label>
         <label class="opt"><span>Инверсия по вертикали</span><input type="checkbox" id="o-inv"></label>
+        <label class="opt"><span>Камера сама разворачивается за спину</span><input type="checkbox" id="o-fol"></label>
       </div></div>`;
       $('#o-q').value = String(set.quality);
       $('#o-sh').checked = set.shadows;
       $('#o-sens').value = set.sens;
       $('#o-snd').checked = set.sound;
       $('#o-inv').checked = !!set.invert;
+      $('#o-fol').checked = !!set.follow;
       const apply = () => {
         set.quality = +$('#o-q').value;
         set.shadows = $('#o-sh').checked;
         set.sens = +$('#o-sens').value;
         set.sound = $('#o-snd').checked;
         set.invert = $('#o-inv').checked;
+        set.follow = $('#o-fol').checked;
         UI.sound = set.sound;
         J.Game.applySettings();
       };
-      ['o-q', 'o-sh', 'o-sens', 'o-snd', 'o-inv'].forEach((id) => ($('#' + id).onchange = apply));
+      ['o-q', 'o-sh', 'o-sens', 'o-snd', 'o-inv', 'o-fol'].forEach((id) => ($('#' + id).onchange = apply));
       $('#m-save').onclick = () => J.Game.save(true);
       $('#m-load').onclick = () => J.Game.loadFromStore();
       $('#m-help').onclick = () => UI.showHelp();
@@ -859,7 +862,7 @@
   UI.showHelp = function () {
     UI.closePanel();
     UI.say('Как играть', [
-      'WASD — движение (относительно камеры). Мышь — камера (кликни по игре, чтобы захватить мышь; Esc — отпустить). Без захвата — тяни правой кнопкой. Колёсико — приближение.',
+      'WASD — движение (относительно камеры). Мышь — камера (кликни по игре, чтобы захватить мышь; Esc — отпустить). Без захвата — тяни правой кнопкой или крути стрелками ←/→. Колёсико — приближение.',
       'ЛКМ — удар (стендом, если он есть). ПКМ или X — тяжёлый удар. Пробел — рывок. Shift — бег. G — призвать стенд. Q / E / R — способности стенда.',
       '1 / 2 / 3 — приёмы стиля (хамон, вампиризм, вращение). V — дыхание хамона (восстанавливает дыхание, лечит). T — сменить стиль. H — сесть на лошадь.',
       'F — говорить с людьми и входить в здания. В зданиях: работа, еда, сон, магазины, вокзалы для быстрых поездок.',

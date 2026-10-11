@@ -25,17 +25,18 @@
     }
   };
   Input.rotateCam = function (dx, dy) {
-    const c = J.R3.cam;
     const s = Game.settings.sens;
-    c.yaw += dx * 0.0026 * s;
-    c.pitch = J.clamp(c.pitch + dy * 0.0022 * s * (Game.settings.invert ? -1 : 1), 0.05, 1.3);
+    J.R3.rotateCam(dx * 0.0024 * s, dy * 0.002 * s * (Game.settings.invert ? -1 : 1));
+  };
+  Input.applyFollow = function () {
+    J.R3.cam.follow = Input.touch || Input.lockFailed || !!Game.settings.follow;
   };
   Input.init = function () {
     const cv = document.getElementById('game');
     Input.touch = 'ontouchstart' in window || (window.matchMedia && matchMedia('(pointer: coarse)').matches);
     window.addEventListener('keydown', (e) => {
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
-      if (['Space', 'Tab', 'F1', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();
+      if (['Space', 'Tab', 'F1', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
       if (e.repeat && !['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) return;
       Input.keys[e.code] = true;
       Game.onKey(e.code);
@@ -83,11 +84,17 @@
     });
     cv.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const c = J.R3.cam;
-      c.dist = J.clamp(c.dist * (e.deltaY > 0 ? 1.1 : 0.9), 4, 22);
+      J.R3.zoomCam(e.deltaY > 0 ? 1.1 : 0.9);
     }, { passive: false });
     document.addEventListener('pointerlockchange', () => {
       Input.locked = document.pointerLockElement === cv;
+    });
+    // захват мыши запрещён (например, во встроенном фрейме) — включаем следящую камеру
+    document.addEventListener('pointerlockerror', () => {
+      if (Input.lockFailed) return;
+      Input.lockFailed = true;
+      Input.applyFollow();
+      J.UI.toast('Захват мыши недоступен: камера сама держится за спиной. Поворот — правой кнопкой мыши или стрелками ←/→.', 'muted');
     });
   };
   Input.touchPress = function (k, down) {
@@ -182,8 +189,8 @@
   };
   Game.moveInput = function () {
     const k = Input.keys;
-    let mx = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0);
-    let my = (k.KeyS || k.ArrowDown ? 1 : 0) - (k.KeyW || k.ArrowUp ? 1 : 0);
+    let mx = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0);
+    let my = (k.KeyS ? 1 : 0) - (k.KeyW ? 1 : 0);
     if (Input.touch && (Input.tmx || Input.tmy)) {
       mx = Input.tmx;
       my = Input.tmy;
@@ -192,11 +199,12 @@
   };
 
   // ---------- Настройки ----------
-  Game.settings = Object.assign({ quality: 1, shadows: true, sens: 1, sound: true, invert: false, lock: true }, J.store.get(SET_KEY) || {});
+  Game.settings = Object.assign({ quality: 1, shadows: true, sens: 1, sound: true, invert: false, lock: true, follow: false }, J.store.get(SET_KEY) || {});
   Game.applySettings = function () {
     J.store.set(SET_KEY, Game.settings);
     J.R3.setQuality(Game.settings.quality, Game.settings.shadows);
     J.UI.sound = Game.settings.sound;
+    Input.applyFollow();
   };
 
   // ---------- Запуск ----------
@@ -210,9 +218,11 @@
     J.R3.shadows = Game.settings.shadows;
     J.R3.init(document.getElementById('game'));
     J.R3.setQuality(Game.settings.quality, Game.settings.shadows);
+    J.R3.warmup();
     J.UI.build();
     J.UI.sound = Game.settings.sound;
     Input.init();
+    Input.applyFollow();
     if (Input.touch) J.UI.initTouch();
     document.getElementById('touch').hidden = true;
     Game.state = 'title';
@@ -347,9 +357,10 @@
     const c = J.R3.cam;
     c.tx = p.x;
     c.tz = p.y;
-    c.dist = Input.touch ? 8.5 : 8;
-    c.pitch = 0.4;
-    c.cut = 1;
+    c.dist = Input.touch ? 6.5 : 5.6;
+    c.arm = c.dist;
+    c.pitch = 0.24;
+    c.idle = 9;
     J.R3.clearAll();
     J.R3.updateChunks(p.x, p.y, true);
     Game.popT = 0;
@@ -687,12 +698,11 @@
     const c = J.R3.cam;
     c.yaw += dt * 0.05;
     c.pitch = 0.62;
-    c.dist = 26;
     G.titleCam.x += Math.cos(G.t * 0.05) * dt * 1.5;
     G.titleCam.y += Math.sin(G.t * 0.04) * dt * 1.5;
     J.R3.updateChunks(G.titleCam.x, G.titleCam.y);
     J.R3.setTime(1140 + Math.sin(G.t * 0.02) * 60, G.titleCam.x, G.titleCam.y, 'temperate', null);
-    J.R3.updateCamera(G.titleCam.x, G.titleCam.y, 0, dt);
+    J.R3.updateCamera(G.titleCam.x, G.titleCam.y, 0, dt, { mode: 'title' });
     J.R3.render();
   };
 
@@ -784,11 +794,14 @@
     if (!wth && rg.biome === 'tundra') wth = 'snow';
     R3.setTime(G.time, R3.cam.tx, R3.cam.tz, rg.biome, wth);
     R3.updateWeather(dt, wth === 'fog' ? null : wth, R3.cam.tx, R3.cam.tz);
-    // сенсорный режим: камера плавно идёт за игроком
-    if (Input.touch && !blocking && Math.hypot(p.vx, p.vy) > 0.5 && !Input.touchHold.atk) {
-      R3.cam.yaw += J.angDiff(R3.cam.yaw, p.face) * Math.min(1, dt * 0.8);
+    // стрелки вращают камеру
+    if (!blocking) {
+      const k = Input.keys;
+      const ax = (k.ArrowRight ? 1 : 0) - (k.ArrowLeft ? 1 : 0), ay = (k.ArrowDown ? 1 : 0) - (k.ArrowUp ? 1 : 0);
+      if (ax || ay) R3.rotateCam(ax * 2.4 * dt * Game.settings.sens, ay * 1.4 * dt * Game.settings.sens);
     }
-    R3.updateCamera(p.x, p.y, G.world.groundY(p.x, p.y) + (p.z || 0), dt);
+    const moving = !blocking && Math.hypot(p.vx, p.vy) > 0.5 && !Input.touchHold.atk && !Input.mouse.l;
+    R3.updateCamera(p.x, p.y, G.world.groundY(p.x, p.y) + (p.z || 0), dt, { mode: 'foot', heading: p.face, moving });
     R3.render();
     Game.updateLabels();
     UI.update(dt);

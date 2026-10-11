@@ -13,9 +13,9 @@
   // Общие примитивы (без индексов — для быстрого копирования)
   const NI = (g) => (g.index ? g.toNonIndexed() : g);
   const PR = {
-    sph: NI(new THREE.SphereGeometry(1, 14, 10)),
-    sphLo: NI(new THREE.SphereGeometry(1, 9, 6)),
-    cap: NI(new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.56)),
+    sph: NI(new THREE.SphereGeometry(1, 12, 8)),
+    sphLo: NI(new THREE.SphereGeometry(1, 8, 5)),
+    cap: NI(new THREE.SphereGeometry(1, 14, 7, 0, Math.PI * 2, 0, Math.PI * 0.56)),
     box: NI(new THREE.BoxGeometry(1, 1, 1)),
     cone: NI(new THREE.ConeGeometry(1, 1, 8)),
     cone4: NI(new THREE.ConeGeometry(1, 1, 4)),
@@ -25,7 +25,7 @@
   const tcache = {};
   const taper = (rt, rb) => {
     const k = rt.toFixed(3) + '/' + rb.toFixed(3);
-    return tcache[k] || (tcache[k] = NI(new THREE.CylinderGeometry(rt, rb, 1, 12, 1)));
+    return tcache[k] || (tcache[k] = NI(new THREE.CylinderGeometry(rt, rb, 1, 10, 1)));
   };
   // эллипсоид
   const ell = (gb, c, x, y, z, rx, ry, rz, ax = 0, ay = 0, az = 0, lo) => gb.geo(lo ? PR.sphLo : PR.sph, M4(x, y, z, rx, ry, rz, ax, ay, az), c);
@@ -39,8 +39,11 @@
     muscular: { sh: 0.25, chest: 0.235, waist: 0.155, hip: 0.165, arm: 0.068, leg: 0.1 },
   };
 
-  // Каркас: возвращает части с точками сочленения
-  function makeRig(spec) {
+  // Геометрии каркасов кэшируются по форме (пол, телосложение, причёска...) — новый персонаж почти бесплатен
+  const geoCache = new Map();
+  function rigGeos(spec) {
+    const hit = spec.cacheKey && geoCache.get(spec.cacheKey);
+    if (hit) return hit;
     const fem = spec.gender === 'f';
     const b = Object.assign({}, BUILDS[spec.build || 'normal']);
     if (fem) {
@@ -51,52 +54,67 @@
       b.arm *= 0.84;
       b.leg *= 0.95;
     }
+    const one = (fn) => {
+      const gb = new GB();
+      fn(gb);
+      return gb.build();
+    };
+    const G = {
+      b,
+      torso: one((gb) => {
+        spec.torso(gb, b, fem);
+        spec.head(gb, b, fem);
+      }),
+      thigh: [-1, 1].map((sx) => one((gb) => spec.thigh(gb, b, sx))),
+      shin: [-1, 1].map((sx) => one((gb) => spec.shin(gb, b, sx))),
+      upper: [-1, 1].map((sx) => one((gb) => spec.upper(gb, b, sx))),
+      fore: [-1, 1].map((sx) => one((gb) => spec.fore(gb, b, sx))),
+      extra: null,
+    };
+    if (spec.extra) {
+      const gb = new GB();
+      spec.extra(gb);
+      if (!gb.empty) G.extra = gb.build();
+    }
+    if (spec.cacheKey) geoCache.set(spec.cacheKey, G);
+    return G;
+  }
+  R3.rigCacheSize = () => geoCache.size;
+
+  // Каркас: возвращает части с точками сочленения
+  function makeRig(spec) {
+    const G = rigGeos(spec);
+    const b = G.b;
     const mat = spec.material;
     const g = new THREE.Group();
     const body = new THREE.Group();
     g.add(body);
-    const mk = (gb) => {
-      const m = new THREE.Mesh(gb.build(), mat);
+    const mk = (geo) => {
+      const m = new THREE.Mesh(geo, mat);
       m.castShadow = true;
       return m;
     };
-    // --- туловище и голова (одна сетка) ---
-    const tb = new GB();
-    spec.torso(tb, b, fem);
-    spec.head(tb, b, fem);
-    const torso = mk(tb);
+    const torso = mk(G.torso);
     body.add(torso);
-    // --- ноги ---
-    const legs = ['L', 'R'].map((side) => {
-      const sx = side === 'L' ? -1 : 1;
-      const tg = new GB();
-      spec.thigh(tg, b, sx);
-      const thigh = mk(tg);
-      thigh.position.set(sx * b.hip * 0.56, 0.94, 0);
-      const sg = new GB();
-      spec.shin(sg, b, sx);
-      const shin = mk(sg);
+    const legs = [0, 1].map((i) => {
+      const thigh = mk(G.thigh[i]);
+      thigh.position.set((i ? 1 : -1) * b.hip * 0.56, 0.94, 0);
+      const shin = mk(G.shin[i]);
       shin.position.set(0, -0.44, 0);
       thigh.add(shin);
       body.add(thigh);
       return { thigh, shin };
     });
-    // --- руки ---
-    const arms = ['L', 'R'].map((side) => {
-      const sx = side === 'L' ? -1 : 1;
-      const ug = new GB();
-      spec.upper(ug, b, sx);
-      const upper = mk(ug);
-      upper.position.set(sx * (b.sh + 0.035), 1.425, 0);
-      const fg = new GB();
-      spec.fore(fg, b, sx);
-      const fore = mk(fg);
+    const arms = [0, 1].map((i) => {
+      const upper = mk(G.upper[i]);
+      upper.position.set((i ? 1 : -1) * (b.sh + 0.035), 1.425, 0);
+      const fore = mk(G.fore[i]);
       fore.position.set(0, -0.29, 0);
       upper.add(fore);
       body.add(upper);
       return { upper, fore };
     });
-    if (spec.extra) spec.extra(arms[1].fore, body, b);
+    if (G.extra) arms[1].fore.add(mk(G.extra));
     return {
       group: g, body, torso,
       legL: legs[0].thigh, legR: legs[1].thigh, shinL: legs[0].shin, shinR: legs[1].shin,
@@ -105,8 +123,25 @@
     };
   }
 
+  // Материал с палитрой: цвет вершины хранит номер слота (r), шейдер берёт цвет из uniform-массива
+  const SLOT = (i) => ({ r: i, g: 0, b: 0 });
+  R3.paletteMaterial = function (colors, opts) {
+    const m = new THREE.MeshLambertMaterial(Object.assign({ vertexColors: true }, opts || {}));
+    const pal = colors.map((c) => (c && c.isColor ? c.clone() : new THREE.Color(c)));
+    while (pal.length < 16) pal.push(new THREE.Color(1, 0, 1));
+    m.userData.palette = { value: pal };
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.palette = m.userData.palette;
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform vec3 palette[16];')
+        .replace('#include <color_vertex>', 'vColor = palette[int(color.r + 0.5)];');
+    };
+    m.customProgramCacheKey = () => 'jj-palette';
+    return m;
+  };
+
   // ---------- Человек ----------
-  function hair(gb, style, H, hc, accent) {
+  function hair(gb, style, H) {
     const top = 1.695;
     const capH = () => gb.geo(PR.cap, M4(0, top + 0.004, -0.008, 0.112, 0.132, 0.124, -0.42), H);
     switch (style) {
@@ -121,14 +156,14 @@
         ell(gb, H, 0.1, top - 0.02, -0.01, 0.022, 0.06, 0.06);
         break;
       case 'cap': {
-        const hatC = col('#1f2a44');
+        const hatC = SLOT(13);
         capH();
         ell(gb, H, 0, top - 0.05, -0.085, 0.1, 0.09, 0.05);
         tube(gb, hatC, 0, top + 0.12, -0.01, 0.118, 0.124, 0.085);
         tube(gb, hatC, 0, top + 0.05, 0.035, 0.13, 0.13, 0.014, 1.35, 0.12);
-        box(gb, col('#f2c230'), -0.04, top + 0.085, 0.115, 0.03, 0.03, 0.01);
+        box(gb, SLOT(10), -0.04, top + 0.085, 0.115, 0.03, 0.03, 0.01);
         // цепочка Джотаро
-        tube(gb, col('#c9a84a'), 0.06, top + 0.1, 0.0, 0.123, 0.123, 0.01);
+        tube(gb, SLOT(14), 0.06, top + 0.1, 0.0, 0.123, 0.123, 0.01);
         break;
       }
       case 'curls':
@@ -166,14 +201,18 @@
   }
 
   R3.buildHuman = function (look, scale = 1) {
-    const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
-    const S = col(look.skin), SD = S.clone().multiplyScalar(0.86);
-    const TOP = col(look.top), TOPD = TOP.clone().multiplyScalar(0.72);
-    const BOT = col(look.bottom), BOTD = BOT.clone().multiplyScalar(0.8);
-    const H = col(look.hairColor);
-    const DARK = col('#1d1a22'), WHITE = col('#f4f4f4'), EYE = col(look.eye || '#2a2230'), GOLD = col('#f2c230'), LIP = SD.clone().lerp(col('#c0605a'), 0.35);
-    const SHOE = col(look.shoe || '#2a2228');
+    const skin = col(look.skin), top = col(look.top), bot = col(look.bottom);
+    const skinD = skin.clone().multiplyScalar(0.86);
+    // палитра: 0 кожа, 1 кожа-тень, 2 верх, 3 верх-тёмный, 4 низ, 5 низ-тёмный, 6 волосы, 7 белки, 8 глаза,
+    // 9 тёмный, 10 золото, 11 губы, 12 обувь, 13 шапка, 14 цепочка
+    const mat = R3.paletteMaterial([
+      skin, skinD, top, top.clone().multiplyScalar(0.72), bot, bot.clone().multiplyScalar(0.8), col(look.hairColor), '#f4f4f4', look.eye || '#2a2230',
+      '#1d1a22', '#f2c230', skinD.clone().lerp(col('#c0605a'), 0.35), look.shoe || '#2a2228', '#1f2a44', '#c9a84a',
+    ]);
+    const S = SLOT(0), SD = SLOT(1), TOP = SLOT(2), TOPD = SLOT(3), BOT = SLOT(4), BOTD = SLOT(5), H = SLOT(6);
+    const WHITE = SLOT(7), EYE = SLOT(8), DARK = SLOT(9), GOLD = SLOT(10), LIP = SLOT(11), SHOE = SLOT(12);
     const v = makeRig({
+      cacheKey: ['h', look.gender, look.build || 'normal', look.hair, look.coat ? 1 : 0].join('|'),
       gender: look.gender,
       build: look.build,
       material: mat,
@@ -249,6 +288,7 @@
     const mat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.88, emissive: C1.clone().multiplyScalar(0.32) });
     const head = sd.head;
     const v = makeRig({
+      cacheKey: 'stand|' + sd.id,
       gender: 'm',
       build: 'muscular',
       material: mat,
@@ -364,8 +404,7 @@
         ell(gb, C2, 0, -0.29, 0.005, 0.045, 0.07, 0.035);
         if (head === 'vines') for (let k = 0; k < 3; k++) gb.geo(PR.torus, M4(0, -0.04 - k * 0.07, 0, b.arm * 0.95, b.arm * 0.95, b.arm * 0.95, Math.PI / 2), C2);
       },
-      extra(foreR) {
-        const gb = new GB();
+      extra(gb) {
         if (sd.extra === 'sword' || sd.extra === 'arrow') {
           box(gb, col('#e8eefc'), 0, -0.3, 0.5, 0.02, 0.035, 0.9);
           box(gb, C2, 0, -0.3, 0.06, 0.12, 0.03, 0.03);
@@ -374,9 +413,7 @@
           box(gb, col('#e8eefc'), 0, 0.42, 0.3, 0.015, 0.08, 0.5);
         } else if (sd.extra === 'rod') {
           box(gb, C2, 0, -0.3, 0.7, 0.015, 0.015, 1.4);
-        } else return;
-        const m = new THREE.Mesh(gb.build(), mat);
-        foreR.add(m);
+        }
       },
     });
     v.kind = 'human';

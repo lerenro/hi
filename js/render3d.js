@@ -284,7 +284,7 @@
         if (Math.abs(dx) === VR && Math.abs(dy) === VR && VR > 1) continue;
         const k = cx + ',' + cy;
         need.add(k);
-        if (!R3.chunks.has(k) && !R3.queue.some((q) => q.k === k)) R3.queue.push({ k, cx, cy });
+        if (!R3.chunks.has(k) && !R3.queue.some((q) => q.k === k) && !(R3.pending && R3.pending.k === k)) R3.queue.push({ k, cx, cy });
       }
     for (const [k, c] of R3.chunks) {
       if (!need.has(k)) {
@@ -294,10 +294,21 @@
     }
     R3.queue = R3.queue.filter((q) => need.has(q.k));
     R3.queue.sort((a, b) => Math.hypot(a.cx - ccx, a.cy - ccy) - Math.hypot(b.cx - ccx, b.cy - ccy));
-    let budget = force ? 99 : 1;
-    while (budget-- > 0 && R3.queue.length) {
-      const q = R3.queue.shift();
-      R3.chunks.set(q.k, R3.buildChunk(q.cx, q.cy));
+    if (R3.pending && !need.has(R3.pending.k)) R3.pending = null;
+    // строим по частям в пределах бюджета времени на кадр
+    const budget = force ? 1e9 : R3.quality > 0 ? 5 : 3.5;
+    const t0 = performance.now();
+    while (R3.pending || R3.queue.length) {
+      if (!R3.pending) {
+        const q = R3.queue.shift();
+        R3.pending = { k: q.k, gen: R3.buildChunkGen(q.cx, q.cy) };
+      }
+      const r = R3.pending.gen.next();
+      if (r.done) {
+        R3.chunks.set(R3.pending.k, r.value);
+        R3.pending = null;
+      }
+      if (performance.now() - t0 > budget) break;
     }
   };
 
@@ -313,10 +324,12 @@
   R3.clearAll = function () {
     for (const [k, c] of R3.chunks) R3.dropChunk(k, c);
     R3.queue = [];
+    R3.pending = null;
   };
 
   const UNDER = { [0]: '#245a80', [1]: '#4f8aa0' };
-  R3.buildChunk = function (cx, cy) {
+  // Генератор: строит чанк по частям, отдавая управление между этапами (без фризов)
+  R3.buildChunkGen = function* (cx, cy) {
     const w = J.G.world;
     const T = J.T, O = J.O;
     const x0 = cx * CH, y0 = cy * CH;
@@ -344,10 +357,12 @@
         const a = [X, h01, Y + 1], b = [X + 1, h11, Y + 1], cc = [X + 1, h10, Y], d = [X, h00, Y];
         gb.tri(a, b, cc, c);
         gb.tri(a, cc, d, c);
+        if (tx === CH - 1 && (ty & 7) === 7) yield;
       }
     const tm = new THREE.Mesh(gb.build(), R3.terrainMat);
     tm.receiveShadow = true;
     group.add(tm);
+    yield;
 
     // Растительность — инстансы
     const lists = {};
@@ -387,6 +402,7 @@
       im.castShadow = o !== O.FLOWERS && o !== O.TALLGRASS;
       im.receiveShadow = true;
       group.add(im);
+      yield;
     }
     if (bulbs.length) {
       const n = bulbs.length / 3;
@@ -404,6 +420,7 @@
     for (const b of w.buildings) {
       if (b.x < x0 || b.x >= x0 + CH || b.y < y0 || b.y >= y0 + CH) continue;
       R3.buildBuilding(bb, lb, b);
+      yield;
     }
     const wallC = new THREE.Color('#8a8490'), wallTop = new THREE.Color('#6a6470');
     const plank = new THREE.Color('#9a7a52'), plankD = new THREE.Color('#6a4a2a');
@@ -440,6 +457,13 @@
     if (!lb.empty) group.add(new THREE.Mesh(lb.build(), R3.lightMat));
     R3.scene.add(group);
     return { group };
+  };
+  R3.buildChunk = function (cx, cy) {
+    const g = R3.buildChunkGen(cx, cy);
+    let r;
+    do r = g.next();
+    while (!r.done);
+    return r.value;
   };
 
   R3.buildBuilding = function (gb, lb, b) {
@@ -983,6 +1007,7 @@
     let op = 1;
     if (e.st && e.st.invis > 0) op = e.team === 'player' ? 0.3 : 0.06;
     if (e.st && e.st.void > 0) op = 0.05;
+    if (e.isPlayer && R3.cam.veryNear) op = Math.min(op, 0.3);
     for (let i = 0; i < v.mats.length; i++) {
       const m = v.mats[i];
       if (flash) m.color.setRGB(1, 0.35, 0.35);
@@ -1236,9 +1261,10 @@
     R3.fxGroup.add(m);
     return m;
   };
+  const pickGeo = new THREE.OctahedronGeometry(0.32, 0);
   R3.pickupMesh = function (color) {
     const g = new THREE.Group();
-    g.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.32, 0), new THREE.MeshBasicMaterial({ color })));
+    g.add(new THREE.Mesh(pickGeo, bmat(color)));
     const beam = new THREE.Mesh(cylGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide }));
     beam.scale.set(0.35, 30, 0.35);
     beam.position.y = 15;
@@ -1338,65 +1364,26 @@
     el.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%,-100%)`;
   };
 
-  // ---------- Камера ----------
-  R3.cam = { yaw: -Math.PI / 2, pitch: 0.42, dist: 9.5, tx: 0, ty: 0, tz: 0, shake: 0 };
-  R3.updateCamera = function (px, py, pz, dt) {
-    const c = R3.cam;
-    c.tx += (px - c.tx) * Math.min(1, dt * 10);
-    c.tz += (py - c.tz) * Math.min(1, dt * 10);
-    c.ty += (pz + 1.4 - c.ty) * Math.min(1, dt * 8);
-    const w = J.G.world;
-    // доля луча (цель → камера), свободная от зданий и скал
-    const clearFrac = (pitch) => {
-      const cp = Math.cos(pitch);
-      const dx = -Math.cos(c.yaw) * cp * c.dist, dz = -Math.sin(c.yaw) * cp * c.dist, dy = Math.sin(pitch) * c.dist;
-      for (let k = 0.06; k <= 1.001; k += 0.035) {
-        const x = c.tx + dx * k, y = c.ty + dy * k, z = c.tz + dz * k;
-        const b = w.buildingAt(x, z);
-        let top = -9;
-        if (b) top = b.height + (b.flat ? 0.7 : 2.4);
-        else {
-          const t = w.tile(x, z);
-          if (t === J.T.ROCK || t === J.T.MESA) top = w.tileH(Math.floor(x), Math.floor(z)) + 0.4;
-          else if (t === J.T.WALL) top = 2.6;
-        }
-        if (y < top) return Math.max(0, k - 0.05);
-      }
-      return 1;
-    };
-    // если обзор перекрыт — поднимаем камеру над крышами
-    let pitch = c.pitch, cut = clearFrac(pitch);
-    if (cut < 0.75) {
-      for (const pp of [0.7, 0.95, 1.2, 1.4]) {
-        if (pp <= pitch) continue;
-        const k = clearFrac(pp);
-        if (k > cut + 0.1) {
-          pitch = pp;
-          cut = k;
-        }
-        if (k >= 0.99) break;
-      }
-    }
-    cut = Math.max(0.35, cut);
-    c.ep = J.lerp(c.ep === undefined ? pitch : c.ep, pitch, Math.min(1, dt * (pitch > (c.ep || 0) ? 8 : 3)));
-    c.cut = J.lerp(c.cut || 1, cut, Math.min(1, dt * (cut < (c.cut || 1) ? 12 : 4)));
-    c.near = c.dist * c.cut < 4.2;
-    const cp = Math.cos(c.ep);
-    let cx = c.tx - Math.cos(c.yaw) * cp * c.dist * c.cut;
-    let cz = c.tz - Math.sin(c.yaw) * cp * c.dist * c.cut;
-    let cy = c.ty + Math.sin(c.ep) * c.dist * c.cut;
-    const gy = w.groundY(cx, cz) + 0.6;
-    if (cy < gy) cy = gy;
-    if (c.shake > 0) {
-      c.shake -= dt;
-      const s = c.shake * 0.6;
-      cx += (Math.random() - 0.5) * s;
-      cy += (Math.random() - 0.5) * s;
-      cz += (Math.random() - 0.5) * s;
-    }
-    R3.camera.position.set(cx, cy, cz);
-    R3.camera.lookAt(c.tx, c.ty, c.tz);
-    R3.lantern.position.set(px, pz + 2.5, py);
+  // Предварительная компиляция шейдеров, чтобы первые встречи с объектами не давали фризов
+  R3.warmup = function () {
+    const tmp = new THREE.Group();
+    const h = R3.buildHuman({ gender: 'm', skin: '#eac09f', hair: 'short', hairColor: '#222', top: '#333', bottom: '#333' });
+    tmp.add(h.group);
+    const st = R3.buildStand(J.STANDS.star_platinum);
+    tmp.add(st.group);
+    tmp.add(R3.buildCreature('coyote', '#aa8855').group);
+    tmp.add(R3.pickupMesh('#ffffff'));
+    tmp.add(new THREE.Mesh(sphGeo, new THREE.MeshBasicMaterial({ color: '#fff', transparent: true, opacity: 0.5, depthWrite: false })));
+    tmp.add(new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: '#fff', transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false })));
+    tmp.position.set(0, -50, 0);
+    R3.scene.add(tmp);
+    try {
+      R3.renderer.compile(R3.scene, R3.camera);
+    } catch (e) {}
+    R3.scene.remove(tmp);
+    R3.fxGroup.children.slice().forEach((c) => {
+      if (c.parent === tmp) tmp.remove(c);
+    });
   };
 
   R3.render = function () {
