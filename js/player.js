@@ -454,77 +454,24 @@
     return { ang, x: tg ? tg.x : p.x + Math.cos(ang) * range, y: tg ? tg.y : p.y + Math.sin(ang) * range, target: tg };
   };
 
-  // ---------- Атаки ----------
+  // ---------- Атаки (момент удара, серии, заряд — в combat.js) ----------
   P.basicAttack = function (p) {
-    if (p.cds.basic > 0 || !p.canAct() || p.channel || p.dash) return;
-    const aim = P.aim(p, 3);
-    p.face = aim.ang;
-    p.combo = ((p.combo || 0) + 1) % 4;
-    const finisher = p.combo === 3;
-    if (p.stand && !(p.st.silence > 0)) {
-      const sd = J.STANDS[p.stand.id];
-      p.standOut = true;
-      const pw = P.standPower(p);
-      const spd = J.rankNum(sd.st.spd);
-      const dmg = (5 + J.rankNum(sd.st.pow) * 2.2) * pw / Math.max(0.8, 0.7 + J.rankNum(sd.st.pow) * 0.11);
-      p.anim = { type: 'punch', t: 0.22, max: 0.22, stand: true };
-      if (sd.ranged || sd.basicFire) {
-        J.spawnProj(p, { ang: aim.ang, speed: 14, dmg: dmg * 0.9, range: 10, shape: sd.basicFire ? 'flame' : 'orb', color: sd.c1, size: 0.18, fx: sd.basicFire ? { burn: 1.5 } : undefined, kind: sd.basicFire ? 'fire' : 'phys', stand: true });
-      } else {
-        const range = 1.5 + J.rankNum(sd.st.rng) * 0.1;
-        const n = J.hitArc(p, aim.ang, range, 1.5, dmg * (finisher ? 1.8 : 1), { knock: finisher ? 6 : 1.5, stun: finisher ? 0.4 : 0.12 });
-        if (n && finisher) J.R3.text(p.x + Math.cos(aim.ang), p.y + Math.sin(aim.ang), sd.cry + '!', 'tcry', 0.7);
-      }
-      p.cds.basic = Math.max(0.2, 0.5 - spd * 0.05);
-      return;
+    if (J.Cb.light(p)) {
+      p.buf = 0;
+      if (J.Fx) J.Fx.cancelStandoff();
     }
-    // без стенда
-    p.anim = { type: 'punch', t: 0.25, max: 0.25 };
-    if (P.hasItem(p, 'revolver') && !p.style) {
-      J.spawnProj(p, { ang: aim.ang, speed: 18, dmg: 16 + p.stats.agi * 1.5, range: 12, shape: 'bullet', color: '#ffd166', size: 0.1 });
-      p.cds.basic = 0.55;
-      return;
-    }
-    let dmg = 4 + p.stats.str * 1.6 + (p.lvl - 1) * 0.6;
-    let kind = 'phys';
-    if (p.style === 'vampire' || p.style === 'ultimate') dmg *= 1.7;
-    if (p.style === 'hamon' && p.breath >= 3) {
-      kind = 'hamon';
-      p.breath -= 3;
-      dmg *= 1.2;
-      J.R3.burst(p.x + Math.cos(aim.ang), p.y + Math.sin(aim.ang), 1.1, '#ffd84a', 4, 1.5, 0.3);
-    }
-    const n = J.hitArc(p, aim.ang, 1.35, 1.4, dmg * (finisher ? 1.7 : 1), { knock: finisher ? 5 : 1.2, stun: 0.1, kind });
-    if (n && p.style === 'vampire') p.hp = Math.min(p.maxHp, p.hp + dmg * 0.15);
-    if (n) P.trainStat(p, 'str', 0.4);
-    p.cds.basic = 0.4;
   };
+  // мгновенный тяжёлый удар (без заряда)
   P.heavyAttack = function (p) {
-    if (p.cds.heavy > 0 || !p.canAct() || p.channel || p.dash) return;
-    const aim = P.aim(p, 3);
-    p.face = aim.ang;
-    const st = p.stamina;
-    if (st < 15) return;
-    p.stamina -= 15;
-    if (p.stand && !(p.st.silence > 0)) {
-      const sd = J.STANDS[p.stand.id];
-      p.standOut = true;
-      const dmg = (12 + J.rankNum(sd.st.pow) * 5) * P.standPower(p) / Math.max(0.8, 0.7 + J.rankNum(sd.st.pow) * 0.11);
-      p.anim = { type: 'heavy', t: 0.35, max: 0.35, stand: true };
-      const n = J.hitArc(p, aim.ang, 1.8 + J.rankNum(sd.st.rng) * 0.1, 1.3, dmg, { knock: 8, stun: 0.7 });
-      J.R3.text(p.x + Math.cos(aim.ang), p.y + Math.sin(aim.ang), sd.cry + '!!', 'tcry', 0.9);
-      if (n) J.R3.cam.shake = 0.2;
-      p.cds.heavy = 2.2;
-      return;
-    }
-    p.anim = { type: 'heavy', t: 0.4, max: 0.4 };
-    let dmg = (10 + p.stats.str * 3.2) * (p.style === 'vampire' || p.style === 'ultimate' ? 1.6 : 1);
-    const kind = p.style === 'hamon' && p.breath >= 8 ? 'hamon' : 'phys';
-    if (kind === 'hamon') p.breath -= 8;
-    J.hitArc(p, aim.ang, 1.5, 1.3, dmg, { knock: 7, stun: 0.6, kind });
-    p.cds.heavy = 2;
+    return J.Cb.heavy(p, 0);
   };
-  P.standAbility = function (p, i) {
+  P.heavyStart = function (p) {
+    return J.Cb.heavyStart(p);
+  };
+  P.heavyRelease = function (p) {
+    if (J.Cb.heavyRelease(p) && J.Fx) J.Fx.cancelStandoff();
+  };
+  P.standAbility = function (p, i, tc) {
     if (!p.stand) {
       J.UI.toast('У тебя нет стенда. Стрела, диск, части Святого Трупа... способов много.', 'muted');
       return;
@@ -549,8 +496,11 @@
     }
     if ((ab.kind === 'timestop' && J.G.timestop) || (ab.kind === 'timeskip' && J.G.timeskip)) return;
     p.standOut = true;
+    if (p.guard) p.guard = false;
+    p.chg = null;
     const aim = P.aim(p, ab.range || 7);
-    const r = J.Abil.use(p, ab, aim);
+    const r = J.Abil.use(p, ab, aim, { key: { kb: ['KeyQ', 'KeyE', 'KeyR'][i], tc: tc || ['q', 'e', 'r'][i] } });
+    if (r && J.Fx) J.Fx.cancelStandoff();
     if (!r) {
       if (['hex', 'pull', 'bomb', 'disc'].includes(ab.kind)) J.UI.toast('Нет цели рядом.', 'muted');
       return;
@@ -569,18 +519,19 @@
     p.standOut = !p.standOut;
     if (p.standOut) {
       J.R3.text(p.x, p.y, J.STANDS[p.stand.id].ru.toUpperCase() + '!', 'tstand', 1.1, 2.6);
-      p.anim = { type: 'pose', t: 0.6, max: 0.6 };
-      J.UI.sfx('stand');
+      if (!p.channel && !(p.atk && !p.atk.done)) p.anim = { type: 'pose', t: 0.7, max: 0.7 };
+      if (J.Fx && J.Fx.ready) J.Fx.summon(p);
+      else J.UI.sfx('stand');
+      p.summonT = 0.25;
+    } else {
+      p.guard = false;
+      J.Sfx && J.Sfx.whoosh(0.18, false, 0.08);
     }
   };
+  // рывок-уклонение: неуязвимость, тратит выносливость; с земли — быстрый подъём
   P.dash = function (p, dx, dy) {
-    if (p.cds.dash > 0 || p.stamina < 22 || !p.canMove()) return;
-    let ang = Math.hypot(dx, dy) > 0.1 ? Math.atan2(dy, dx) : p.face;
-    p.stamina -= 22;
-    p.cds.dash = 0.6;
-    p.dash = { t: 0.2, vx: Math.cos(ang) * 14, vy: Math.sin(ang) * 14, dmg: 0, hit: new Set() };
-    p.st.invuln = Math.max(p.st.invuln || 0, 0.18);
-    J.R3.burst(p.x, p.y, 0.4, '#ffffff', 8, 2, 0.3, 0.5);
+    if (J.Cb.inClash(p)) return J.Cb.mash(p);
+    J.Cb.dodge(p, dx, dy);
   };
 
   // ---------- Ежесекундное обновление игрока ----------
@@ -658,8 +609,17 @@
     if (p.vampire && p.blood <= 0) regen = -0.006;
     if (!(p.st.infinite > 0)) p.hp = J.clamp(p.hp + p.maxHp * regen * dt, 0, p.maxHp);
     if (p.hp <= 0 && !p.dead) J.kill(p, null);
-    if (p.st.fly > 0) p.z = J.lerp(p.z, 1.4, dt * 4);
-    else p.z = J.lerp(p.z, 0, dt * 8);
+    if (!p.airborne) {
+      if (p.st.fly > 0) p.z = J.lerp(p.z, 1.4, dt * 4);
+      else p.z = J.lerp(p.z, 0, dt * 8);
+    }
+    // блок: удержание клавиши (Z / ПКМ при захвате мыши / кнопка «Блок»)
+    if (inp.guard && !p.guard && !J.Cb.inClash(p)) J.Cb.setGuard(p, true);
+    else if (!inp.guard && p.guard) J.Cb.setGuard(p, false);
+    // буфер удара, нажатого во время замаха
+    if (p.buf && g.t - p.buf > 0.3) p.buf = 0;
+    // в блоке и при заряде — лицом к противнику
+    if ((p.guard || p.chg) && p.canAct()) p.face = P.aim(p, 6).ang;
 
     // движение
     if (!p.canMove() || p.dash) {
@@ -673,6 +633,9 @@
     if (p.energy < 15) spd *= 0.8;
     if (p.mount && !w.cityAt(p.x, p.y)) spd *= 1.45;
     if (p.channel) spd *= 0.35;
+    if (p.guard) spd *= 0.4;
+    if (p.chg) spd *= 0.45;
+    if (p.atk && !p.atk.done) spd *= 0.3;
     if (p.breathing) spd *= 0.5;
     if (p.st.void > 0) spd *= 1.4;
     if (p.st.fly > 0) spd *= 1.25;
@@ -689,8 +652,10 @@
       J.moveEnt(p, dx * spd * dt, dy * spd * dt);
       p.vx = (p.x - ox) / dt;
       p.vy = (p.y - oy) / dt;
-      const busy = (p.anim && p.anim.t > 0 && p.anim.type !== 'pose') || p.channel;
+      const busy = (p.anim && p.anim.t > 0 && p.anim.type !== 'pose') || p.channel || p.guard || p.chg;
       if (!busy) p.face = Math.atan2(dy, dx);
+      // любое движение отменяет победную позу
+      if (p.anim && p.anim.victory) p.anim = null;
       p.lastMoveAng = Math.atan2(dy, dx);
       if (sprint && Math.random() < dt * 2) P.trainStat(p, 'agi', 0.3);
     } else {

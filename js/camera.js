@@ -13,8 +13,10 @@
     carDist: 8.5, // желаемая длина штанги (в машине)
     arm: 5.6, // текущая длина после столкновений
     tx: 0, ty: 0, tz: 0,
-    shake: 0,
+    shake: 0, // устаревшее: прибавляется к «травме» камеры (J.Fx)
     fov: 60,
+    // боевые модификаторы от J.Fx: ракурс, наезд, поле зрения, фокус на противнике
+    yawOff: 0, distMul: 1, fovAdd: 0, focusW: 0, focusX: 0, focusY: 0, focusZ: 0,
     idle: 9, // секунд без ручного поворота
     follow: false, // авто-разворот за спину пешком
     near: false,
@@ -94,13 +96,14 @@
     c.tz = py;
     const ty = pz + headH;
     c.ty = jump || mode === 'title' ? ty : c.ty + (ty - c.ty) * Math.min(1, dt * 14);
-    // направление штанги
+    // направление штанги (с боевым смещением ракурса)
+    const yaw = c.yaw + (mode === 'foot' ? c.yawOff : 0);
     const cp = Math.cos(c.pitch), sp = Math.sin(c.pitch);
-    const dx = -Math.cos(c.yaw) * cp, dz = -Math.sin(c.yaw) * cp, dy = sp;
-    const want = mode === 'car' ? c.carDist + Math.min(4, Math.abs(opts.speed || 0) * 0.12) : mode === 'title' ? 26 : c.dist;
+    const dx = -Math.cos(yaw) * cp, dz = -Math.sin(yaw) * cp, dy = sp;
+    const want = mode === 'car' ? c.carDist + Math.min(4, Math.abs(opts.speed || 0) * 0.12) : mode === 'title' ? 26 : c.dist * (mode === 'foot' ? c.distMul : 1);
     // смещение за правое плечо (уменьшается при близкой камере)
     const sh = mode === 'foot' ? 0.42 * J.clamp(c.arm / 4, 0.3, 1) : 0;
-    const rx = -Math.sin(c.yaw), rz = Math.cos(c.yaw);
+    const rx = -Math.sin(yaw), rz = Math.cos(yaw);
     const ox = c.tx + rx * sh, oz = c.tz + rz * sh, oy = c.ty;
     let len = want;
     if (mode !== 'title' && !opts.noCollide) len = Math.max(0.7, traceArm(ox, oy, oz, dx, dy, dz, want));
@@ -114,24 +117,35 @@
     let cx = ox + dx * c.arm, cy = oy + dy * c.arm + up, cz = oz + dz * c.arm;
     const gmin = J.G.world.groundY(cx, cz) + 0.3;
     if (cy < gmin) cy = gmin;
-    // тряска
+    // тряска: старое поле shake прибавляется к «травме» (J.Fx), она накапливается, а не перезаписывается
     if (c.shake > 0) {
-      c.shake = Math.max(0, c.shake - dt);
-      const s = Math.min(0.6, c.shake) * 0.5;
-      cx += (Math.random() - 0.5) * s;
-      cy += (Math.random() - 0.5) * s;
-      cz += (Math.random() - 0.5) * s;
+      if (J.Fx && J.Fx.ready) J.Fx.trauma(c.shake * 1.6);
+      else {
+        const s = Math.min(0.6, c.shake) * 0.5;
+        cx += (Math.random() - 0.5) * s;
+        cy += (Math.random() - 0.5) * s;
+        cz += (Math.random() - 0.5) * s;
+      }
+      c.shake = 0;
     }
     // поле зрения: шире на скорости
     const fov = mode === 'car' ? 62 + Math.min(18, Math.abs(opts.speed || 0) * 0.55) : mode === 'title' ? 55 : 60;
     c.fov += (fov - c.fov) * Math.min(1, dt * 3);
-    if (Math.abs(R3.camera.fov - c.fov) > 0.05) {
-      R3.camera.fov = c.fov;
+    const fv = c.fov + (mode === 'foot' ? c.fovAdd : 0);
+    if (Math.abs(R3.camera.fov - fv) > 0.05) {
+      R3.camera.fov = fv;
       R3.camera.updateProjectionMatrix();
     }
     R3.camera.position.set(cx, cy, cz);
-    // смотрим чуть выше и вперёд цели — персонаж в нижней трети кадра
-    R3.camera.lookAt(ox - dx * 2, oy + (mode === 'car' ? 0.2 : 0.1) + up * 0.25, oz - dz * 2);
+    // смотрим чуть выше и вперёд цели — персонаж в нижней трети кадра; в бою — чуть к противнику
+    let lx = ox - dx * 2, ly = oy + (mode === 'car' ? 0.2 : 0.1) + up * 0.25, lz = oz - dz * 2;
+    if (c.focusW > 0.01 && mode === 'foot') {
+      const w = 0.35 * c.focusW;
+      lx += (c.focusX - lx) * w;
+      ly += (c.focusY - ly) * w;
+      lz += (c.focusZ - lz) * w;
+    }
+    R3.camera.lookAt(lx, ly, lz);
     if (R3.lantern) R3.lantern.position.set(px, pz + 2.5, py);
   };
 })();

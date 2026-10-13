@@ -199,12 +199,19 @@
     opt = opt || {};
     if (!t || t.dead || amount <= 0) return 0;
     const g = G();
+    const so = src ? J.ownerOf(src) : null;
     if (t.st.invuln > 0 || t.st.void > 0 || t.immortal) {
-      if (!opt.dot && Math.random() < 0.3) J.R3.text(t.x, t.y, 'НЕУЯЗВИМ', 'tmiss', 0.6);
+      // удар пришёлся на неуязвимость рывка — идеальное уклонение
+      if (t.dash && t.dash.dodge && so && so !== t && !opt.dot && J.Cb) J.Cb.perfectDodge(t, so);
+      else if (!opt.dot && !t.dash && Math.random() < 0.3 && !(t._nuT > g.t)) {
+        t._nuT = g.t + 0.6;
+        J.R3.text(t.x, t.y, 'НЕУЯЗВИМ', 'tmiss', 0.6);
+      }
       return 0;
     }
+    // кадры неуязвимости при подъёме с земли
+    if (t.st.gup > 0 && !opt.pierceDef && !opt.dot) return 0;
     if (t.kind === 'civ') return 0;
-    const so = src ? J.ownerOf(src) : null;
     // Реквием: возврат к нулю
     if (t.st.zero > 0 && so && so !== t && !opt.dot) {
       so.st.stun = Math.max(so.st.stun || 0, 1.5);
@@ -229,13 +236,23 @@
       J.R3.text(t.x, t.y, 'ЭПИТАФИЯ', 'tred', 0.8);
       return 0;
     }
+    // блок и парирование
+    let blocked = false;
+    if (J.Cb && !opt.dot) {
+      const r = J.Cb.preHurt(t, amount, src, opt);
+      if (r < 0) return 0;
+      if (r !== amount) {
+        blocked = true;
+        amount = r;
+      }
+    }
     let mul = 1;
     const kind = opt.kind || 'phys';
     if (kind === 'hamon') {
       if (t.undead || t.vamp || t.pillar) mul *= t.pillar ? 2.5 : 3.2;
       else mul *= 0.9;
       if (t.isPlayer && t.vampire) mul *= 3;
-      J.R3.burst(t.x, t.y, 1.2, '#ffd84a', 8, 3, 0.4);
+      if (!opt.rushTick || Math.random() < 0.3) J.R3.burst(t.x, t.y, 1.2, '#ffd84a', opt.rushTick ? 3 : 8, 3, 0.4);
     }
     if (kind === 'sun' && !(t.undead || t.vamp || t.pillar || (t.isPlayer && t.vampire && !t.ultimate))) return 0;
     if (kind === 'fire' && (t.vamp || t.undead)) mul *= 1.4;
@@ -249,11 +266,11 @@
     if (t.isPlayer) armor += J.P.armorBonus(t);
     armor = Math.min(0.8, armor);
     let crit = false;
-    if (so && !opt.dot) {
+    if (so && !opt.dot && !blocked) {
       let cc = so.crit || 0.04;
       if (so.st.luck > 0) cc += so.sv.luck || 0.3;
       if (so.isPlayer) cc += J.P.critBonus(so);
-      if (Math.random() < cc) {
+      if (opt.crit || Math.random() < cc) {
         crit = true;
         mul *= 1.8;
       }
@@ -264,28 +281,34 @@
     if (opt.pierceDef) armor = 0;
     const dmg = Math.max(1, amount * mul * (1 - armor));
     t.hp -= dmg;
-    t.hitFlash = 0.12;
+    if (!blocked) t.hitFlash = 0.12;
     if (t.st.sleep > 0) t.st.sleep = 0;
     if (t.ai && so && so !== t && J.hostile(t, so)) t.ai.target = so;
     if (t.ai && t.ai.civ) t.ai.fear = 6;
-    if (!opt.silent) {
-      const near = g.player && J.dist(t.x, t.y, g.player.x, g.player.y) < 30;
-      if (near) J.R3.text(t.x, t.y, (crit ? '!' : '') + Math.round(dmg), crit ? 'tcrit' : t.isPlayer ? 'thurt' : 'tdmg', 0.8, 2.1);
+    if (!opt.silent && !blocked) {
+      if (J.Fx && J.Fx.ready) J.Fx.dmgNum(t, dmg, crit, opt.rushTick);
+      else {
+        const near = g.player && J.dist(t.x, t.y, g.player.x, g.player.y) < 30;
+        if (near) J.R3.text(t.x, t.y, (crit ? '!' : '') + Math.round(dmg), crit ? 'tcrit' : t.isPlayer ? 'thurt' : 'tdmg', 0.8, 2.1);
+      }
     }
-    if (opt.knock && !t.boss) {
-      const a = opt.ang !== undefined ? opt.ang : so ? Math.atan2(t.y - so.y, t.x - so.x) : 0;
-      t.kx += Math.cos(a) * opt.knock;
-      t.ky += Math.sin(a) * opt.knock;
+    if (J.Cb) J.Cb.postHurt(t, dmg, so, src, opt, crit, blocked);
+    else {
+      if (opt.knock && !t.boss) {
+        const a = opt.ang !== undefined ? opt.ang : so ? Math.atan2(t.y - so.y, t.x - so.x) : 0;
+        t.kx += Math.cos(a) * opt.knock;
+        t.ky += Math.sin(a) * opt.knock;
+      }
+      if (opt.stun) t.st.stun = Math.max(t.st.stun || 0, t.boss ? opt.stun * 0.4 : opt.stun);
     }
-    if (opt.stun) t.st.stun = Math.max(t.st.stun || 0, t.boss ? opt.stun * 0.4 : opt.stun);
-    if (opt.fx) J.applyFx(t, opt.fx, so);
+    if (opt.fx && !blocked) J.applyFx(t, opt.fx, so);
+    if (J.Fx && !blocked) J.Fx.onHit(t, src, dmg, opt, crit, t.hp <= 0, 'hit');
     if (t.isPlayer) {
       if (!t.stand && so && (so.stand || so.standSummon || (src && src.standProj)) && !(g._invisT > 0)) {
         g._invisT = 40;
         J.UI.toast('Тебя бьёт что-то невидимое! Без своего стенда чужие стенды не видны.', 'red');
       }
       J.UI && J.UI.hurtFlash(dmg / t.maxHp);
-      if (dmg > t.maxHp * 0.12) J.R3.cam.shake = 0.25;
     }
     if (so && so.isPlayer && so.stand && so.standOut) J.P.standXp(so, dmg * 0.25);
     if (t.hp <= 0) J.kill(t, so);
@@ -318,6 +341,10 @@
     }
     const pl = g.player;
     const killer = src ? J.ownerOf(src) : null;
+    t.guard = false;
+    t.atk = null;
+    t.channel = null;
+    if (J.Fx) J.Fx.onKill(t, killer);
     if (t.team === 'enemy' || t.origTeam === 'enemy') {
       if (killer && (killer.isPlayer || killer.team === 'player')) {
         J.P.gainXp(pl, t.xp || 10);
@@ -478,41 +505,14 @@
     const d = J.dist(e.x, e.y, tg.x, tg.y);
     if (J.dist(e.x, e.y, ai.home.x, ai.home.y) > ai.leash && !e.boss) {
       ai.target = null;
+      e.guard = false;
       return;
     }
     const ang = Math.atan2(tg.y - e.y, tg.x - e.x);
     e.face = ang;
     if (e.stand) e.standOut = true;
-    // способности стенда
-    ai.cast -= dt;
-    if (ai.cast <= 0 && !(e.st.silence > 0)) {
-      ai.cast = (e.boss ? 1.4 : 2.4) + Math.random() * 1.5;
-      if (J.Abil.aiCast(e, tg, d)) return;
-    }
-    const ranged = e.gun || (e.stand && J.STANDS[e.stand.id].ranged);
-    const want = ranged ? 5.5 : (e.range || 1.2) * 0.8 + tg.r;
-    if (d > want) steer(e, tg.x, tg.y, spd, dt);
-    else if (ranged && d < 3.5) steer(e, e.x - Math.cos(ang) * 3, e.y - Math.sin(ang) * 3, spd * 0.8, dt);
-    else {
-      // кружение
-      ai.orb = ai.orb || (Math.random() < 0.5 ? 1 : -1);
-      if (Math.random() < dt * 0.3) ai.orb *= -1;
-      steer(e, e.x - Math.sin(ang) * ai.orb, e.y + Math.cos(ang) * ai.orb, spd * 0.35, dt);
-    }
-    ai.atk -= dt;
-    if (ai.atk <= 0) {
-      if (ranged && d < 11) {
-        ai.atk = e.rate * (0.8 + Math.random() * 0.6);
-        e.anim = { type: 'punch', t: 0.25, max: 0.25, stand: !!e.stand };
-        const color = e.stand ? J.STANDS[e.stand.id].c1 : '#ffd166';
-        J.spawnProj(e, { ang: ang + (Math.random() - 0.5) * 0.12, speed: 14, dmg: e.dmg * e.dmgMul, range: 12, shape: e.stand ? 'orb' : 'bullet', color, size: e.stand ? 0.2 : 0.12, stand: !!e.stand });
-      } else if (d < (e.range || 1.2) + tg.r + 0.2) {
-        ai.atk = e.rate * (0.8 + Math.random() * 0.5);
-        e.anim = { type: 'punch', t: 0.3, max: 0.3, stand: !!e.stand };
-        const fx = e.poisonHit ? { poison: e.poisonHit } : undefined;
-        J.hurt(tg, e.dmg * e.dmgMul * (e.stand ? 1.3 : 1), e, { knock: 2, ang, fx });
-      }
-    }
+    // бой: дистанция, обход, блок, замахи, способности (combat.js)
+    J.Cb.fight(e, tg, d, ang, dt);
   };
 
   function speedMul(e) {
@@ -647,7 +647,7 @@
     if (ai.atk <= 0 && d < 1.2 + tg.r) {
       ai.atk = e.rate || 0.8;
       e.anim = { type: 'punch', t: 0.25, max: 0.25 };
-      J.hurt(tg, e.dmg, e, { knock: 1.5, ang, fx: e.hitFx });
+      J.hurt(tg, e.dmg, e, { knock: 1.5, ang, fx: e.hitFx, melee: true });
     }
   }
 
@@ -716,11 +716,13 @@
     const w = g.world;
     const out = [];
     for (const p of g.projs) {
-      if (g.timestop && p.owner !== g.timestop.by) {
+      if (g.timestop && (p.owner !== g.timestop.by || (p.tsAge = (p.tsAge || 0) + dt) > 0.12)) {
+        // ножи ДИО замирают в воздухе, едва покинув руку
         out.push(p);
         J.R3.updateProj(p, dt);
         continue;
       }
+      p.tsAge = 0;
       p.life -= dt;
       if (p.life <= 0) {
         if (p.explode) explodeProj(p);
@@ -923,6 +925,8 @@
     for (const e of g.ents) {
       if (e.dead) {
         e.deadT += dt;
+        e.hitFlash = 0;
+        if (J.Cb) J.Cb.physics(e, dt);
         continue;
       }
       // остановка времени
@@ -934,18 +938,14 @@
       }
       J.updateStatus(e, dt);
       if (e.anim && e.anim.t > 0) e.anim.t -= dt;
-      // отбрасывание
-      if (Math.abs(e.kx) + Math.abs(e.ky) > 0.05) {
-        J.moveEnt(e, e.kx * dt, e.ky * dt);
-        e.kx *= Math.pow(0.02, dt);
-        e.ky *= Math.pow(0.02, dt);
-      }
+      // отбрасывание, полёт, реакции, замахи (combat.js)
+      J.Cb.tickEnt(e, dt);
       // каналы (раш, рывок)
       if (e.channel) J.Abil.updateChannel(e, dt);
       if (e.dash) J.Abil.updateDash(e, dt);
       if (e.st.void > 0) J.Abil.updateVoid(e, dt);
       if (e.isPlayer) continue; // игрок обновляется отдельно
-      if (e.canAct() && !e.dash) J.updateAI(e, dt);
+      if (e.canAct() && !e.dash && !e.airborne) J.updateAI(e, dt);
       else e.vx = e.vy = 0;
     }
     // расталкивание

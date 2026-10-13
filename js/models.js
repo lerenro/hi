@@ -39,8 +39,10 @@
     muscular: { sh: 0.25, chest: 0.235, waist: 0.155, hip: 0.165, arm: 0.068, leg: 0.1 },
   };
 
-  // Геометрии каркасов кэшируются по форме (пол, телосложение, причёска...) — новый персонаж почти бесплатен
+  // Геометрии каркасов кэшируются по форме (пол, телосложение, причёска...) — новый персонаж почти бесплатен.
+  // Общие геометрии НЕЛЬЗЯ освобождать (dispose) при удалении вида — ими пользуются другие персонажи.
   const geoCache = new Map();
+  const SPINE_Y = 0.98, NECK_Y = 1.575;
   function rigGeos(spec) {
     const hit = spec.cacheKey && geoCache.get(spec.cacheKey);
     if (hit) return hit;
@@ -59,12 +61,11 @@
       fn(gb);
       return gb.build();
     };
+    // торс и голова — отдельные геометрии с центрами в суставах (таз 0.98 и шея 1.575)
     const G = {
       b,
-      torso: one((gb) => {
-        spec.torso(gb, b, fem);
-        spec.head(gb, b, fem);
-      }),
+      torso: one((gb) => spec.torso(gb, b, fem)).translate(0, -SPINE_Y, 0),
+      head: one((gb) => spec.head(gb, b, fem)).translate(0, -NECK_Y, 0),
       thigh: [-1, 1].map((sx) => one((gb) => spec.thigh(gb, b, sx))),
       shin: [-1, 1].map((sx) => one((gb) => spec.shin(gb, b, sx))),
       upper: [-1, 1].map((sx) => one((gb) => spec.upper(gb, b, sx))),
@@ -94,8 +95,15 @@
       m.castShadow = true;
       return m;
     };
+    // позвоночник: торс, голова и руки поворачиваются отдельно от ног
+    const spine = new THREE.Group();
+    spine.position.y = SPINE_Y;
+    body.add(spine);
     const torso = mk(G.torso);
-    body.add(torso);
+    spine.add(torso);
+    const head = mk(G.head);
+    head.position.y = NECK_Y - SPINE_Y;
+    spine.add(head);
     const legs = [0, 1].map((i) => {
       const thigh = mk(G.thigh[i]);
       thigh.position.set((i ? 1 : -1) * b.hip * 0.56, 0.94, 0);
@@ -107,21 +115,45 @@
     });
     const arms = [0, 1].map((i) => {
       const upper = mk(G.upper[i]);
-      upper.position.set((i ? 1 : -1) * (b.sh + 0.035), 1.425, 0);
+      upper.position.set((i ? 1 : -1) * (b.sh + 0.035), 1.425 - SPINE_Y, 0);
       const fore = mk(G.fore[i]);
       fore.position.set(0, -0.29, 0);
       upper.add(fore);
-      body.add(upper);
+      spine.add(upper);
       return { upper, fore };
     });
     if (G.extra) arms[1].fore.add(mk(G.extra));
     return {
-      group: g, body, torso,
+      group: g, body, torso, spine, head,
       legL: legs[0].thigh, legR: legs[1].thigh, shinL: legs[0].shin, shinR: legs[1].shin,
       armL: arms[0].upper, armR: arms[1].upper, foreL: arms[0].fore, foreR: arms[1].fore,
       mats: [mat], baseColors: [new THREE.Color(1, 1, 1)],
     };
   }
+
+  // Обесцвечивание (остановка времени): uniform uDesat подмешивается в конец фрагментного шейдера.
+  // Патч ставится один раз при создании материала; во время игры меняется только значение uniform.
+  const DESAT = '#include <dithering_fragment>\n{ float l = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114)); gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(l) * vec3(0.86, 0.9, 1.12), uDesat); }';
+  R3.fxPatchShader = function (sh, uni) {
+    sh.uniforms.uDesat = uni;
+    sh.fragmentShader = 'uniform float uDesat;\n' + sh.fragmentShader.replace('#include <dithering_fragment>', DESAT);
+  };
+  R3.fxPatch = function (mat, uni) {
+    if (!mat || !mat.isMaterial) return null;
+    if (mat.userData.fxU) return mat.userData.fxU;
+    uni = uni || { value: 0 };
+    mat.userData.fxU = uni;
+    const prev = mat.onBeforeCompile;
+    const prevKey = mat.customProgramCacheKey.call(mat);
+    mat.onBeforeCompile = function (sh, r) {
+      if (prev) prev.call(this, sh, r);
+      R3.fxPatchShader(sh, uni);
+    };
+    // ключ программы сохраняет отличие от исходного шейдера
+    mat.customProgramCacheKey = () => 'fx|' + prevKey;
+    mat.needsUpdate = true;
+    return uni;
+  };
 
   // Материал с палитрой: цвет вершины хранит номер слота (r), шейдер берёт цвет из uniform-массива
   const SLOT = (i) => ({ r: i, g: 0, b: 0 });
@@ -130,13 +162,15 @@
     const pal = colors.map((c) => (c && c.isColor ? c.clone() : new THREE.Color(c)));
     while (pal.length < 16) pal.push(new THREE.Color(1, 0, 1));
     m.userData.palette = { value: pal };
+    m.userData.fxU = { value: 0 };
     m.onBeforeCompile = (sh) => {
       sh.uniforms.palette = m.userData.palette;
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\nuniform vec3 palette[16];')
         .replace('#include <color_vertex>', 'vColor = palette[int(color.r + 0.5)];');
+      R3.fxPatchShader(sh, m.userData.fxU);
     };
-    m.customProgramCacheKey = () => 'jj-palette';
+    m.customProgramCacheKey = () => 'jj-palette-fx';
     return m;
   };
 
@@ -286,6 +320,7 @@
     const C1D = C1.clone().multiplyScalar(0.72), C2D = C2.clone().multiplyScalar(0.7);
     const GLOW = col('#ffffff');
     const mat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.88, emissive: C1.clone().multiplyScalar(0.32) });
+    R3.fxPatch(mat);
     const head = sd.head;
     const v = makeRig({
       cacheKey: 'stand|' + sd.id,
