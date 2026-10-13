@@ -6,13 +6,13 @@
 
   // style — стиль застройки, lang — пул имён
   J.REGIONS = [
-    { id: 'morioh', name: 'Морио-тё', country: 'Япония', x: 975, y: 300, land: 45, biome: 'temperate', city: 30, style: 'japan', lang: 'jp', danger: 1 },
+    { id: 'morioh', name: 'Морио-тё', country: 'Япония', x: 953, y: 300, land: 45, biome: 'temperate', city: 30, style: 'japan', lang: 'jp', danger: 1 },
     { id: 'tibet', name: 'Тибет', country: 'Тибет', x: 840, y: 250, land: 55, biome: 'alpine', city: 9, style: 'tibet', lang: 'tib', danger: 3 },
     { id: 'varanasi', name: 'Варанаси', country: 'Индия', x: 830, y: 420, land: 60, biome: 'savanna', city: 22, style: 'india', lang: 'in', danger: 2 },
     { id: 'singapore', name: 'Сингапур', country: 'Сингапур', x: 910, y: 600, land: 45, biome: 'tropical', city: 22, style: 'singapore', lang: 'sg', danger: 2 },
     { id: 'arabia', name: 'Аравийская пустыня', country: 'Ближний Восток', x: 760, y: 350, land: 40, biome: 'desert', city: 0, lang: 'ar', danger: 3 },
     { id: 'cairo', name: 'Каир', country: 'Египет', x: 610, y: 540, land: 85, biome: 'desert', city: 28, style: 'egypt', lang: 'ar', danger: 4 },
-    { id: 'naples', name: 'Неаполь', country: 'Италия', x: 585, y: 350, land: 45, biome: 'mediterranean', city: 26, style: 'italy', lang: 'it', danger: 3 },
+    { id: 'naples', name: 'Неаполь', country: 'Италия', x: 600, y: 362, land: 45, biome: 'mediterranean', city: 26, style: 'italy', lang: 'it', danger: 3 },
     { id: 'rome', name: 'Рим', country: 'Италия', x: 520, y: 290, land: 50, biome: 'mediterranean', city: 26, style: 'italy', lang: 'it', danger: 3 },
     { id: 'venice', name: 'Венеция', country: 'Италия', x: 640, y: 245, land: 40, biome: 'mediterranean', city: 16, style: 'italy', lang: 'it', danger: 2 },
     { id: 'alps', name: 'Швейцарские Альпы', country: 'Швейцария', x: 560, y: 200, land: 55, biome: 'alpine', city: 10, style: 'swiss', lang: 'de', danger: 4 },
@@ -29,15 +29,65 @@
   const SC = 1.5;
   J.WORLD_W = Math.round(1024 * SC);
   J.WORLD_H = Math.round(768 * SC);
+  // Радиусы городов в клетках (1 клетка = 1 м): настоящие проспекты и кварталы помещаются только в большие города
+  J.CITY_R = { newyork: 140, cairo: 130, london: 100, varanasi: 100, singapore: 90, sandiego: 80, florida: 80, mexico: 80, morioh: 80, rome: 64, naples: 64, venice: 60, arizona: 32, alps: 30, tibet: 28 };
   J.REGION = {};
   J.REGIONS.forEach((r, i) => {
     r.idx = i;
     r.x = Math.round(r.x * SC);
     r.y = Math.round(r.y * SC);
     r.land = Math.round(r.land * SC);
-    r.city = Math.round(r.city * 1.25);
+    r.city = r.city ? J.CITY_R[r.id] || Math.round(r.city * 1.25) : 0;
     J.REGION[r.id] = r;
   });
+
+  // Сетка улиц по стилям (в клетках = метрах; ширина асфальта чётная, чтобы ось дороги шла по краю клетки).
+  // aw/as — асфальт/тротуар проспекта, sw/ss — улицы; lng/sht — размер квартала по длинной/короткой оси
+  // для зон [центр, середина, окраина]; lngAve/shtAve — каждая N-я линия — проспект (99 — только центральная);
+  // maxF — этажность в самом центре; pitched — доля скатных крыш; drive — сторона движения
+  J.GRID = {
+    usa: { aw: 12, as: 3, sw: 8, ss: 3, lng: [40, 36, 34], sht: [26, 24, 22], lngAve: 1, shtAve: 3, maxF: 42, pitched: 0.1, drive: 'R' },
+    singapore: { aw: 12, as: 3, sw: 8, ss: 3, lng: [38, 34, 32], sht: [26, 24, 22], lngAve: 1, shtAve: 3, maxF: 36, pitched: 0.05, drive: 'L' },
+    japan: { aw: 10, as: 3, sw: 6, ss: 2, lng: [30, 28, 26], sht: [22, 20, 20], lngAve: 2, shtAve: 3, maxF: 14, pitched: 0.6, drive: 'L' },
+    london: { aw: 10, as: 3, sw: 8, ss: 3, lng: [40, 36, 32], sht: [26, 24, 22], lngAve: 2, shtAve: 3, maxF: 18, pitched: 0.7, drive: 'L' },
+    italy: { aw: 10, as: 3, sw: 6, ss: 2, lng: [30, 28, 26], sht: [22, 20, 20], lngAve: 2, shtAve: 3, maxF: 7, pitched: 0.85, drive: 'R' },
+    egypt: { aw: 12, as: 3, sw: 6, ss: 2, lng: [36, 32, 30], sht: [24, 22, 22], lngAve: 2, shtAve: 3, maxF: 10, pitched: 0, drive: 'R' },
+    india: { aw: 10, as: 3, sw: 6, ss: 2, lng: [34, 30, 28], sht: [22, 22, 20], lngAve: 2, shtAve: 3, maxF: 8, pitched: 0.1, drive: 'L' },
+    mexico: { aw: 10, as: 3, sw: 6, ss: 2, lng: [34, 30, 28], sht: [22, 22, 20], lngAve: 2, shtAve: 3, maxF: 4, pitched: 0.1, drive: 'R' },
+    western: { aw: 12, as: 3, sw: 6, ss: 2, lng: [36, 36, 36], sht: [22, 22, 22], lngAve: 99, shtAve: 99, maxF: 2, pitched: 0.5, drive: 'R' },
+    swiss: { aw: 8, as: 3, sw: 6, ss: 2, lng: [30, 30, 30], sht: [22, 22, 22], lngAve: 99, shtAve: 99, maxF: 4, pitched: 1, drive: 'R' },
+    tibet: { aw: 8, as: 2, sw: 6, ss: 2, lng: [28, 28, 28], sht: [22, 22, 22], lngAve: 99, shtAve: 99, maxF: 3, pitched: 1, drive: 'L' },
+  };
+  // Доли зон по рангу удалённости кварталов: [ядро, деловой центр, средний пояс], остальное — пригород
+  J.ZSHARE = { usa: [0.08, 0.2, 0.42], singapore: [0.08, 0.2, 0.45], london: [0.04, 0.16, 0.5], japan: [0.04, 0.16, 0.48], egypt: [0.03, 0.15, 0.5], italy: [0, 0.14, 0.56], india: [0, 0.14, 0.5], mexico: [0, 0.1, 0.5], western: [0, 0, 0.5], swiss: [0, 0, 0.5], tibet: [0, 0, 0.5] };
+  // Особые здания: предпочтительные зоны, минимальный участок (фасад × глубина), этажность
+  {
+    const BIG = { w: 14, d: 12 }, MED = { w: 12, d: 10 }, SMALL = { w: 8, d: 8 };
+    J.CITY_PREF = {
+      station: { z: ['downtown', 'midtown'], s: { w: 18, d: 12 }, f: 2 },
+      hospital: { z: ['midtown', 'downtown'], s: { w: 16, d: 14 }, f: 6 },
+      school: { z: ['midtown', 'suburb'], s: { w: 16, d: 12 }, f: 3 },
+      hotel: { z: ['core', 'downtown'], s: BIG, f: 16, tower: 1 },
+      office: { z: ['core', 'downtown'], s: BIG, f: 24, tower: 1 },
+      speedwagon: { z: ['core', 'downtown'], s: BIG, f: 30, tower: 1 },
+      casino: { z: ['downtown', 'core'], s: BIG, f: 8 },
+      church: { z: ['midtown', 'downtown'], s: { w: 12, d: 14 }, f: 3 },
+      police: { z: ['midtown', 'downtown'], s: MED, f: 3 },
+      library: { z: ['midtown', 'downtown'], s: MED, f: 3 },
+      gym: { z: ['midtown'], s: SMALL, f: 2 },
+      kame_yu: { z: ['downtown', 'midtown'], s: BIG, f: 4 },
+      passione: { z: ['midtown', 'downtown'], s: MED, f: 4 },
+      polpo_prison: { z: ['suburb', 'midtown'], s: { w: 16, d: 14 }, f: 4 },
+      colosseum: { z: ['downtown', 'midtown'], s: { w: 20, d: 18 }, f: 4 },
+      sbr_office: { z: ['midtown', 'downtown'], s: MED, f: 2 },
+      stable: { z: ['suburb'], s: MED, f: 1 },
+      farm: { z: ['suburb'], s: MED, f: 1 },
+      dig: { z: ['suburb'], s: MED, f: 1 },
+      dock: { z: ['suburb', 'midtown'], s: MED, f: 1, water: true },
+      rohan: { z: ['suburb', 'midtown'], s: SMALL, f: 2 },
+    };
+    J.CITY_PREF_DEFAULT = { z: ['midtown', 'downtown'], s: SMALL, f: null };
+  }
   const scalePt = (p) => (typeof p === 'string' ? p : [Math.round(p[0] * SC), Math.round(p[1] * SC)]);
 
   // Перешейки между землями: [ax, ay, bx, by, радиус]
