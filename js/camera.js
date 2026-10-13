@@ -109,7 +109,9 @@
     else c.arm += (len - c.arm) * Math.min(1, dt * 3.2);
     c.near = c.arm < 2.4;
     c.veryNear = c.arm < 1.25;
-    let cx = ox + dx * c.arm, cy = oy + dy * c.arm, cz = oz + dz * c.arm;
+    // в тесноте камера приподнимается и смотрит поверх головы
+    const up = mode === 'foot' ? J.clamp((2.3 - c.arm) / 2.3, 0, 1) * 0.6 : 0;
+    let cx = ox + dx * c.arm, cy = oy + dy * c.arm + up, cz = oz + dz * c.arm;
     const gmin = J.G.world.groundY(cx, cz) + 0.3;
     if (cy < gmin) cy = gmin;
     // тряска
@@ -129,7 +131,7 @@
     }
     R3.camera.position.set(cx, cy, cz);
     // смотрим чуть выше и вперёд цели — персонаж в нижней трети кадра
-    R3.camera.lookAt(ox - dx * 2, oy + (mode === 'car' ? 0.2 : 0.1), oz - dz * 2);
+    R3.camera.lookAt(ox - dx * 2, oy + (mode === 'car' ? 0.2 : 0.1) + up * 0.25, oz - dz * 2);
     if (R3.lantern) R3.lantern.position.set(px, pz + 2.5, py);
   };
 })();
