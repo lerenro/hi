@@ -1461,7 +1461,8 @@
         if (!nd.ctrl || nd.ctrl === 'none' || !nd.city) continue;
         const hx = nd.aw[0] / 2, hy = nd.aw[1] / 2;
         const left = (J.GRID[J.REGION[nd.city].style] || J.GRID.usa).drive === 'L';
-        const corners = left ? [[hx, hy, 0], [-hx - 1, hy, 3], [-hx - 1, -hy - 1, 2], [hx, -hy - 1, 1]] : [[hx, hy, 3], [-hx - 1, hy, 2], [-hx - 1, -hy - 1, 1], [hx, -hy - 1, 0]];
+        // правостороннее: ЮВ угол → стрела на запад над въездом с юга и т.д.; левостороннее — зеркально
+        const corners = left ? [[hx, hy, 2], [-hx - 1, hy, 1], [-hx - 1, -hy - 1, 0], [hx, -hy - 1, 3]] : [[hx, hy, 3], [-hx - 1, hy, 2], [-hx - 1, -hy - 1, 1], [hx, -hy - 1, 0]];
         for (const [ox, oy, od] of corners) {
           const x = nd.x + ox, y = nd.y + oy, i = y * W + x;
           if (this.inb(x, y) && this.t[i] === T.SIDEWALK && this.o[i] && !(this.rf[i] & RF.KEEP)) this.o[i] = 0; // светофор важнее урны
