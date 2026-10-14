@@ -126,7 +126,7 @@
     if (sh > 0 && !opts.noCollide) sh *= R3.segTrace(c.tx, oy, c.tz, c.tx + rx * (sh + 0.25), oy, c.tz + rz * (sh + 0.25));
     const ox = c.tx + rx * sh, oz = c.tz + rz * sh;
     let len = want;
-    if (mode !== 'title' && !opts.noCollide) len = Math.max(0.7, Math.min(want, R3.armTrace(ox, oy, oz, dx, dy, dz, want, 0.26) - 0.25));
+    if (mode !== 'title' && !opts.noCollide) len = Math.max(0.7, Math.min(want, R3.armTrace(ox, oy, oz, dx, dy, dz, want + 0.25, 0.26) - 0.25)); // 0.25 м зазора до стены
     // укорачиваем мгновенно, удлиняем плавно
     if (jump || c.arm === undefined) c.arm = len;
     else if (len < c.arm) c.arm = len;

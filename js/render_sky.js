@@ -203,6 +203,7 @@
   const C_CLOUD = new THREE.Color('#ffffff'), C_CLOUD_D = new THREE.Color('#8a94a4');
   const vDir = new THREE.Vector3(), vRt = new THREE.Vector3(), vUp = new THREE.Vector3(), vTc = new THREE.Vector3();
   const UPV = new THREE.Vector3(0, 1, 0);
+  const SMP = { si: 0, hi: 0 };
 
   R3.lookInit = function () {
     const P = R3.preset;
@@ -299,9 +300,10 @@
     cH.copy(a.h).lerp(b.h, t);
     cS.copy(a.s).lerp(b.s, t);
     cHC.copy(a.hc).lerp(b.hc, t);
-    return { si: a.si + (b.si - a.si) * t, hi: a.hi + (b.hi - a.hi) * t };
+    SMP.si = a.si + (b.si - a.si) * t;
+    SMP.hi = a.hi + (b.hi - a.hi) * t;
+    return SMP;
   }
-  const SMP = { si: 0, hi: 0 };
 
   // ---------- Освещение по времени суток ----------
   R3.setTime = function (minutes, cx, cz, regionBiome, weather) {
@@ -311,8 +313,6 @@
     const sy = Math.sin(ang), sxz = Math.cos(ang);
     const el = Math.asin(Math.max(-1, Math.min(1, sy * 0.92))) * 57.2958; // высота солнца в градусах
     const s = sample(el);
-    SMP.si = s.si;
-    SMP.hi = s.hi;
     // день 0..1 для игровой логики (как раньше: 6:30–18:30 — день)
     let day;
     if (h >= 6.5 && h <= 18.5) day = 1;
@@ -398,7 +398,10 @@
     const lit = Math.max(0, Math.min(1, (6 - el) / 10)); // включаются в сумерках
     R3.lightMat.color.setRGB(0.12 + 2.2 * lit, 0.13 + 1.75 * lit, 0.16 + 1.05 * lit);
     R3.bulbMat.color.setRGB(0.25 + 3.0 * lit, 0.25 + 2.6 * lit, 0.22 + 1.6 * lit);
-    if (R3.cmat && R3.cmat.facade) R3.cmat.facade.emissive.copy(C_WIN).multiplyScalar(1.05 * lit);
+    if (R3.cmat && R3.cmat.facade) {
+      R3.cmat.facade.emissive.copy(C_WIN).multiplyScalar(1.05 * lit);
+      R3.cmat.facade.userData.sky.value.copy(cH).lerp(cZ, 0.35).multiplyScalar(0.75 * (1 - overcast * 0.4));
+    }
     if (R3.poolMat) {
       R3.poolMat.visible = R3.preset.pools && lit > 0.05;
       R3.poolMat.color.copy(C_POOL).multiplyScalar(0.55 * lit);

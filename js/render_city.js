@@ -456,13 +456,16 @@
     const atlas = makeAtlas();
     const facade = lam({ map: atlas.tex, emissiveMap: atlas.etex, emissive: new THREE.Color(0, 0, 0) });
     const PAD = (3 / ASZ).toFixed(6), IN = ((AS - 6) / ASZ).toFixed(6);
+    facade.userData.sky = { value: new THREE.Color(0, 0, 0) };
     facade.onBeforeCompile = (sh) => {
+      sh.uniforms.facSky = facade.userData.sky;
       sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nattribute vec2 aCell;\nvarying vec2 vCell;')
-        .replace('#include <uv_vertex>', '#include <uv_vertex>\nvCell = aCell;');
+        .replace('#include <common>', '#include <common>\nattribute vec2 aCell;\nvarying vec2 vCell;\nvarying vec3 vFacV, vFacN;')
+        .replace('#include <uv_vertex>', '#include <uv_vertex>\nvCell = aCell;')
+        .replace('#include <project_vertex>', '#include <project_vertex>\nvFacV = -mvPosition.xyz;\nvFacN = transformedNormal;');
       const samp = atlas.gl2 ? (t) => `textureGrad(${t}, cuv, cgx, cgy)` : (t) => `texture2D(${t}, cuv)`;
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec2 vCell;')
+        .replace('#include <common>', '#include <common>\nvarying vec2 vCell;\nvarying vec3 vFacV, vFacN;\nuniform vec3 facSky;')
         .replace(
           '#include <map_fragment>',
           `vec2 cuv = vCell + ${PAD} + fract(vUv) * ${IN};
@@ -482,7 +485,12 @@
           // у каждого окна своя яркость и оттенок (тёплые лампы, холодный свет экранов), сверху светлее
           float wr = fract(sin(dot(wId, vec2(39.3468, 11.135))) * 24634.6345);
           vec3 wt = mix(vec3(1.0, 0.86, 0.66), vec3(0.78, 0.88, 1.0), step(0.72, wr));
-          totalEmissiveRadiance *= emissiveColor.rgb * litW * (0.3 + 0.7 * wr) * wt * (0.7 + 0.3 * fract(vUv.y));`
+          totalEmissiveRadiance *= emissiveColor.rgb * litW * (0.3 + 0.7 * wr) * wt * (0.7 + 0.3 * fract(vUv.y));
+          // тёмное стекло отражает небо (сильнее под острым углом — Френель)
+          float gLum = dot(texelColor.rgb, vec3(0.3, 0.59, 0.11));
+          float glassK = (1.0 - wallMask) * (1.0 - smoothstep(0.06, 0.3, gLum)) * (1.0 - litW * step(0.01, dot(totalEmissiveRadiance, vec3(1.0))));
+          float fres = 0.1 + 0.9 * pow(1.0 - clamp(dot(normalize(vFacN), normalize(vFacV)), 0.0, 1.0), 4.0);
+          totalEmissiveRadiance += facSky * glassK * fres;`
         );
     };
     if (!atlas.gl2) facade.extensions = { derivatives: true };
@@ -667,17 +675,17 @@
         if (t === T.ROAD) {
           const r = w.rid[i];
           if (r && !(r & 0x8000) && edges[r - 1].cls === 'hw') continue; // обочина шоссе — в местности
-          c.copy(GC.asphalt).offsetHSL(0, 0, v);
+          c.copy(GC.asphalt).multiplyScalar(1 + v * 3); // цвета линейные: лёгкая вариация множителем
           asph.top(X, Y, X + 1, Y + 1, RH, c, 6);
           continue;
         }
         if (!URBAN[t]) continue;
         if (t === T.PARKING) {
-          c.copy(GC.parking).offsetHSL(0, 0, v);
+          c.copy(GC.parking).multiplyScalar(1 + v * 3);
           asph.top(X, Y, X + 1, Y + 1, CB, c, 6);
         } else if (t !== T.LAWN) {
           const base = t === T.SIDEWALK ? GC.sidewalk : t === T.PLAZA ? GC.plaza : t === T.BUILDING ? GC.building : GC.pave;
-          c.copy(base).offsetHSL(0, 0, v);
+          c.copy(base).multiplyScalar(1 + v * 3);
           pav.top(X, Y, X + 1, Y + 1, CB, c, t === T.PLAZA ? 2 : 3);
         }
         // бордюр к более низким соседям (дорога, земля, вода — набережная)
@@ -778,7 +786,6 @@
     yield;
     // 5) здания
     const B = new GBU(true, 8192);
-    let k = 0;
     for (const id of w.chunkBuildings(cx, cy)) {
       R3.buildArch(B, S, Lt, w.buildings[id]);
       yield;
