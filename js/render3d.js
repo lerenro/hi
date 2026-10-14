@@ -209,6 +209,7 @@
     R3.lightMat = new THREE.MeshBasicMaterial({ vertexColors: true, color: '#5a6a80' });
     R3.bulbMat = new THREE.MeshBasicMaterial({ color: '#8a8a7a' });
     R3.decoGeos = makeDecoGeos();
+    R3.cityInit();
 
     // вода
     const wg = new THREE.PlaneGeometry(420, 420, 1, 1);
@@ -339,12 +340,22 @@
     for (let vy = 0; vy <= CH; vy++) for (let vx = 0; vx <= CH; vx++) hv[vy * (CH + 1) + vx] = w.vertH(x0 + vx, y0 + vy);
     const gb = new GB();
     const c = new THREE.Color();
+    const URB = J.URBAN, CB = J.CURB_H;
     for (let ty = 0; ty < CH; ty++)
       for (let tx = 0; tx < CH; tx++) {
         const X = x0 + tx, Y = y0 + ty;
         if (!w.inb(X, Y)) continue;
-        const t = w.tile(X, Y);
-        let hex = UNDER[t] || J.TCOL[t];
+        const i = Y * w.W + X, t = w.t[i];
+        // городская земля (асфальт, плитка, бордюры) строится в render_city.js; обочины шоссе — здесь
+        if (t === T.ROAD && !(w.rid[i] && !(w.rid[i] & 0x8000) && w.net.edges[w.rid[i] - 1].cls === 'hw')) continue;
+        if (URB[t] && t !== T.LAWN) continue;
+        if (t === T.LAWN) {
+          c.set(J.TCOL[t]).offsetHSL(0, 0, (J.hash2(X, Y, 7) - 0.5) * 0.06);
+          gb.tri([X, CB, Y + 1], [X + 1, CB, Y + 1], [X + 1, CB, Y], c);
+          gb.tri([X, CB, Y + 1], [X + 1, CB, Y], [X, CB, Y], c);
+          continue;
+        }
+        let hex = UNDER[t] || (t === T.ROAD ? '#77716a' : J.TCOL[t]);
         if (t === T.BRIDGE || t === T.DOCKWOOD) hex = UNDER[1];
         c.set(hex);
         const v = (J.hash2(X, Y, 7) - 0.5) * 0.1;
@@ -371,7 +382,8 @@
         const X = x0 + tx, Y = y0 + ty;
         if (!w.inb(X, Y)) continue;
         const o = w.o[Y * w.W + X];
-        if (!o || o === O.FOUNTAIN) continue;
+        // уличная мебель (фонари, светофоры, деревья у тротуара…) — одной геометрией в render_city.js
+        if (!o || R3.props[o] || !R3.decoGeos[o]) continue;
         (lists[o] || (lists[o] = [])).push(X, Y);
       }
     const bulbs = [];
@@ -415,46 +427,8 @@
       group.add(im);
     }
 
-    // Здания, стены, мосты
-    const bb = new GB(), lb = new GB();
-    for (const b of w.buildings) {
-      if (b.x < x0 || b.x >= x0 + CH || b.y < y0 || b.y >= y0 + CH) continue;
-      R3.buildBuilding(bb, lb, b);
-      yield;
-    }
-    const wallC = new THREE.Color('#8a8490'), wallTop = new THREE.Color('#6a6470');
-    const plank = new THREE.Color('#9a7a52'), plankD = new THREE.Color('#6a4a2a');
-    for (let ty = 0; ty < CH; ty++)
-      for (let tx = 0; tx < CH; tx++) {
-        const X = x0 + tx, Y = y0 + ty;
-        if (!w.inb(X, Y)) continue;
-        const t = w.t[Y * w.W + X];
-        if (t === T.WALL) {
-          bb.box(X, 0, Y, X + 1, 2.2, Y + 1, wallC);
-          bb.box(X - 0.03, 2.2, Y - 0.03, X + 1.03, 2.4, Y + 1.03, wallTop);
-        } else if (t === T.BRIDGE || t === T.DOCKWOOD) {
-          bb.box(X, 0.14, Y, X + 1, 0.3, Y + 1, (X + Y) % 2 ? plank : plankD);
-          // перила там, где рядом вода
-          const wt = (xx, yy) => {
-            const q = w.tile(xx, yy);
-            return q === T.WATER || q === T.DEEP;
-          };
-          if (wt(X - 1, Y) && (Y % 2 === 0)) bb.box(X, 0.3, Y + 0.4, X + 0.12, 0.9, Y + 0.6, plankD);
-          if (wt(X + 1, Y) && (Y % 2 === 0)) bb.box(X + 0.88, 0.3, Y + 0.4, X + 1, 0.9, Y + 0.6, plankD);
-          if (wt(X, Y - 1) && (X % 2 === 0)) bb.box(X + 0.4, 0.3, Y, X + 0.6, 0.9, Y + 0.12, plankD);
-          if (wt(X, Y + 1) && (X % 2 === 0)) bb.box(X + 0.4, 0.3, Y + 0.88, X + 0.6, 0.9, Y + 1, plankD);
-        }
-        if (w.o[Y * w.W + X] === O.FOUNTAIN) {
-          bb.geo(R3.decoGeos[O.FOUNTAIN], M(X + 0.5, 0.05, Y + 0.5, 1.4, 1.2, 1.4), new THREE.Color('#ffffff'));
-        }
-      }
-    if (!bb.empty) {
-      const bm = new THREE.Mesh(bb.build(), R3.buildMat);
-      bm.castShadow = true;
-      bm.receiveShadow = true;
-      group.add(bm);
-    }
-    if (!lb.empty) group.add(new THREE.Mesh(lb.build(), R3.lightMat));
+    // Город: земля, бордюры, разметка, шоссе, мебель, стены, мосты и все здания
+    yield* R3.cityChunkGen(w, cx, cy, group);
     R3.scene.add(group);
     return { group };
   };
