@@ -344,6 +344,8 @@
     const C1D = C1.clone().multiplyScalar(0.72), C2D = C2.clone().multiplyScalar(0.7);
     const GLOW = col('#ffffff');
     const mat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.88, emissive: C1.clone().multiplyScalar(0.32) });
+    // контурный свет цвета стенда и светящиеся глаза (powers.js), затем обесцвечивание
+    if (R3.standPatch) R3.standPatch(mat, sd.c1, sd.c2);
     R3.fxPatch(mat);
     const head = sd.head;
     const v = makeRig({

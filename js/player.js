@@ -497,6 +497,21 @@
       return;
     }
     const key = 's' + i;
+    // Мир: в своём остановленном времени та же клавиша роняет дорожный каток
+    const ts = J.G.timestop;
+    if (ab.kind === 'timestop' && ts && ts.by === p) {
+      if (p.stand.id === 'the_world' && !J.G.roller && !(ts.intro > 0) && p._rollerTs !== ts && p.se >= 15) {
+        const tg = P.aim(p, 12).target || J.nearestHostile(p, 12);
+        if (tg) {
+          p._rollerTs = ts;
+          p.se -= 15;
+          p.anim = { type: 'pose', t: 0.6, max: 0.6 };
+          J.Cb.roadRoller(p, tg);
+          if (J.Pw) J.Pw.shout(p, 'ロードローラーだッ!!', '#ffe14a', '#3a2a00');
+        }
+      }
+      return;
+    }
     if (p.cds[key] > 0) return;
     if (p.se < ab.cost) {
       J.UI.toast('Не хватает энергии стенда.', 'muted');

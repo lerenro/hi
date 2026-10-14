@@ -1281,6 +1281,12 @@
         });
       }
       if (sv.armL) R3.animateStand(sv, e, attacking, tl, dt);
+      // аура, контурный свет, послеобразы; без доспехов Колесница тоньше
+      if (J.Pw && J.Pw.ready) J.Pw.standFx(e, sv, attacking, dt);
+      if (e.st.armorOff > 0) {
+        sv.group.scale.x *= 0.8;
+        sv.group.scale.z *= 0.8;
+      }
       const op = e.isPlayer && R3.cam.near ? 0.35 : 0.88;
       if (sv.op !== op) {
         sv.op = op;

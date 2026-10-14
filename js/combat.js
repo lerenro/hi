@@ -1019,6 +1019,8 @@
     const pr = Cb.prof(e);
     const wind = t * (e.boss ? 0.9 : 1) * (pr.wind / 0.36);
     const melee = ab.kind === 'strike' || ab.kind === 'rush' || ab.kind === 'bomb' || ab.kind === 'disc';
+    // сила видна заранее: свет собирается в руке, зона удара подсвечена
+    if (J.Pw && !melee) J.Pw.tele(e, ab, tg, wind);
     Cb.attack(e, {
       type: melee ? 'heavy' : 'cast', clip: melee ? 'heavy' : null, dur: wind + 0.05, at: wind, stand: standOn(e), tg, kind: ab.kind === 'rush' ? 'rush' : melee ? 'heavy' : 'shot', glint: true, ai: true,
       fn: () => {
@@ -1162,7 +1164,7 @@
     const g = G();
     const x = tg.x, y = tg.y;
     J.R3.text(e.x, e.y, 'ДОРОЖНЫЙ КАТОК!', 'tbig', 1.6, 3);
-    J.UI.toast('ДИО: «ДОРОЖНЫЙ КАТОК!!»', 'red');
+    J.UI.toast(e.isPlayer ? '«ДОРОЖНЫЙ КАТОК!!» — когда время пойдёт, он взорвётся.' : 'ДИО: «ДОРОЖНЫЙ КАТОК!!»', e.isPlayer ? 'gold' : 'red');
     const m = J.R3.roller ? J.R3.roller() : null;
     const rr = { x, y, h: 9, vh: 0, m, t: 0, landed: false, by: e };
     g.roller = rr;

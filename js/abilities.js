@@ -26,6 +26,9 @@
     const ang = aim.ang;
     u.face = ang;
     const anim = (type, t) => (u.anim = { type, t, max: t, stand: !extra || !extra.noStand });
+    const Pw = J.Pw && J.Pw.ready ? J.Pw : null;
+    // своя сверхспособность стенда (powers.js): огонь Красного Мага, лозы, изумруды, стирание Руки...
+    if (Pw && ab.pw && Pw.has(ab.pw)) return Pw.use(u, ab, aim, extra, pw, kind);
     switch (ab.kind) {
       case 'rush': {
         // раш: удержание клавиши продлевает, в конце — добивающий удар
@@ -48,6 +51,7 @@
           for (let i = 0; i < hits; i++) n += J.hitArc(u, a, ab.range || 1.8, ab.arc || 1.4, ab.dmg * pw, { knock: ab.knock || 3, stun: ab.stun, fx: ab.fx, pierceDef: ab.pierceDef, kind, melee: true, finisher: strong, gdmg: strong ? 70 : 45 });
           const fx = u.x + Math.cos(a) * 1.2, fy = u.y + Math.sin(a) * 1.2;
           J.R3.flash(fx, fy, 0.9, ab.color || standColor(u), 0.2);
+          if (Pw && !(extra && extra.noStand && !ab.color)) Pw.fxStrike(u, ab, a, n);
           if (u.isPlayer && !n) u.whiff = g.t;
         };
         // игрок: замах и удар в момент касания; ИИ уже показал замах (Cb.aiCastTele)
@@ -61,7 +65,8 @@
       case 'shoot': {
         anim('cast', 0.3);
         if (J.Cb) J.Cb.threat(u, 0.12, 'shot');
-        if (J.Fx && J.Fx.ready && u.isPlayer) J.Fx.star(u.x + Math.cos(ang) * 0.9, g.world.groundY(u.x, u.y) + 1.25, u.y + Math.sin(ang) * 0.9, 0.5, ab.color || '#ffffff');
+        if (Pw) Pw.fxShoot(u, ab, ang);
+        else if (J.Fx && J.Fx.ready && u.isPlayer) J.Fx.star(u.x + Math.cos(ang) * 0.9, g.world.groundY(u.x, u.y) + 1.25, u.y + Math.sin(ang) * 0.9, 0.5, ab.color || '#ffffff');
         const n = ab.n || 1;
         const spread = deg(ab.spread || 0);
         for (let i = 0; i < n; i++) {
@@ -70,7 +75,7 @@
           J.spawnProj(u, {
             ang: a, speed: ab.speed || 10, dmg: ab.dmg * pw, range: ab.range || 10, shape: ab.proj, color: ab.color, size: ab.size,
             pierce: ab.pierce, homing: ab.homing, fx: ab.fx, explode: ab.explode, cloud: ab.cloud, kind, ghost: ab.ghost,
-            stand: !(extra && extra.noStand) && !!u.stand,
+            stand: !(extra && extra.noStand) && !!u.stand, kick: ab.kick, theme: ab.vis,
           });
         }
         return true;
@@ -88,6 +93,7 @@
         }
         const x1 = u.x + Math.cos(ang) * L, y1 = u.y + Math.sin(ang) * L;
         J.R3.beam(u.x, u.y, x1, y1, ab.width || 0.35, ab.color || standColor(u), 0.35);
+        if (Pw) Pw.fxBeam(u, ab, ang, L);
         if (J.Fx && J.Fx.ready && J.Fx.nearPlayer(u, null, 25)) {
           J.Fx.sparks(x1, g.world.groundY(x1, y1) + 1.1, y1, 14, ang + Math.PI, ab.color || standColor(u), 6);
           if (u.isPlayer) J.Fx.word('ビシュウウ', u.x + Math.cos(ang) * 2, u.y + Math.sin(ang) * 2, g.world.groundY(u.x, u.y) + 1.6, 'mid', ab.color || '#ffffff');
@@ -121,6 +127,7 @@
           J.R3.flash(cx, cy, ab.radius * 0.8, ab.color || standColor(u), 0.35, 0.6);
           J.R3.burst(cx, cy, 0.6, ab.color || standColor(u), 24, ab.radius * 1.5, 0.6);
           J.hitCircle(u, cx, cy, ab.radius, ab.dmg * pw, { fx: ab.fx, kind, knock: ab.knock || 3, gdmg: 40 });
+          if (Pw) Pw.fxNova(u, ab, cx, cy);
           if (ab.radius > 3) J.R3.cam.shake = 0.2;
           if (J.Fx && J.Fx.ready) J.Fx.shock(cx, cy, Math.min(1.5, ab.radius / 3));
         };
@@ -138,6 +145,7 @@
         if (ab.ghost) u.st.ghost = dist / sp + 0.05;
         anim('heavy', dist / sp);
         if (J.Fx && J.Fx.ready) J.Fx.dodge(u, ang);
+        if (Pw) Pw.fxDash(u, ab);
         return true;
       }
       case 'blink': {
@@ -167,8 +175,11 @@
         if (!ok) return false;
         J.R3.burst(u.x, u.y, 1, standColor(u), 16, 3, 0.5);
         if (J.Fx && J.Fx.ready) J.Fx.star(u.x, g.world.groundY(u.x, u.y) + 1.1, u.y, 1.2, standColor(u));
+        const bx0 = u.x, by0 = u.y;
+        if (Pw && u.view) Pw.ghost(u.view, standColor(u), 0.35);
         u.x = tx;
         u.y = ty;
+        if (Pw) Pw.fxBlink(u, ab, bx0, by0);
         J.R3.burst(u.x, u.y, 1, standColor(u), 16, 3, 0.5);
         if (J.Fx && J.Fx.ready && J.Fx.nearPlayer(u, null, 20)) {
           J.Fx.star(u.x, g.world.groundY(u.x, u.y) + 1.1, u.y, 1.2, standColor(u));
@@ -182,7 +193,8 @@
         const tg = aim.target && J.dist(u.x, u.y, aim.target.x, aim.target.y) < (ab.range || 7) + 0.5 ? aim.target : J.nearestHostile(u, ab.range || 7, 0.6, ang);
         if (!tg) return false;
         anim('cast', 0.3);
-        J.R3.beam(u.x, u.y, tg.x, tg.y, 0.12, standColor(u), 0.35);
+        if (Pw) Pw.fxPull(u, ab, tg);
+        else J.R3.beam(u.x, u.y, tg.x, tg.y, 0.12, standColor(u), 0.35);
         const a = Math.atan2(tg.y - u.y, tg.x - u.x);
         if (!tg.boss) {
           tg.x = u.x + Math.cos(a) * 1.1;
@@ -230,6 +242,7 @@
         g.timeskip = { by: u, t: ab.dur, max: ab.dur };
         J.R3.text(u.x, u.y, 'КИНГ КРИМСОН!', 'tbig', 1.4, 2.6);
         if (J.Fx && J.Fx.ready) J.Fx.timeskip(u, true);
+        if (Pw) Pw.surge(u, 1.5);
         for (const o of g.ents) if (o.ai && J.hostile(u, o)) o.ai.blind = ab.dur;
         if (u.isPlayer) J.UI.timeskipFx(true);
         else {
@@ -263,6 +276,7 @@
         if (!snap) return false;
         const ox = u.x, oy = u.y;
         J.R3.flash(u.x, u.y, 2.5, '#d670b8', 0.5);
+        if (Pw) Pw.fxRewind(u, ab, ox, oy, h.filter((s) => s.t >= snap.t));
         u.x = snap.x;
         u.y = snap.y;
         u.hp = Math.max(u.hp, snap.hp);
@@ -274,7 +288,7 @@
           J.Sfx && J.Sfx.whoosh(0.4, false, 0.12);
         }
         if (ab.dmg) {
-          J.R3.flash(ox, oy, ab.radius, '#ff5fa2', 0.5);
+          if (!Pw) J.R3.flash(ox, oy, ab.radius, '#ff5fa2', 0.5);
           J.hitCircle(u, ox, oy, ab.radius, ab.dmg * pw, { knock: 5, kind: 'fire' });
         }
         if (u.isPlayer) J.UI.rewindFx();
@@ -282,33 +296,41 @@
       }
       case 'summon': {
         anim('cast', 0.3);
+        if (Pw) Pw.fxSummon(u, ab);
         J.spawnSummon(u, ab.unit, ab.n || 1, ab.life || 15, pw);
         return true;
       }
       case 'heal': {
         const amt = u.maxHp * (ab.amt || 0.3);
         u.hp = Math.min(u.maxHp, u.hp + amt);
-        J.R3.burst(u.x, u.y, 1, '#7ed957', 20, 2, 0.8, 3);
+        if (Pw) Pw.fxHeal(u, ab);
+        else J.R3.burst(u.x, u.y, 1, '#7ed957', 20, 2, 0.8, 3);
         J.R3.text(u.x, u.y, '+' + Math.round(amt), 'theal', 1);
         return true;
       }
       case 'restore': {
         anim('cast', 0.35);
         let healed = 0;
+        const foes = [], friends = [];
         for (const o of g.ents) {
           if (o.dead || o === u) continue;
           const d = J.dist(u.x, u.y, o.x, o.y);
           if (d > ab.radius) continue;
           if (J.hostile(u, o)) {
+            // «исправленный» враг вплавлен в камень: стоит как статуя
             J.hurt(o, 12 * pw, u, { stun: ab.stun });
+            o.st.root = Math.max(o.st.root || 0, o.boss ? 1 : ab.stun || 2.5);
             J.R3.text(o.x, o.y, 'ВОССТАНОВЛЕНИЕ', 'tpink', 0.8);
+            foes.push(o);
           } else if (o.team === u.team || o.kind === 'civ') {
             o.hp = Math.min(o.maxHp, o.hp + ab.heal * pw);
             healed++;
+            friends.push(o);
             J.R3.burst(o.x, o.y, 1, '#ff9be6', 10, 1.5, 0.6);
           }
         }
-        J.R3.ring(u.x, u.y, ab.radius, '#ff9be6', 0.6);
+        if (Pw) Pw.fxRestore(u, ab, foes, friends);
+        else J.R3.ring(u.x, u.y, ab.radius, '#ff9be6', 0.6);
         if (u.isPlayer && healed === 0) J.UI.toast('Безумный Бриллиант не может лечить своего владельца.', 'muted');
         return true;
       }
@@ -324,6 +346,7 @@
         if (b === 'zero') J.R3.text(u.x, u.y, 'РЕКВИЕМ', 'tbig', 1.4, 2.6);
         if (b === 'lovetrain') J.R3.text(u.x, u.y, 'ПОЕЗД ЛЮБВИ', 'tbig', 1.4, 2.6);
         if (b === 'fly') u.z = 0;
+        if (Pw) Pw.fxBuff(u, ab);
         J.R3.burst(u.x, u.y, 1, ab.color || standColor(u), 24, 2.5, 0.7, 3);
         J.R3.ring(u.x, u.y, 2, ab.color || standColor(u), 0.5);
         if (J.Fx && J.Fx.ready && u.isPlayer) J.Fx.column(0, 'ドドドド', ab.color || standColor(u), 1.2);
@@ -334,7 +357,8 @@
         if (!tg) return false;
         anim('cast', 0.3);
         const victims = ab.aoe ? G().ents.filter((o) => !o.dead && J.hostile(u, o) && J.dist(o.x, o.y, tg.x, tg.y) <= ab.aoe) : [tg];
-        J.R3.beam(u.x, u.y, tg.x, tg.y, 0.08, standColor(u), 0.3);
+        if (Pw) Pw.fxHex(u, ab, tg, victims);
+        else J.R3.beam(u.x, u.y, tg.x, tg.y, 0.08, standColor(u), 0.3);
         if (ab.aoe) J.R3.ring(tg.x, tg.y, ab.aoe, standColor(u), 0.5);
         for (const v of victims) A.applyHex(u, v, ab.status, ab.dur, pw);
         return true;
@@ -352,7 +376,7 @@
             x = cx;
             y = cy;
           }
-          J.addTrap(u, { x, y, dmg: ab.dmg * pw, fx: ab.fx, color: ab.color || standColor(u), life: ab.life || 25 });
+          J.addTrap(u, { x, y, dmg: ab.dmg * pw, fx: ab.fx, color: ab.color || standColor(u), life: ab.life || 25, vis: ab.vis });
         }
         return true;
       }
@@ -363,13 +387,15 @@
           fx = aim.target.x;
           fy = aim.target.y;
         }
-        J.addField(u, { x: fx, y: fy, radius: ab.radius, dur: ab.dur, dps: ab.dps * pw, color: ab.color || standColor(u), fx: ab.fx, follow: ab.follow, hurtSelf: ab.hurtSelf, calamity: ab.calamity });
+        J.addField(u, { x: fx, y: fy, radius: ab.radius, dur: ab.dur, dps: ab.dps * pw, color: ab.color || standColor(u), fx: ab.fx, follow: ab.follow, hurtSelf: ab.hurtSelf, calamity: ab.calamity, vis: ab.vis });
+        if (Pw) Pw.surge(u, 1);
         return true;
       }
       case 'reveal': {
         if (!u.isPlayer) return false;
         g.reveal = ab.dur;
         J.R3.ring(u.x, u.y, 25, standColor(u), 1.2);
+        if (Pw) Pw.fxReveal(u, ab);
         J.UI.toast('Скрытое стало видно: враги, улики и тайники отмечены.', 'gold');
         if (ab.money) {
           const m = 20 + Math.floor(Math.random() * 120);
@@ -418,6 +444,7 @@
         anim('heavy', 0.35);
         if (!tg) return false;
         J.hurt(tg, ab.dmg * pw, u, { stun: ab.stun });
+        if (Pw) Pw.fxDisc(u, tg, !!(tg.stand && (!tg.boss || tg.hp < tg.maxHp * 0.35)));
         if (tg.stand && (!tg.boss || tg.hp < tg.maxHp * 0.35)) {
           if (u.isPlayer) {
             J.P.addItem(u, 'stand_disc', 1, { stand: tg.stand.id });
@@ -579,6 +606,7 @@
     e.vx = d.vx;
     e.vy = d.vy;
     J.R3.burst(e.x, e.y, 0.6, standColor(e), 2, 1, 0.3, 0.5);
+    if (J.Pw && J.Pw.ready) J.Pw.dashTick(e, d, dt);
     if (d.dmg > 0)
       for (const o of G().ents) {
         if (o.dead || d.hit.has(o.id) || !J.hostile(e, o)) continue;

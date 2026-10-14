@@ -381,6 +381,180 @@
     Sfx.tick(false);
     setTimeout(() => Sfx.tick(true), 70);
   };
+
+  // ---------- Звуки сверхспособностей ----------
+  // полосовой шум с огибающей (основа для огня, воды, ветра)
+  const band = (t, dur, f0, f1, Q, peak, a, type) => {
+    const ac = Sfx.ac;
+    const n = noise(t, dur);
+    const f = ac.createBiquadFilter();
+    f.type = type || 'bandpass';
+    f.Q.value = Q;
+    f.frequency.setValueAtTime(f0, t);
+    f.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + a);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    n.connect(f).connect(g).connect(master);
+    return g;
+  };
+  // Рёв пламени
+  Sfx.fire = function (power = 1) {
+    const t = voice('fire', 0.9);
+    if (t === null) return;
+    band(t, 0.8 * power, 300, 900, 0.7, 0.32 * power, 0.12, 'lowpass');
+    band(t, 0.5, 1800, 600, 1.2, 0.08 * power, 0.05);
+  };
+  // Электрический треск
+  Sfx.zap = function (power = 1) {
+    const t = voice('zap', 0.5);
+    if (t === null) return;
+    const ac = Sfx.ac;
+    for (let i = 0; i < 5; i++) {
+      const d = t + i * 0.035 + Math.random() * 0.02;
+      const o = osc('square', 90 + Math.random() * 300, 60, d, 0.05);
+      const g = ac.createGain();
+      env(g, d, 0.001, 0.09 * power, 0.04);
+      o.connect(g).connect(master);
+    }
+    band(t, 0.25, 5000, 2500, 0.8, 0.16 * power, 0.005, 'highpass');
+  };
+  // Лёд: хрустальный звон
+  Sfx.ice = function () {
+    const t = voice('ice', 0.8);
+    if (t === null) return;
+    const ac = Sfx.ac;
+    [2637, 3520, 4186, 3136].forEach((f, i) => {
+      const d = t + i * 0.03;
+      const o = osc('sine', f, f * 0.995, d, 0.6);
+      const g = ac.createGain();
+      env(g, d, 0.002, 0.06, 0.55);
+      o.connect(g).connect(master);
+    });
+    band(t, 0.2, 6000, 3000, 1, 0.1, 0.003, 'highpass');
+  };
+  // Вода: всплеск
+  Sfx.water = function () {
+    const t = voice('water', 0.6);
+    if (t === null) return;
+    band(t, 0.45, 2400, 500, 1.5, 0.22, 0.02);
+    band(t + 0.05, 0.3, 900, 300, 2, 0.12, 0.03);
+  };
+  // Хлёст лозы / нити
+  Sfx.whip = function () {
+    const t = voice('whip', 0.4);
+    if (t === null) return;
+    band(t, 0.18, 800, 5000, 1.6, 0.18, 0.12);
+    const ac = Sfx.ac;
+    const c = noise(t + 0.17, 0.02);
+    const g = ac.createGain();
+    env(g, t + 0.17, 0.001, 0.25, 0.02);
+    c.connect(g).connect(master);
+  };
+  // Стекло: изумруды, осколки, зеркала
+  Sfx.glass = function () {
+    const t = voice('glass', 0.5);
+    if (t === null) return;
+    const ac = Sfx.ac;
+    for (let i = 0; i < 3; i++) {
+      const f = 3000 + Math.random() * 3000;
+      const d = t + i * 0.025;
+      const o = osc('triangle', f, f, d, 0.3);
+      const g = ac.createGain();
+      env(g, d, 0.001, 0.05, 0.25);
+      o.connect(g).connect(master);
+    }
+  };
+  // Рука стирает пространство: «гаон»
+  Sfx.erase = function () {
+    const t = voice('erase', 0.8, true);
+    if (t === null) return;
+    const ac = Sfx.ac;
+    const o = osc('sawtooth', 220, 40, t, 0.35);
+    const f = ac.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(1800, t);
+    f.frequency.exponentialRampToValueAtTime(150, t + 0.35);
+    const g = ac.createGain();
+    env(g, t, 0.005, 0.32, 0.35);
+    o.connect(f).connect(g).connect(master);
+    band(t, 0.25, 4000, 200, 0.9, 0.2, 0.01);
+  };
+  // Молния-застёжка: быстрая трещотка
+  Sfx.zip = function (up = true) {
+    const t = voice('zip', 0.5);
+    if (t === null) return;
+    const ac = Sfx.ac;
+    for (let i = 0; i < 14; i++) {
+      const d = t + i * 0.018;
+      const n = noise(d, 0.006);
+      const bp = ac.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = (up ? 1800 + i * 120 : 3400 - i * 120);
+      bp.Q.value = 6;
+      const g = ac.createGain();
+      env(g, d, 0.0005, 0.35, 0.006);
+      n.connect(bp).connect(g).connect(master);
+    }
+  };
+  // Выстрел
+  Sfx.shot = function (power = 1) {
+    const t = voice('shot', 0.4);
+    if (t === null) return;
+    band(t, 0.12, 3000, 800, 0.6, 0.35 * power, 0.002, 'lowpass');
+    thudAt(t, 0.4 * power, 0, 0.6);
+  };
+  // Звук Эха: пружинящее «бойнг»
+  Sfx.word = function () {
+    const t = voice('word', 0.5);
+    if (t === null) return;
+    const ac = Sfx.ac;
+    const o = osc('sine', 300, 120, t, 0.35);
+    const lfo = osc('sine', 18, 18, t, 0.35);
+    const lg = ac.createGain();
+    lg.gain.value = 60;
+    lfo.connect(lg).connect(o.frequency);
+    const g = ac.createGain();
+    env(g, t, 0.005, 0.2, 0.33);
+    o.connect(g).connect(master);
+  };
+  // Жизнь / исцеление: светлый аккорд
+  Sfx.life = function () {
+    const t = voice('life', 1);
+    if (t === null) return;
+    const ac = Sfx.ac;
+    [523, 659, 784, 1046].forEach((f, i) => {
+      const d = t + i * 0.06;
+      const o = osc('sine', f, f, d, 0.8);
+      const g = ac.createGain();
+      env(g, d, 0.02, 0.05, 0.7);
+      o.connect(g).connect(master);
+    });
+  };
+  // Гул заряда силы (короткий)
+  Sfx.power = function (dur = 0.4) {
+    const t = voice('power', dur);
+    if (t === null) return;
+    const ac = Sfx.ac;
+    const o = osc('sawtooth', 110, 330, t, dur);
+    const f = ac.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(400, t);
+    f.frequency.exponentialRampToValueAtTime(2400, t + dur);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.07, t + dur * 0.85);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.05);
+    o.connect(f).connect(g).connect(master);
+  };
+  // Гром
+  Sfx.thunder = function () {
+    const t = voice('thunder', 2, true);
+    if (t === null) return;
+    Sfx.zap(1.2);
+    band(t + 0.02, 1.6, 1200, 60, 0.5, 0.6, 0.01, 'lowpass');
+  };
   // Замедление: глушим верха
   Sfx.setSlow = function (k) {
     if (!Sfx.ac || !lp) return;

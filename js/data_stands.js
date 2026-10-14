@@ -13,7 +13,7 @@
     desc: 'Невероятно сильный и точный стенд ближнего боя. Видит муху на расстоянии.',
     abil: [
       { name: 'ОРА-раш', kind: 'rush', dmg: 4, dur: 1.4, range: 1.6, cd: 6, cost: 14, lvl: 1 },
-      { name: 'Звёздный палец', kind: 'beam', dmg: 26, range: 6, width: 0.45, color: '#c7b6ff', cd: 5, cost: 12, lvl: 3 },
+      { name: 'Звёздный палец', pw: 'starFinger', kind: 'beam', dmg: 26, range: 6, width: 0.45, color: '#c7b6ff', cd: 5, cost: 12, lvl: 3 },
       { name: 'Финальный ОРА', kind: 'strike', dmg: 60, range: 1.8, knock: 9, stun: 1.2, cd: 14, cost: 25, lvl: 6 },
     ],
     evo: { to: 'star_platinum_tw', how: 'witness', note: 'Пережить остановку времени врагом (ур. 5+)' },
@@ -24,7 +24,7 @@
     desc: 'Платина научилась останавливать время. Пять секунд — и всё решено.',
     abil: [
       { name: 'ОРА-раш', kind: 'rush', dmg: 5, dur: 1.5, range: 1.7, cd: 6, cost: 14, lvl: 1 },
-      { name: 'Звёздный палец', kind: 'beam', dmg: 30, range: 6.5, width: 0.45, color: '#c7b6ff', cd: 5, cost: 12, lvl: 1 },
+      { name: 'Звёздный палец', pw: 'starFinger', kind: 'beam', dmg: 30, range: 6.5, width: 0.45, color: '#c7b6ff', cd: 5, cost: 12, lvl: 1 },
       { name: 'Звёздная Платина: Мир!', kind: 'timestop', dur: 3, cd: 40, cost: 55, lvl: 1 },
     ],
   });
@@ -34,9 +34,9 @@
     desc: 'Повелитель огня с головой птицы. Пламя гнётся по воле владельца.',
     basicFire: true,
     abil: [
-      { name: 'Огненный анкх', kind: 'shoot', n: 1, dmg: 18, speed: 9, range: 9, proj: 'flame', color: '#ff7b1c', size: 0.35, fx: { burn: 3 }, cd: 2.5, cost: 8, lvl: 1 },
-      { name: 'Красные путы', kind: 'nova', radius: 3.2, dmg: 18, color: '#ff5a1c', fx: { burn: 4, slow: 2 }, cd: 9, cost: 18, lvl: 3 },
-      { name: 'Ураган перекрёстного огня', kind: 'shoot', n: 7, spread: 70, dmg: 16, speed: 8, range: 10, proj: 'flame', color: '#ff9b2c', size: 0.32, homing: 2.2, fx: { burn: 4 }, cd: 14, cost: 30, lvl: 6 },
+      { name: 'Огненный анкх', pw: 'ankh', kind: 'shoot', n: 1, dmg: 18, speed: 9, range: 9, proj: 'flame', color: '#ff7b1c', size: 0.35, fx: { burn: 3 }, cd: 2.5, cost: 8, lvl: 1 },
+      { name: 'Красные путы', pw: 'redBind', kind: 'nova', radius: 3.2, dmg: 18, color: '#ff5a1c', fx: { burn: 4, slow: 2 }, cd: 9, cost: 18, lvl: 3 },
+      { name: 'Ураган перекрёстного огня', pw: 'crossfire', kind: 'shoot', n: 7, spread: 70, dmg: 16, speed: 8, range: 10, proj: 'flame', color: '#ff9b2c', size: 0.32, homing: 2.2, fx: { burn: 4 }, cd: 14, cost: 30, lvl: 6 },
     ],
   });
   add({
@@ -44,9 +44,9 @@
     stats: 'DCD ADE', c1: '#8b3fc4', c2: '#c06bff', head: 'vines', cry: 'ОХ МОЙ БОГ', type: 'Колючие лозы',
     desc: 'Терновые лозы для предсказаний и захвата. Проводит хамон.',
     abil: [
-      { name: 'Хватка лоз', kind: 'pull', range: 7, dmg: 8, stun: 0.8, cd: 4, cost: 8, lvl: 1 },
+      { name: 'Хватка лоз', pw: 'lasso', style: 'vine', kind: 'pull', range: 7, dmg: 8, stun: 0.8, cd: 4, cost: 8, lvl: 1 },
       { name: 'Ясновидение', kind: 'reveal', dur: 25, cd: 30, cost: 20, lvl: 2 },
-      { name: 'Хамон по лозам', kind: 'nova', radius: 3.5, dmg: 24, color: '#ffd84a', hamon: true, fx: { stun: 1 }, cd: 10, cost: 20, lvl: 5 },
+      { name: 'Хамон по лозам', pw: 'hamonVines', kind: 'nova', radius: 3.5, dmg: 24, color: '#ffd84a', hamon: true, fx: { stun: 1 }, cd: 10, cost: 20, lvl: 5 },
     ],
   });
   add({
@@ -55,9 +55,9 @@
     desc: 'Стенд-лента, способный разматываться на огромные расстояния.',
     ranged: true,
     abil: [
-      { name: 'Изумрудный всплеск', kind: 'shoot', n: 6, spread: 40, dmg: 8, speed: 12, range: 10, proj: 'emerald', color: '#3dff8a', size: 0.22, cd: 2.5, cost: 8, lvl: 1 },
-      { name: 'Барьер 20 метров', kind: 'trap', n: 8, radius: 4.5, dmg: 14, life: 25, color: '#3dff8a', cd: 16, cost: 25, lvl: 3, fx: { stun: 0.6 } },
-      { name: 'Захват тела', kind: 'hex', status: 'charm', dur: 8, range: 6, cd: 22, cost: 30, lvl: 6 },
+      { name: 'Изумрудный всплеск', pw: 'emeraldSplash', kind: 'shoot', n: 6, spread: 40, dmg: 8, speed: 12, range: 10, proj: 'emerald', color: '#3dff8a', size: 0.22, cd: 2.5, cost: 8, lvl: 1 },
+      { name: 'Барьер 20 метров', pw: 'web', style: 'emerald', kind: 'trap', n: 8, radius: 4.5, dmg: 14, life: 25, color: '#3dff8a', cd: 16, cost: 25, lvl: 3, fx: { stun: 0.6 } },
+      { name: 'Захват тела', pw: 'possess', kind: 'hex', status: 'charm', dur: 8, range: 6, cd: 22, cost: 30, lvl: 6 },
     ],
   });
   add({
@@ -66,8 +66,8 @@
     desc: 'Рыцарь с рапирой. Сбросив доспех, становится неуловим.',
     abil: [
       { name: 'Шквал рапиры', kind: 'rush', dmg: 3.5, dur: 1.3, range: 2, cd: 5, cost: 12, lvl: 1 },
-      { name: 'Снять доспехи', kind: 'buff', buff: 'haste', val: 0.8, dur: 8, cd: 18, cost: 20, lvl: 3 },
-      { name: 'Выстрел клинком', kind: 'shoot', n: 1, dmg: 40, speed: 16, range: 9, proj: 'blade', color: '#e8eefc', size: 0.3, pierce: 3, cd: 8, cost: 18, lvl: 6 },
+      { name: 'Снять доспехи', pw: 'armorOff', kind: 'buff', buff: 'haste', val: 0.8, dur: 8, cd: 18, cost: 20, lvl: 3 },
+      { name: 'Выстрел клинком', pw: 'bladeShot', kind: 'shoot', n: 1, dmg: 40, speed: 16, range: 9, proj: 'blade', color: '#e8eefc', size: 0.3, pierce: 3, cd: 8, cost: 18, lvl: 6 },
     ],
     evo: { to: 'chariot_requiem', how: 'arrow', note: 'Стрела на 10 уровне стенда' },
   });
@@ -119,7 +119,7 @@
     abil: [
       { name: 'Взмах косы', kind: 'strike', dmg: 22, range: 2.2, arc: 1.6, knock: 3, cd: 2.5, cost: 6, lvl: 1 },
       { name: 'Колыбельная', kind: 'hex', status: 'sleep', dur: 5, range: 6, aoe: 2.5, cd: 14, cost: 20, lvl: 3 },
-      { name: 'Кошмар', kind: 'nova', radius: 4, dmg: 34, color: '#7d5cb3', fx: { stun: 1.2 }, cd: 16, cost: 28, lvl: 6 },
+      { name: 'Кошмар', vis: 'dark', kind: 'nova', radius: 4, dmg: 34, color: '#7d5cb3', fx: { stun: 1.2 }, cd: 16, cost: 28, lvl: 6 },
     ],
   });
   add({
@@ -140,7 +140,7 @@
     abil: [
       { name: 'Водяной коготь', kind: 'shoot', n: 1, dmg: 20, speed: 10, range: 14, proj: 'water', color: '#5ab3ff', size: 0.28, homing: 4, pierce: 2, cd: 2.2, cost: 8, lvl: 1 },
       { name: 'Слух пустыни', kind: 'reveal', dur: 15, cd: 25, cost: 12, lvl: 3 },
-      { name: 'Режущий поток', kind: 'beam', dmg: 36, range: 10, width: 0.5, color: '#7fc4ff', cd: 9, cost: 22, lvl: 6 },
+      { name: 'Режущий поток', pw: 'waterJet', kind: 'beam', dmg: 36, range: 10, width: 0.5, color: '#7fc4ff', cd: 9, cost: 22, lvl: 6 },
     ],
   });
   add({
@@ -149,7 +149,7 @@
     desc: 'Ледяной стенд пса-сокола Пет Шопа.',
     abil: [
       { name: 'Ледяные копья', kind: 'shoot', n: 3, spread: 24, dmg: 14, speed: 11, range: 10, proj: 'ice', color: '#bfe9ff', size: 0.25, fx: { slow: 2 }, cd: 2.5, cost: 8, lvl: 1 },
-      { name: 'Ледяная клетка', kind: 'nova', radius: 3, dmg: 20, color: '#a7e3ff', fx: { freeze: 1.6 }, cd: 12, cost: 20, lvl: 3 },
+      { name: 'Ледяная клетка', pw: 'iceCage', kind: 'nova', radius: 3, dmg: 20, color: '#a7e3ff', fx: { freeze: 1.6 }, cd: 12, cost: 20, lvl: 3 },
       { name: 'Ледяной шторм', kind: 'shoot', n: 12, spread: 360, dmg: 16, speed: 9, range: 9, proj: 'ice', color: '#d8f3ff', size: 0.25, fx: { freeze: 0.6 }, cd: 16, cost: 32, lvl: 6 },
     ],
   });
@@ -191,9 +191,9 @@
     stats: 'BBD CCC', c1: '#3f63c9', c2: '#f2c230', head: 'helmet', cry: 'ВЖУХ', type: 'Ближний бой',
     desc: 'Правая рука стирает пространство. Окуясу не понимает, куда оно девается.',
     abil: [
-      { name: 'Стирание', kind: 'strike', dmg: 45, range: 1.8, arc: 1, pierceDef: true, cd: 5, cost: 14, lvl: 1 },
-      { name: 'Притяжение', kind: 'pull', range: 8, dmg: 6, stun: 0.6, cd: 4, cost: 8, lvl: 2 },
-      { name: 'Шаг сквозь пространство', kind: 'blink', range: 7, cd: 5, cost: 10, lvl: 4 },
+      { name: 'Стирание', pw: 'handErase', kind: 'strike', dmg: 45, range: 1.8, arc: 1, pierceDef: true, cd: 5, cost: 14, lvl: 1 },
+      { name: 'Притяжение', pw: 'handPull', kind: 'pull', range: 8, dmg: 6, stun: 0.6, cd: 4, cost: 8, lvl: 2 },
+      { name: 'Шаг сквозь пространство', pw: 'handStep', kind: 'blink', range: 7, cd: 5, cost: 10, lvl: 4 },
     ],
   });
   add({
@@ -202,8 +202,8 @@
     desc: 'Звуковые иероглифы. Растёт вместе с владельцем.',
     ranged: true,
     abil: [
-      { name: 'Звуковой иероглиф', kind: 'shoot', n: 1, dmg: 8, speed: 9, range: 12, proj: 'sound', color: '#a6ff7e', size: 0.32, fx: { slow: 2 }, cd: 2, cost: 6, lvl: 1 },
-      { name: 'Оглушающий звук', kind: 'nova', radius: 3, dmg: 6, color: '#a6ff7e', fx: { stun: 1.2 }, cd: 10, cost: 14, lvl: 2 },
+      { name: 'Звуковой иероглиф', pw: 'soundWord', word: 'ドジュウウ', kind: 'shoot', n: 1, dmg: 8, speed: 9, range: 12, proj: 'sound', color: '#a6ff7e', size: 0.32, fx: { slow: 2 }, cd: 2, cost: 6, lvl: 1 },
+      { name: 'Оглушающий звук', word: 'キィィィン', kind: 'nova', radius: 3, dmg: 6, color: '#a6ff7e', fx: { stun: 1.2 }, cd: 10, cost: 14, lvl: 2 },
       { name: 'Вой', kind: 'hex', status: 'slow', dur: 6, range: 8, aoe: 3, cd: 14, cost: 16, lvl: 3 },
     ],
     evo: { to: 'echoes_2', how: 'level', lvl: 4 },
@@ -214,9 +214,9 @@
     desc: 'Хвост-иероглиф: звуки становятся реальностью. «Шшш» обжигает!',
     ranged: true,
     abil: [
-      { name: 'Звук «ДОГОН»', kind: 'shoot', n: 1, dmg: 16, speed: 9, range: 12, proj: 'sound', color: '#ffd23f', size: 0.34, explode: 1.6, cd: 2.2, cost: 8, lvl: 1 },
+      { name: 'Звук «ДОГОН»', pw: 'soundWord', word: 'ドゴォン', kind: 'shoot', n: 1, dmg: 16, speed: 9, range: 12, proj: 'sound', color: '#ffd23f', size: 0.34, explode: 1.6, cd: 2.2, cost: 8, lvl: 1 },
       { name: 'Звуковые ловушки', kind: 'trap', n: 4, radius: 3, dmg: 22, life: 30, color: '#ffd23f', fx: { burn: 3 }, cd: 12, cost: 18, lvl: 1 },
-      { name: 'Шшш-ожог', kind: 'nova', radius: 3, dmg: 24, color: '#ff8a1c', fx: { burn: 5 }, cd: 12, cost: 20, lvl: 1 },
+      { name: 'Шшш-ожог', vis: 'sound', word: 'ジュウウウ', kind: 'nova', radius: 3, dmg: 24, color: '#ff8a1c', fx: { burn: 5 }, cd: 12, cost: 20, lvl: 1 },
     ],
     evo: { to: 'echoes_3', how: 'level', lvl: 7 },
   });
@@ -227,7 +227,7 @@
     abil: [
       { name: 'S-H-I-T раш', kind: 'rush', dmg: 4, dur: 1.2, range: 1.5, cd: 6, cost: 12, lvl: 1 },
       { name: 'Тройная заморозка', kind: 'hex', status: 'heavy', dur: 6, range: 5, cd: 9, cost: 18, lvl: 1 },
-      { name: 'Звуковая бомба', kind: 'shoot', n: 1, dmg: 40, speed: 9, range: 12, proj: 'sound', color: '#ffd23f', size: 0.4, explode: 2.4, cd: 10, cost: 22, lvl: 1 },
+      { name: 'Звуковая бомба', pw: 'soundWord', word: 'ドグォォン', kind: 'shoot', n: 1, dmg: 40, speed: 9, range: 12, proj: 'sound', color: '#ffd23f', size: 0.4, explode: 2.4, cd: 10, cost: 22, lvl: 1 },
     ],
   });
   add({
@@ -245,9 +245,9 @@
     stats: 'ABD BBA', c1: '#e889c9', c2: '#6b4a9e', head: 'cat', cry: 'КЛИК', type: 'Бомба',
     desc: 'Превращает всё, чего коснётся, в бомбу. Хочу спокойной жизни.',
     abil: [
-      { name: 'Первая бомба', kind: 'bomb', dmg: 55, radius: 2.2, range: 2, cd: 4, cost: 14, lvl: 1 },
+      { name: 'Первая бомба', pw: 'kqBomb', kind: 'bomb', dmg: 55, radius: 2.2, range: 2, cd: 4, cost: 14, lvl: 1 },
       { name: 'Шиер Харт Атак', kind: 'summon', unit: 'sha', n: 1, life: 16, cd: 18, cost: 25, lvl: 3 },
-      { name: 'Пузыри Стрей Кэта', kind: 'shoot', n: 4, spread: 50, dmg: 22, speed: 5, range: 9, proj: 'bubble', color: '#e8f7ff', size: 0.3, explode: 1.8, homing: 1.5, cd: 9, cost: 20, lvl: 6 },
+      { name: 'Пузыри Стрей Кэта', vis: 'bubble', kind: 'shoot', n: 4, spread: 50, dmg: 22, speed: 5, range: 9, proj: 'bubble', color: '#e8f7ff', size: 0.3, explode: 1.8, homing: 1.5, cd: 9, cost: 20, lvl: 6 },
     ],
     evo: { to: 'kq_btd', how: 'arrow', minLvl: 8, note: 'Стрела на 8+ уровне стенда' },
   });
@@ -256,7 +256,7 @@
     stats: 'ABD BBA', c1: '#d670b8', c2: '#f2c230', head: 'cat', cry: 'КЛИК', type: 'Бомба',
     desc: 'Третья бомба. Время откатывается назад, а судьба повторяется.',
     abil: [
-      { name: 'Первая бомба', kind: 'bomb', dmg: 65, radius: 2.4, range: 2, cd: 4, cost: 14, lvl: 1 },
+      { name: 'Первая бомба', pw: 'kqBomb', kind: 'bomb', dmg: 65, radius: 2.4, range: 2, cd: 4, cost: 14, lvl: 1 },
       { name: 'Шиер Харт Атак', kind: 'summon', unit: 'sha', n: 2, life: 16, cd: 18, cost: 25, lvl: 1 },
       { name: 'Bites the Dust', kind: 'rewind', back: 5, dmg: 70, radius: 4, cd: 35, cost: 45, lvl: 1 },
     ],
@@ -288,9 +288,9 @@
     stats: 'AAA AEA', c1: '#ffb52a', c2: '#ff4a2a', head: 'horn', cry: 'БЗЗТ', type: 'Электричество',
     desc: 'Живёт в проводах. Чем больше энергии, тем сильнее.',
     abil: [
-      { name: 'Разряд', kind: 'beam', dmg: 18, range: 7, width: 0.35, color: '#ffe14a', fx: { stun: 0.5 }, cd: 3, cost: 8, lvl: 1 },
+      { name: 'Разряд', pw: 'elecBeam', kind: 'beam', dmg: 18, range: 7, width: 0.35, color: '#ffe14a', fx: { stun: 0.5 }, cd: 3, cost: 8, lvl: 1 },
       { name: 'Бег по проводам', kind: 'dash', dist: 8, dmg: 20, invuln: true, cd: 6, cost: 12, lvl: 2 },
-      { name: 'Перегрузка', kind: 'nova', radius: 4, dmg: 40, color: '#ffe14a', fx: { stun: 1.5 }, cd: 16, cost: 32, lvl: 6 },
+      { name: 'Перегрузка', pw: 'overload', kind: 'nova', radius: 4, dmg: 40, color: '#ffe14a', fx: { stun: 1.5 }, cd: 16, cost: 32, lvl: 6 },
     ],
   });
   add({
@@ -364,8 +364,8 @@
     desc: 'Молнии на всём, чего коснётся. Можно спрятаться в стене.',
     abil: [
       { name: 'АРИ-раш', kind: 'rush', dmg: 4, dur: 1.3, range: 1.5, cd: 6, cost: 14, lvl: 1 },
-      { name: 'Молния-проход', kind: 'blink', range: 7, cd: 4, cost: 10, lvl: 2 },
-      { name: 'Расстегнуть', kind: 'strike', dmg: 48, range: 1.8, stun: 2, cd: 10, cost: 18, lvl: 5 },
+      { name: 'Молния-проход', pw: 'zipBlink', kind: 'blink', range: 7, cd: 4, cost: 10, lvl: 2 },
+      { name: 'Расстегнуть', pw: 'unzip', kind: 'strike', dmg: 48, range: 1.8, stun: 2, cd: 10, cost: 18, lvl: 5 },
     ],
   });
   add({
@@ -384,9 +384,9 @@
     desc: 'Шесть маленьких стендов, перенаправляющих пули. Только не №4!',
     ranged: true, swarm: true,
     abil: [
-      { name: 'Пас пули', kind: 'shoot', n: 3, spread: 18, dmg: 13, speed: 16, range: 13, proj: 'bullet', color: '#ffe066', size: 0.13, homing: 5, cd: 1.6, cost: 6, lvl: 1 },
-      { name: 'Рикошет', kind: 'shoot', n: 6, spread: 360, dmg: 12, speed: 15, range: 12, proj: 'bullet', color: '#ffe066', size: 0.13, homing: 6, cd: 7, cost: 16, lvl: 3 },
-      { name: 'Пистолз, вперёд!', kind: 'shoot', n: 1, dmg: 75, speed: 22, range: 15, proj: 'bullet', color: '#fff6b0', size: 0.18, homing: 8, pierce: 2, cd: 14, cost: 26, lvl: 6 },
+      { name: 'Пас пули', kick: 1, kind: 'shoot', n: 3, spread: 18, dmg: 13, speed: 16, range: 13, proj: 'bullet', color: '#ffe066', size: 0.13, homing: 5, cd: 1.6, cost: 6, lvl: 1 },
+      { name: 'Рикошет', kick: 2, kind: 'shoot', n: 6, spread: 360, dmg: 12, speed: 15, range: 12, proj: 'bullet', color: '#ffe066', size: 0.13, homing: 6, cd: 7, cost: 16, lvl: 3 },
+      { name: 'Пистолз, вперёд!', kick: 3, kind: 'shoot', n: 1, dmg: 75, speed: 22, range: 15, proj: 'bullet', color: '#fff6b0', size: 0.18, homing: 8, pierce: 2, cd: 14, cost: 26, lvl: 6 },
     ],
   });
   add({
@@ -425,7 +425,7 @@
     stats: 'AAE ??A', c1: '#c4283c', c2: '#ffd2d2', head: 'twin', cry: 'КИНГ КРИМСОН', type: 'Стирание времени',
     desc: 'Стирает время. В этом мире останутся только результаты.',
     abil: [
-      { name: 'Удар сквозь грудь', kind: 'strike', dmg: 55, range: 1.8, arc: 0.9, knock: 4, stun: 0.8, cd: 4, cost: 12, lvl: 1 },
+      { name: 'Удар сквозь грудь', pw: 'impale', kind: 'strike', dmg: 55, range: 1.8, arc: 0.9, knock: 4, stun: 0.8, cd: 4, cost: 12, lvl: 1 },
       { name: 'Эпитафия', kind: 'buff', buff: 'dodge', dur: 9, cd: 20, cost: 20, lvl: 3 },
       { name: 'Стирание времени', kind: 'timeskip', dur: 5, cd: 35, cost: 50, lvl: 6 },
     ],
@@ -457,7 +457,7 @@
     desc: 'Удочка, леска которой проходит сквозь стены.',
     ranged: true,
     abil: [
-      { name: 'Заброс', kind: 'pull', range: 10, dmg: 14, stun: 0.6, cd: 4, cost: 8, lvl: 1 },
+      { name: 'Заброс', pw: 'lasso', style: 'line', kind: 'pull', range: 10, dmg: 14, stun: 0.6, cd: 4, cost: 8, lvl: 1 },
       { name: 'Крючок в сердце', kind: 'hex', status: 'bleed', dur: 8, range: 9, cd: 9, cost: 16, lvl: 3 },
       { name: 'Подсечка', kind: 'beam', dmg: 40, range: 10, width: 0.25, color: '#e8f4ff', ghost: true, cd: 10, cost: 22, lvl: 5 },
     ],
@@ -468,7 +468,7 @@
     desc: 'Ледяной костюм. Абсолютный ноль и коньки.',
     abil: [
       { name: 'Ледяная броня', kind: 'buff', buff: 'armor', val: 0.6, dur: 12, cd: 18, cost: 22, lvl: 1 },
-      { name: 'Заморозка', kind: 'nova', radius: 3.5, dmg: 20, color: '#c8f0ff', fx: { freeze: 1.8 }, cd: 10, cost: 18, lvl: 2 },
+      { name: 'Заморозка', pw: 'iceCage', kind: 'nova', radius: 3.5, dmg: 20, color: '#c8f0ff', fx: { freeze: 1.8 }, cd: 10, cost: 18, lvl: 2 },
       { name: 'Gently Weeps', kind: 'buff', buff: 'reflect', dur: 6, cd: 24, cost: 30, lvl: 5 },
     ],
   });
@@ -539,7 +539,7 @@
     abil: [
       { name: 'Шквал рапиры', kind: 'rush', dmg: 5, dur: 1.4, range: 2, cd: 5, cost: 12, lvl: 1 },
       { name: 'Обмен душ', kind: 'hex', status: 'charm', dur: 12, range: 7, aoe: 4, cd: 20, cost: 30, lvl: 1 },
-      { name: 'Сон Реквиема', kind: 'nova', radius: 7, dmg: 20, color: '#2a2440', fx: { sleep: 4 }, cd: 25, cost: 35, lvl: 1 },
+      { name: 'Сон Реквиема', vis: 'dark', kind: 'nova', radius: 7, dmg: 20, color: '#2a2440', fx: { sleep: 4 }, cd: 25, cost: 35, lvl: 1 },
     ],
   });
 
@@ -550,8 +550,8 @@
     desc: 'Тело разматывается в нити. Свобода из камня!',
     abil: [
       { name: 'ОРА-раш', kind: 'rush', dmg: 4, dur: 1.4, range: 1.6, cd: 6, cost: 14, lvl: 1 },
-      { name: 'Нить-захват', kind: 'pull', range: 9, dmg: 10, stun: 0.8, cd: 4, cost: 8, lvl: 2 },
-      { name: 'Паутина', kind: 'trap', n: 7, radius: 4, dmg: 16, life: 25, color: '#7fe3e6', fx: { root: 2.5 }, cd: 14, cost: 22, lvl: 5 },
+      { name: 'Нить-захват', pw: 'lasso', style: 'string', kind: 'pull', range: 9, dmg: 10, stun: 0.8, cd: 4, cost: 8, lvl: 2 },
+      { name: 'Паутина', pw: 'web', style: 'string', kind: 'trap', n: 7, radius: 4, dmg: 16, life: 25, color: '#7fe3e6', fx: { root: 2.5 }, cd: 14, cost: 22, lvl: 5 },
     ],
   });
   add({
@@ -571,7 +571,7 @@
     desc: 'Сам становится центром гравитации. Всё выворачивается наизнанку.',
     abil: [
       { name: 'Выворачивающий удар', kind: 'strike', dmg: 50, range: 1.8, stun: 1, knock: 6, cd: 5, cost: 14, lvl: 1 },
-      { name: 'Обратная гравитация', kind: 'nova', radius: 5, dmg: 26, color: '#7dff9b', knock: 10, cd: 10, cost: 20, lvl: 1 },
+      { name: 'Обратная гравитация', pw: 'gravity', kind: 'nova', radius: 5, dmg: 26, color: '#7dff9b', knock: 10, cd: 10, cost: 20, lvl: 1 },
       { name: 'Кража диска', kind: 'disc', range: 2.2, dmg: 28, stun: 2, cd: 10, cost: 22, lvl: 1 },
     ],
     evo: { to: 'made_in_heaven', how: 'level', lvl: 10, note: 'Мыс Канаверал ждёт' },
@@ -591,7 +591,7 @@
     stats: 'AEC EEA', c1: '#d6e2f0', c2: '#4f8fd8', head: 'cloud', cry: 'ГРОМ', type: 'Погода',
     desc: 'Управляет погодой. Тяжёлая погода сводит с ума всех вокруг.',
     abil: [
-      { name: 'Молния', kind: 'nova', at: 'aim', range: 7, radius: 1.8, dmg: 34, color: '#fff27a', fx: { stun: 0.8 }, cd: 3, cost: 10, lvl: 1 },
+      { name: 'Молния', pw: 'lightning', kind: 'nova', at: 'aim', range: 7, radius: 1.8, dmg: 34, color: '#fff27a', fx: { stun: 0.8 }, cd: 3, cost: 10, lvl: 1 },
       { name: 'Ливень', kind: 'field', radius: 6, dur: 10, dps: 5, color: '#7fb8ff', fx: { slow: 2 }, follow: true, cd: 18, cost: 24, lvl: 3 },
       { name: 'Тяжёлая погода', kind: 'hex', status: 'charm', dur: 10, range: 8, aoe: 5, cd: 30, cost: 45, lvl: 7 },
     ],
@@ -623,9 +623,9 @@
     desc: 'Притягивает метеоры с неба. Опасно для всех.',
     ranged: true,
     abil: [
-      { name: 'Метеорит', kind: 'nova', at: 'aim', range: 9, radius: 2, dmg: 36, color: '#ff8a3a', fx: { burn: 3 }, delay: 0.6, cd: 4, cost: 12, lvl: 1 },
+      { name: 'Метеорит', pw: 'meteor', kind: 'nova', at: 'aim', range: 9, radius: 2, dmg: 36, color: '#ff8a3a', fx: { burn: 3 }, delay: 0.6, cd: 4, cost: 12, lvl: 1 },
       { name: 'Метеоритный дождь', kind: 'shoot', n: 8, spread: 360, dmg: 18, speed: 7, range: 7, proj: 'flame', color: '#ff6a2a', size: 0.32, explode: 1.4, cd: 14, cost: 28, lvl: 4 },
-      { name: 'Звездопад', kind: 'nova', radius: 6, dmg: 50, color: '#ffb03a', fx: { burn: 5 }, delay: 1, cd: 25, cost: 40, lvl: 7 },
+      { name: 'Звездопад', pw: 'meteor', kind: 'nova', radius: 6, dmg: 50, color: '#ffb03a', fx: { burn: 5 }, delay: 1, cd: 25, cost: 40, lvl: 7 },
     ],
   });
   add({
@@ -653,8 +653,8 @@
     stats: 'BCA CCC', c1: '#5f7fbf', c2: '#ffd34a', head: 'helmet', cry: 'ВЖЖЖ', type: 'Невесомость',
     desc: 'Создаёт вакуум и невесомость.',
     abil: [
-      { name: 'Вакуумная пуля', kind: 'shoot', n: 2, spread: 10, dmg: 16, speed: 12, range: 11, proj: 'orb', color: '#c8d8ff', size: 0.22, cd: 2, cost: 6, lvl: 1 },
-      { name: 'Невесомость', kind: 'nova', radius: 4, dmg: 14, color: '#c8d8ff', knock: 8, fx: { stun: 1 }, cd: 10, cost: 18, lvl: 3 },
+      { name: 'Вакуумная пуля', vis: 'wind', kind: 'shoot', n: 2, spread: 10, dmg: 16, speed: 12, range: 11, proj: 'orb', color: '#c8d8ff', size: 0.22, cd: 2, cost: 6, lvl: 1 },
+      { name: 'Невесомость', pw: 'gravity', style: 'zerog', kind: 'nova', radius: 4, dmg: 14, color: '#c8d8ff', knock: 8, fx: { stun: 1 }, cd: 10, cost: 18, lvl: 3 },
       { name: 'Вакуум', kind: 'field', radius: 4, dur: 7, dps: 14, color: '#5f7fbf', fx: { slow: 2 }, cd: 20, cost: 30, lvl: 6 },
     ],
   });
@@ -753,7 +753,7 @@
     desc: 'Абсолютная защита ценой неподвижности.',
     abil: [
       { name: 'Абсолютная защита', kind: 'buff', buff: 'invuln', root: true, dur: 4, cd: 12, cost: 16, lvl: 1 },
-      { name: 'Ответный удар', kind: 'nova', radius: 2.5, dmg: 30, color: '#ffd34a', knock: 6, cd: 8, cost: 14, lvl: 2 },
+      { name: 'Ответный удар', vis: 'metal', kind: 'nova', radius: 2.5, dmg: 30, color: '#ffd34a', knock: 6, cd: 8, cost: 14, lvl: 2 },
       { name: 'Динамит', kind: 'trap', n: 3, radius: 3, dmg: 45, life: 25, color: '#ff6a3a', cd: 16, cost: 22, lvl: 4 },
     ],
   });
@@ -784,7 +784,7 @@
     abil: [
       { name: 'Мясной крем', kind: 'heal', amt: 0.3, cd: 14, cost: 18, lvl: 1 },
       { name: 'Залепить', kind: 'hex', status: 'silence', dur: 6, range: 5, cd: 10, cost: 14, lvl: 2 },
-      { name: 'Струя', kind: 'beam', dmg: 30, range: 7, width: 0.5, color: '#f5e6d3', fx: { slow: 2 }, cd: 8, cost: 16, lvl: 4 },
+      { name: 'Струя', vis: 'poison', kind: 'beam', dmg: 30, range: 7, width: 0.5, color: '#f5e6d3', fx: { slow: 2 }, cd: 8, cost: 16, lvl: 4 },
     ],
   });
 
@@ -806,7 +806,7 @@
     abil: [
       { name: 'Бедствие', kind: 'field', radius: 5, dur: 10, dps: 16, color: '#3a2e24', follow: true, calamity: true, cd: 18, cost: 28, lvl: 1 },
       { name: 'Иллюзия старика', kind: 'blink', range: 7, cd: 5, cost: 10, lvl: 2 },
-      { name: 'Неотвратимость', kind: 'nova', radius: 5, dmg: 40, color: '#6b5a48', fx: { stun: 1.5 }, cd: 20, cost: 34, lvl: 5 },
+      { name: 'Неотвратимость', vis: 'dark', kind: 'nova', radius: 5, dmg: 40, color: '#6b5a48', fx: { stun: 1.5 }, cd: 20, cost: 34, lvl: 5 },
     ],
   });
   add({
@@ -815,7 +815,7 @@
     desc: 'Ведёт хозяйку по правильному пути через сети и карты.',
     abil: [
       { name: 'Путеводитель', kind: 'reveal', dur: 30, cd: 20, cost: 10, lvl: 1 },
-      { name: 'Электрошок', kind: 'beam', dmg: 20, range: 7, width: 0.3, color: '#bde0ff', fx: { stun: 0.6 }, cd: 4, cost: 8, lvl: 2 },
+      { name: 'Электрошок', pw: 'elecBeam', kind: 'beam', dmg: 20, range: 7, width: 0.3, color: '#bde0ff', fx: { stun: 0.6 }, cd: 4, cost: 8, lvl: 2 },
       { name: 'Верный путь', kind: 'buff', buff: 'dodge', dur: 8, cd: 22, cost: 20, lvl: 4 },
     ],
   });

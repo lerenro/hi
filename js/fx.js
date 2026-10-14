@@ -892,7 +892,8 @@
       const sh = (hasSv ? sv.pos.y : gy(u.x, u.y) + (u.z || 0)) + 1.35 * (hasSv ? 1.18 : 1);
       const oy = gy(u.x, u.y) + (u.z || 0) + 1.25 * (u.scale || 1);
       const sd = u.stand ? J.STANDS[u.stand.id] : null;
-      const c1 = sd ? sd.c1 : '#ffd84a', c2 = sd ? sd.c2 : '#fff2a8';
+      const blade = !!(sd && sd.extra === 'sword');
+      const c1 = blade ? '#e8eefc' : sd ? sd.c1 : '#ffd84a', c2 = blade ? '#ffffff' : sd ? sd.c2 : '#fff2a8';
       const reach = clash && (clash.a === u || clash.b === u) ? 0.75 : 1;
       const frozen = !!u.st.timefrozen;
       // кулаки останавливаются у тела цели
@@ -918,7 +919,9 @@
         P3.set(ox + fx * (0.45 + ext) - fy * f.ox, h0 + (h1 - h0) * (0.35 + 0.65 * ke), oz + fy * (0.45 + ext) + fx * f.ox);
         EF.set(Math.atan2(h0 - h1, 0.45 + f.ext), Math.PI / 2 - a, 0);
         Q.setFromEuler(EF);
-        S3.set(1.1, 1.1, 0.85 + ext * 0.45);
+        // рапира Колесницы: вместо кулаков — тонкие выпады клинка
+        if (blade) S3.set(0.22, 0.22, 3.2 + ext * 1.6);
+        else S3.set(1.1, 1.1, 0.85 + ext * 0.45);
         M4.compose(P3, Q, S3);
         FIST.setMatrixAt(n, M4);
         n++;

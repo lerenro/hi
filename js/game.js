@@ -288,11 +288,14 @@
     J.R3.initCars();
     // обесцвечивание мира для остановки времени — патч материалов до первой компиляции
     if (J.Fx) J.Fx.patchWorld();
+    // свет сверхспособностей — до прогрева шейдеров (число источников света потом не меняется)
+    if (J.Pw) J.Pw.preInit();
     J.R3.setQuality(Game.settings.quality, Game.settings.shadows);
     J.R3.warmup();
     J.UI.build();
     J.UI.sound = Game.settings.sound;
     if (J.Fx) J.Fx.init();
+    if (J.Pw) J.Pw.init();
     if (J.Sfx) J.Sfx.init();
     Input.init();
     Input.applyFollow();
@@ -396,6 +399,7 @@
     if (G.roller && G.roller.m) J.R3.removeMesh(G.roller.m);
     G.roller = null;
     if (J.Fx) J.Fx.reset();
+    if (J.Pw && J.Pw.ready) J.Pw.reset();
     if (keepWorld && G.world && G.world.seed === seed) return;
     G.seed = seed;
     G.world = new J.World(seed);
@@ -899,6 +903,7 @@
       J.Veh.update(dt, J.Veh.input());
       J.updateEnts(dt);
       if (J.Cb) J.Cb.update(dt);
+      if (J.Pw) J.Pw.update(dt);
       J.updateProjs(dt);
       J.updateFields(dt);
       J.updateTraps(dt);
@@ -946,6 +951,7 @@
       R3.updateFx(dt);
     }
     if (Fx) Fx.update(blocking ? 0 : rdt, dt);
+    if (J.Pw) J.Pw.draw(blocking ? 0 : rdt, blocking ? 0 : dt);
     R3.updateText(blocking ? 0 : rdt);
     let wth = G.weather;
     if (!wth && rg.biome === 'tundra') wth = 'snow';

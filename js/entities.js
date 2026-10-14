@@ -213,6 +213,8 @@
     // кадры неуязвимости при подъёме с земли
     if (t.st.gup > 0 && !opt.pierceDef && !opt.dot) return 0;
     if (t.kind === 'civ') return 0;
+    // остановка времени: удары по застывшему копятся и обрушиваются разом, когда время пойдёт
+    if (g.timestop && J.Pw && J.Pw.tsHold(t, amount, src, opt)) return amount;
     // в машине кузов принимает часть удара на себя
     if (t.isPlayer && t.inCar && !opt.dot) {
       J.Veh.damage(t.inCar, amount * 0.6, src);
@@ -222,6 +224,10 @@
     if (t.st.zero > 0 && so && so !== t && !opt.dot) {
       so.st.stun = Math.max(so.st.stun || 0, 1.5);
       J.R3.text(t.x, t.y, 'ВОЗВРАТ К НУЛЮ', 'tgold', 1);
+      if (J.Pw && J.Pw.ready) {
+        J.Pw.burst('gold', so.x, g.world.groundY(so.x, so.y) + 1.1, so.y, 1);
+        if (so.view) J.Pw.ghost(so.view, '#ffd84a', 0.7);
+      }
       J.hurt(so, amount * 0.6, null, { dot: true, kind: 'pure' });
       return 0;
     }
@@ -270,6 +276,7 @@
     if (kind === 'fire' && (t.vamp || t.undead)) mul *= 1.4;
     if (t.pillar && kind !== 'hamon' && kind !== 'sun' && kind !== 'pure') mul *= 0.3;
     if (t.st.soft > 0) mul *= 1.5;
+    if (t.st.fragile > 0) mul *= 1.25; // Колесница без доспехов
     if (t.st.book > 0) mul *= 1.5;
     if (t.st.mark2 > 0) mul *= 1.2;
     let armor = t.armor || 0;
@@ -335,6 +342,11 @@
       J.UI && J.UI.hurtFlash(dmg / t.maxHp);
     }
     if (so && so.isPlayer && so.stand && so.standOut) J.P.standXp(so, dmg * 0.25);
+    // лягушки Золотого Опыта возвращают удар обидчику
+    if (t.reflectDmg && so && so !== t && opt.melee && !so.dead) {
+      J.hurt(so, dmg * 0.5, null, { dot: true });
+      if (J.Pw && J.Pw.ready) J.Pw.burst('life', t.x, g.world.groundY(t.x, t.y) + 0.4, t.y, 0.6);
+    }
     if (t.hp <= 0) J.kill(t, so);
     return dmg;
   };
@@ -656,6 +668,10 @@
     }
     let tg = ai.target;
     if (!tg || tg.dead || !J.hostile(e, tg)) tg = ai.target = J.nearestHostile(e, 10);
+    // Шиер Харт Атак идёт на тепло: горящие цели — первыми
+    if (e.sha && !(tg && tg.st.burn > 0)) {
+      for (const o of g.ents) if (!o.dead && J.hostile(e, o) && o.st.burn > 0 && J.dist(o.x, o.y, e.x, e.y) < 14) { tg = ai.target = o; break; }
+    }
     const spd = e.speed * speedMul(e);
     if (!tg) {
       if (own && J.dist(e.x, e.y, own.x, own.y) > 2.5) steer(e, own.x, own.y, spd, dt);
@@ -668,8 +684,11 @@
     if (e.sha) {
       steer(e, tg.x, tg.y, spd, dt);
       if (d < 1.0) {
-        J.R3.flash(e.x, e.y, 2.4, '#ffb03a');
-        J.R3.ring(e.x, e.y, 2.6, '#ff6a2a');
+        if (J.Pw && J.Pw.ready) J.Pw.explosion(e.x, e.y, 2.4);
+        else {
+          J.R3.flash(e.x, e.y, 2.4, '#ffb03a');
+          J.R3.ring(e.x, e.y, 2.6, '#ff6a2a');
+        }
         J.R3.text(e.x, e.y, 'КОТЧИ ВО МИРО!', 'tcry', 1.1);
         J.hitCircle(e, e.x, e.y, 2.2, e.dmg, { knock: 6, kind: 'fire', fx: { burn: 3 } });
         e.dead = true;
@@ -784,6 +803,11 @@
       }
       p.life -= dt;
       if (p.life <= 0) {
+        // Секс Пистолз: промах — пулю пинают к ближайшей цели
+        if (p.kick > 0 && J.Pw && J.Pw.kick(p)) {
+          out.push(p);
+          continue;
+        }
         if (p.explode) explodeProj(p);
         J.R3.dropProj(p);
         continue;
@@ -801,7 +825,12 @@
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       if (!p.ghost && w.solid(p.x, p.y, { water: true })) {
+        if (p.kick > 0 && J.Pw && J.Pw.kick(p)) {
+          out.push(p);
+          continue;
+        }
         if (p.explode) explodeProj(p);
+        else if (J.Pw && J.Pw.ready) J.Pw.impact(p, null, true);
         else J.R3.burst(p.x, p.y, p.h, p.color, 4, 2, 0.3);
         J.R3.dropProj(p);
         continue;
@@ -829,6 +858,7 @@
           break;
         }
         J.hurt(o, p.dmg, p.owner, { fx: p.fx, kind: p.kind, knock: 1.2, ang: Math.atan2(p.vy, p.vx) });
+        if (J.Pw && J.Pw.ready) J.Pw.onProjHit(p, o);
         if (o.reflectDmg && p.owner && !p.owner.dead) J.hurt(p.owner, p.dmg * 0.5, null, { dot: true });
         if (p.cloud) J.addField(p.owner, { x: p.x, y: p.y, radius: p.cloud.radius, dur: p.cloud.dur, dps: p.cloud.dps, color: p.color, fx: { poison: 3 } });
         if (p.pierce-- <= 0) {
@@ -848,9 +878,12 @@
 
   function explodeProj(p) {
     const r = p.explode;
-    J.R3.flash(p.x, p.y, r, p.color, 0.35);
-    J.R3.ring(p.x, p.y, r * 1.1, p.color);
-    J.R3.burst(p.x, p.y, 1, p.color, 16, 4, 0.5);
+    if (J.Pw && J.Pw.ready) J.Pw.explodeProj(p);
+    else {
+      J.R3.flash(p.x, p.y, r, p.color, 0.35);
+      J.R3.ring(p.x, p.y, r * 1.1, p.color);
+      J.R3.burst(p.x, p.y, 1, p.color, 16, 4, 0.5);
+    }
     J.hitCircle(p, p.x, p.y, r, p.dmg, { fx: p.fx, kind: p.kind === 'phys' ? 'fire' : p.kind, knock: 3 });
     if (p.cloud) J.addField(p.owner, { x: p.x, y: p.y, radius: p.cloud.radius, dur: p.cloud.dur, dps: p.cloud.dps, color: p.color, fx: { poison: 3 } });
   }
@@ -862,7 +895,8 @@
     f.team = owner.team;
     f.t = 0;
     f.tick = 0;
-    f.mesh = J.R3.fieldMesh(f);
+    // с powers.js поле рисуется частицами (туман, газ, дождь, плесень...), без цилиндра
+    f.mesh = J.Pw && J.Pw.ready ? null : J.R3.fieldMesh(f);
     g.fields.push(f);
     return f;
   };
@@ -874,9 +908,11 @@
         f.x = f.owner.x;
         f.y = f.owner.y;
       }
-      f.mesh.position.set(f.x, g.world.groundY(f.x, f.y) + 0.8, f.y);
-      f.mesh.rotation.y += dt * 0.6;
-      if (Math.random() < dt * 20) J.R3.burst(f.x + (Math.random() - 0.5) * f.radius * 1.6, f.y + (Math.random() - 0.5) * f.radius * 1.6, 0.4, f.color, 1, 0.3, 0.8, 1);
+      if (f.mesh) {
+        f.mesh.position.set(f.x, g.world.groundY(f.x, f.y) + 0.8, f.y);
+        f.mesh.rotation.y += dt * 0.6;
+        if (Math.random() < dt * 20) J.R3.burst(f.x + (Math.random() - 0.5) * f.radius * 1.6, f.y + (Math.random() - 0.5) * f.radius * 1.6, 0.4, f.color, 1, 0.3, 0.8, 1);
+      }
       if (f.t >= f.dur) {
         J.R3.removeMesh(f.mesh);
         return false;
@@ -913,7 +949,7 @@
   J.addTrap = function (owner, t) {
     t.owner = owner;
     t.team = owner.team;
-    t.mesh = J.R3.trapMesh(t);
+    t.mesh = J.Pw && J.Pw.ready ? null : J.R3.trapMesh(t);
     G().traps.push(t);
   };
   J.updateTraps = function (dt) {
@@ -921,17 +957,22 @@
     g.traps = g.traps.filter((t) => {
       t.life -= dt;
       const gy = g.world.groundY(t.x, t.y);
-      t.mesh.position.set(t.x, gy + 0.4 + Math.sin(g.t * 3 + t.x) * 0.1, t.y);
-      t.mesh.rotation.y += dt * 3;
+      if (t.mesh) {
+        t.mesh.position.set(t.x, gy + 0.4 + Math.sin(g.t * 3 + t.x) * 0.1, t.y);
+        t.mesh.rotation.y += dt * 3;
+      }
       if (t.life <= 0) {
         J.R3.removeMesh(t.mesh);
+        if (J.Pw) J.Pw.trapGone(t);
         return false;
       }
       for (const o of g.ents) {
         if (o.dead || !J.hostile(t, o)) continue;
         if (J.dist(o.x, o.y, t.x, t.y) < 0.9 + o.r) {
-          J.R3.flash(t.x, t.y, 1.6, t.color);
-          J.R3.ring(t.x, t.y, 1.8, t.color);
+          if (!(J.Pw && J.Pw.trapBoom(t))) {
+            J.R3.flash(t.x, t.y, 1.6, t.color);
+            J.R3.ring(t.x, t.y, 1.8, t.color);
+          }
           J.hitCircle(t, t.x, t.y, 1.6, t.dmg, { fx: t.fx, knock: 3 });
           J.R3.removeMesh(t.mesh);
           return false;
