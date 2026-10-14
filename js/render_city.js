@@ -14,47 +14,60 @@
 
   // ---------- Сборщик геометрии с UV (и ячейкой атласа для фасадов) ----------
   class GBU {
-    constructor(cells) {
-      this.p = [];
-      this.n = [];
-      this.c = [];
-      this.u = [];
-      this.a = cells ? [] : null;
+    constructor(cells, cap = 256) {
+      this.cap = cap;
+      this.p = new Float32Array(cap * 3);
+      this.n = new Float32Array(cap * 3);
+      this.c = new Float32Array(cap * 3);
+      this.u = new Float32Array(cap * 2);
+      this.a = cells ? new Float32Array(cap * 2) : null;
+      this.v = 0;
       this.cell = 0;
+    }
+    grow(k) {
+      if (this.v + k <= this.cap) return;
+      let cap = this.cap * 2;
+      while (cap < this.v + k) cap *= 2;
+      const g = (a, n) => {
+        const b = new Float32Array(n);
+        b.set(a);
+        return b;
+      };
+      this.p = g(this.p, cap * 3);
+      this.n = g(this.n, cap * 3);
+      this.c = g(this.c, cap * 3);
+      this.u = g(this.u, cap * 2);
+      if (this.a) this.a = g(this.a, cap * 2);
+      this.cap = cap;
+    }
+    vert(p, nx, ny, nz, cl, uv) {
+      const v = this.v, o = v * 3, o2 = v * 2;
+      this.p[o] = p[0]; this.p[o + 1] = p[1]; this.p[o + 2] = p[2];
+      this.n[o] = nx; this.n[o + 1] = ny; this.n[o + 2] = nz;
+      this.c[o] = cl.r; this.c[o + 1] = cl.g; this.c[o + 2] = cl.b;
+      this.u[o2] = uv[0]; this.u[o2 + 1] = uv[1];
+      if (this.a) {
+        this.a[o2] = CELLS[this.cell * 2];
+        this.a[o2 + 1] = CELLS[this.cell * 2 + 1];
+      }
+      this.v = v + 1;
     }
     quad(a, b, c, d, cl, ua, ub, uc, ud) {
       const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
       let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
       const l = Math.hypot(nx, ny, nz) || 1;
       nx /= l; ny /= l; nz /= l;
-      const P = this.p, N = this.n, C = this.c, U = this.u;
-      const v = (p, uv) => {
-        P.push(p[0], p[1], p[2]);
-        N.push(nx, ny, nz);
-        C.push(cl.r, cl.g, cl.b);
-        U.push(uv[0], uv[1]);
-      };
-      v(a, ua); v(b, ub); v(c, uc); v(a, ua); v(c, uc); v(d, ud);
-      if (this.a) {
-        const cu = CELLS[this.cell * 2], cv = CELLS[this.cell * 2 + 1];
-        for (let k = 0; k < 6; k++) this.a.push(cu, cv);
-      }
+      this.grow(6);
+      this.vert(a, nx, ny, nz, cl, ua); this.vert(b, nx, ny, nz, cl, ub); this.vert(c, nx, ny, nz, cl, uc);
+      this.vert(a, nx, ny, nz, cl, ua); this.vert(c, nx, ny, nz, cl, uc); this.vert(d, nx, ny, nz, cl, ud);
     }
     tri(a, b, c, cl, ua, ub, uc) {
       const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
       let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
       const l = Math.hypot(nx, ny, nz) || 1;
       nx /= l; ny /= l; nz /= l;
-      for (const [p, uv] of [[a, ua], [b, ub], [c, uc]]) {
-        this.p.push(p[0], p[1], p[2]);
-        this.n.push(nx, ny, nz);
-        this.c.push(cl.r, cl.g, cl.b);
-        this.u.push(uv[0], uv[1]);
-      }
-      if (this.a) {
-        const cu = CELLS[this.cell * 2], cv = CELLS[this.cell * 2 + 1];
-        for (let k = 0; k < 3; k++) this.a.push(cu, cv);
-      }
+      this.grow(3);
+      this.vert(a, nx, ny, nz, cl, ua); this.vert(b, nx, ny, nz, cl, ub); this.vert(c, nx, ny, nz, cl, uc);
     }
     // горизонтальная грань вверх, UV в мировых координатах / s
     top(x0, z0, x1, z1, y, cl, s = 1) {
@@ -76,17 +89,17 @@
       if (top) this.top(x0, z0, x1, z1, y1, cl, 4);
     }
     build() {
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
-      g.setAttribute('normal', new THREE.Float32BufferAttribute(this.n, 3));
-      g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
-      g.setAttribute('uv', new THREE.Float32BufferAttribute(this.u, 2));
-      if (this.a) g.setAttribute('aCell', new THREE.Float32BufferAttribute(this.a, 2));
-      g.computeBoundingSphere();
+      const g = new THREE.BufferGeometry(), n = this.v;
+      g.setAttribute('position', new THREE.BufferAttribute(this.p.slice(0, n * 3), 3));
+      g.setAttribute('normal', new THREE.BufferAttribute(this.n.slice(0, n * 3), 3));
+      g.setAttribute('color', new THREE.BufferAttribute(this.c.slice(0, n * 3), 3));
+      g.setAttribute('uv', new THREE.BufferAttribute(this.u.slice(0, n * 2), 2));
+      if (this.a) g.setAttribute('aCell', new THREE.BufferAttribute(this.a.slice(0, n * 2), 2));
+      J.fastBounds(g, this.p, n * 3);
       return g;
     }
     get empty() {
-      return this.p.length === 0;
+      return this.v === 0;
     }
   }
   R3.GBU = GBU;
@@ -495,7 +508,7 @@
     const mk = (fn, edge = 0) => {
       const b = new GB(), l = new GB();
       fn(b, l);
-      return { p: b.p, n: b.n, c: b.c, lp: l.p, ln: l.n, lc: l.c, edge };
+      return { p: b.p.slice(0, b.v * 3), n: b.n.slice(0, b.v * 3), c: b.c.slice(0, b.v * 3), lp: l.p.slice(0, l.v * 3), ln: l.n.slice(0, l.v * 3), lc: l.c.slice(0, l.v * 3), edge };
     };
     const metal = col('#4a4d55'), dark = col('#26282e');
     // фонарь: опора у бордюра, консоль над дорогой
@@ -614,13 +627,10 @@
   function addProp(S, L, pr, x, y, z, od, tint) {
     const cs = RC[od], sn = RS[od];
     const put = (src, srcN, srcC, dst) => {
-      const p = dst.p, n = dst.n, c = dst.c;
+      dst.grow(src.length / 3);
       for (let i = 0; i < src.length; i += 3) {
-        const lx = src[i], ly = src[i + 1], lz = src[i + 2];
-        p.push(x + lx * cs + lz * sn, y + ly, z - lx * sn + lz * cs);
-        const nx = srcN[i], nz = srcN[i + 2];
-        n.push(nx * cs + nz * sn, srcN[i + 1], -nx * sn + nz * cs);
-        c.push(srcC[i] * tint, srcC[i + 1] * tint, srcC[i + 2] * tint);
+        const lx = src[i], ly = src[i + 1], lz = src[i + 2], nx = srcN[i], nz = srcN[i + 2];
+        dst.vert(x + lx * cs + lz * sn, y + ly, z - lx * sn + lz * cs, nx * cs + nz * sn, srcN[i + 1], -nx * sn + nz * cs, srcC[i] * tint, srcC[i + 1] * tint, srcC[i + 2] * tint);
       }
     };
     put(pr.p, pr.n, pr.c, S);
@@ -644,8 +654,8 @@
   R3.cityChunkGen = function* (w, cx, cy, group) {
     const x0 = cx * CH, y0 = cy * CH, X1 = x0 + CH, Y1 = y0 + CH;
     const W = w.W, edges = w.net.edges;
-    const asph = new GBU(false), pav = new GBU(false);
-    const S = new J.GB(), Lt = new J.GB(), MK = new J.GB(), PL = new GBU(false);
+    const asph = new GBU(false, 4096), pav = new GBU(false, 4096);
+    const S = new J.GB(8192), Lt = new J.GB(1024), MK = new J.GB(2048), PL = new GBU(false, 64);
     const c = new THREE.Color();
     // 1) асфальт, плитка, бордюры
     for (let ty = 0; ty < CH; ty++) {
@@ -767,11 +777,11 @@
       }
     yield;
     // 5) здания
-    const B = new GBU(true);
+    const B = new GBU(true, 8192);
     let k = 0;
     for (const id of w.chunkBuildings(cx, cy)) {
       R3.buildArch(B, S, Lt, w.buildings[id]);
-      if (++k % 2 === 0) yield;
+      yield;
     }
     yield;
     // 6) меши

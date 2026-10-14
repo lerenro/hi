@@ -35,12 +35,58 @@
   })();
 
   // ---------- Сборщик геометрии с цветами вершин ----------
+  // Растущие типизированные массивы (а не JS-массивы с push): меньше памяти и мусора, сборка чанков без пауз GC.
+  // p/n/c — Float32Array по 3 числа на вершину, v — число вершин.
   const GEO_NM = new THREE.Matrix3();
+  const growF = (a, n) => {
+    const b = new Float32Array(n);
+    b.set(a);
+    return b;
+  };
+  // Ограничивающие объёмы за один проход по массиву (быстрее computeBoundingSphere на больших чанках)
+  J.fastBounds = function (g, P, n) {
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+    for (let i = 0; i < n; i += 3) {
+      const x = P[i], y = P[i + 1], z = P[i + 2];
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+      if (z < z0) z0 = z;
+      if (z > z1) z1 = z;
+    }
+    if (!(x1 >= x0)) {
+      g.computeBoundingSphere();
+      return;
+    }
+    g.boundingBox = new THREE.Box3(new THREE.Vector3(x0, y0, z0), new THREE.Vector3(x1, y1, z1));
+    g.boundingSphere = new THREE.Sphere(new THREE.Vector3((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), Math.hypot(x1 - x0, y1 - y0, z1 - z0) / 2);
+  };
   class GB {
-    constructor() {
-      this.p = [];
-      this.n = [];
-      this.c = [];
+    constructor(cap = 256) {
+      this.cap = cap;
+      this.p = new Float32Array(cap * 3);
+      this.n = new Float32Array(cap * 3);
+      this.c = new Float32Array(cap * 3);
+      this.v = 0;
+    }
+    // место ещё под k вершин
+    grow(k) {
+      if (this.v + k <= this.cap) return;
+      let cap = this.cap * 2;
+      while (cap < this.v + k) cap *= 2;
+      this.p = growF(this.p, cap * 3);
+      this.n = growF(this.n, cap * 3);
+      this.c = growF(this.c, cap * 3);
+      this.cap = cap;
+    }
+    // одна вершина (после grow)
+    vert(x, y, z, nx, ny, nz, r, g, b) {
+      const o = this.v * 3, P = this.p, N = this.n, C = this.c;
+      P[o] = x; P[o + 1] = y; P[o + 2] = z;
+      N[o] = nx; N[o + 1] = ny; N[o + 2] = nz;
+      C[o] = r; C[o + 1] = g; C[o + 2] = b;
+      this.v++;
     }
     tri(a, b, c, col) {
       const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
@@ -48,9 +94,10 @@
       let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
       const l = Math.hypot(nx, ny, nz) || 1;
       nx /= l; ny /= l; nz /= l;
-      this.p.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
-      this.n.push(nx, ny, nz, nx, ny, nz, nx, ny, nz);
-      this.c.push(col.r, col.g, col.b, col.r, col.g, col.b, col.r, col.g, col.b);
+      this.grow(3);
+      this.vert(a[0], a[1], a[2], nx, ny, nz, col.r, col.g, col.b);
+      this.vert(b[0], b[1], b[2], nx, ny, nz, col.r, col.g, col.b);
+      this.vert(c[0], c[1], c[2], nx, ny, nz, col.r, col.g, col.b);
     }
     quad(a, b, c, d, col) {
       this.tri(a, b, c, col);
@@ -72,28 +119,27 @@
       const P = gg.attributes.position.array, N = gg.attributes.normal.array;
       const e = m.elements;
       const nm = GEO_NM.getNormalMatrix(m).elements;
-      const p = this.p, n = this.n, c = this.c, cr = col.r, cg = col.g, cb = col.b;
+      const cr = col.r, cg = col.g, cb = col.b;
+      this.grow(P.length / 3);
       for (let i = 0; i < P.length; i += 3) {
         const x = P[i], y = P[i + 1], z = P[i + 2];
         const w = 1 / (e[3] * x + e[7] * y + e[11] * z + e[15]);
-        p.push((e[0] * x + e[4] * y + e[8] * z + e[12]) * w, (e[1] * x + e[5] * y + e[9] * z + e[13]) * w, (e[2] * x + e[6] * y + e[10] * z + e[14]) * w);
         const a = N[i], b = N[i + 1], d = N[i + 2];
-        let nx = nm[0] * a + nm[3] * b + nm[6] * d, ny = nm[1] * a + nm[4] * b + nm[7] * d, nz = nm[2] * a + nm[5] * b + nm[8] * d;
+        const nx = nm[0] * a + nm[3] * b + nm[6] * d, ny = nm[1] * a + nm[4] * b + nm[7] * d, nz = nm[2] * a + nm[5] * b + nm[8] * d;
         const l = 1 / (Math.sqrt(nx * nx + ny * ny + nz * nz) || 1);
-        n.push(nx * l, ny * l, nz * l);
-        c.push(cr, cg, cb);
+        this.vert((e[0] * x + e[4] * y + e[8] * z + e[12]) * w, (e[1] * x + e[5] * y + e[9] * z + e[13]) * w, (e[2] * x + e[6] * y + e[10] * z + e[14]) * w, nx * l, ny * l, nz * l, cr, cg, cb);
       }
     }
     build() {
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
-      g.setAttribute('normal', new THREE.Float32BufferAttribute(this.n, 3));
-      g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
-      g.computeBoundingSphere();
+      const g = new THREE.BufferGeometry(), n = this.v * 3;
+      g.setAttribute('position', new THREE.BufferAttribute(this.p.slice(0, n), 3));
+      g.setAttribute('normal', new THREE.BufferAttribute(this.n.slice(0, n), 3));
+      g.setAttribute('color', new THREE.BufferAttribute(this.c.slice(0, n), 3));
+      J.fastBounds(g, this.p, n);
       return g;
     }
     get empty() {
-      return this.p.length === 0;
+      return this.v === 0;
     }
   }
   J.GB = GB;
@@ -458,7 +504,7 @@
     // высоты вершин
     const hv = new Float32Array((CH + 1) * (CH + 1));
     for (let vy = 0; vy <= CH; vy++) for (let vx = 0; vx <= CH; vx++) hv[vy * (CH + 1) + vx] = w.vertH(x0 + vx, y0 + vy);
-    const gb = new GB();
+    const gb = new GB(6400);
     const c = new THREE.Color();
     const URB = J.URBAN, CB = J.CURB_H;
     for (let ty = 0; ty < CH; ty++)
@@ -1455,15 +1501,27 @@
   R3.placeLabel = function (el, x, y, h) {
     const s = R3.toScreen(x, y, h);
     if (!s || s.x < -100 || s.x > R3.W + 100 || s.y < -50 || s.y > R3.H + 50) {
-      el.style.display = 'none';
+      if (el._hid !== true) {
+        el.style.display = 'none';
+        el._hid = true;
+      }
       return;
     }
-    el.style.display = '';
-    el.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%,-100%)`;
+    if (el._hid !== false) {
+      el.style.display = '';
+      el._hid = false;
+    }
+    const sx = Math.round(s.x * 2) / 2, sy = Math.round(s.y * 2) / 2;
+    if (el._x !== sx || el._y !== sy) {
+      el._x = sx;
+      el._y = sy;
+      el.style.transform = `translate3d(${sx}px, ${sy}px, 0) translate(-50%,-100%)`;
+    }
   };
 
   // Предварительная компиляция шейдеров, чтобы первые встречи с объектами не давали фризов
   R3.warmup = function () {
+    R3.prebuildRigs();
     const tmp = new THREE.Group();
     const h = R3.buildHuman({ gender: 'm', skin: '#eac09f', hair: 'short', hairColor: '#222', top: '#333', bottom: '#333' });
     tmp.add(h.group);
@@ -1473,15 +1531,29 @@
     tmp.add(R3.pickupMesh('#ffffff'));
     tmp.add(new THREE.Mesh(sphGeo, new THREE.MeshBasicMaterial({ color: '#fff', transparent: true, opacity: 0.5, depthWrite: false })));
     tmp.add(new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: '#fff', transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false })));
+    // материалы чанков (земля, город, фасады, растительность-инстансы) — иначе первый город даёт фриз компиляции
+    const g = new THREE.BufferGeometry();
+    const n3 = (a) => new THREE.Float32BufferAttribute(a, 3);
+    g.setAttribute('position', n3([0, 0, 0, 1, 0, 0, 0, 0, 1]));
+    g.setAttribute('normal', n3([0, 1, 0, 0, 1, 0, 0, 1, 0]));
+    g.setAttribute('color', n3([1, 1, 1, 1, 1, 1, 1, 1, 1]));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1], 2));
+    g.setAttribute('aCell', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0], 2));
+    const mats = [R3.terrainMat, R3.buildMat, R3.lightMat, R3.poolMat].concat(Object.values(R3.cmat || {}));
+    for (const m of mats) if (m) tmp.add(new THREE.Mesh(g, m));
+    for (const m of [R3.decoMat, R3.bulbMat]) {
+      const im = new THREE.InstancedMesh(g, m, 1);
+      im.setMatrixAt(0, new THREE.Matrix4());
+      im.setColorAt(0, new THREE.Color(1, 1, 1));
+      tmp.add(im);
+    }
     tmp.position.set(0, -50, 0);
     R3.scene.add(tmp);
     try {
       R3.renderer.compile(R3.scene, R3.camera);
     } catch (e) {}
     R3.scene.remove(tmp);
-    R3.fxGroup.children.slice().forEach((c) => {
-      if (c.parent === tmp) tmp.remove(c);
-    });
+    g.dispose();
   };
 
   R3.render = function () {

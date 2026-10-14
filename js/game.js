@@ -697,7 +697,10 @@
     }
     for (const o of act) {
       if (o._lf !== f) {
-        if (o.labelEl) o.labelEl.style.display = 'none';
+        if (o.labelEl) {
+          o.labelEl.style.display = 'none';
+          o.labelEl._hid = true;
+        }
         act.delete(o);
       }
     }

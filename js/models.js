@@ -288,6 +288,18 @@
     return v;
   };
 
+  // Заранее собрать каркасы всех вариантов прохожих (пол × телосложение × причёска, как в J.rndLook) —
+  // тогда появление нового прохожего стоит доли миллисекунды, а не 3–15 мс сборки геометрии
+  R3.prebuildRigs = function () {
+    const H = { m: ['short', 'spiky', 'bald', 'pompadour', 'cap', 'curls'], f: ['long', 'buns', 'short'] };
+    for (const g of ['m', 'f'])
+      for (const build of ['normal', 'slim', 'muscular'])
+        for (const hair of H[g]) {
+          const v = R3.buildHuman({ gender: g, build, hair, skin: '#eac09f', hairColor: '#222', top: '#333', bottom: '#333' });
+          v.mats.forEach((m) => m.dispose());
+        }
+  };
+
   // ---------- Стенд ----------
   R3.buildStand = function (sd) {
     if (sd.head === 'plane' || sd.head === 'tiny' || sd.head === 'bug') return R3.buildStandSimple(sd);
