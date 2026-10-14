@@ -925,7 +925,7 @@
     for (const e of g.ents) {
       if (e.dead) {
         e.deadT += dt;
-        e.hitFlash = 0;
+        if (e.hitFlash > 0) e.hitFlash = Math.max(0, e.hitFlash - dt);
         if (J.Cb) J.Cb.physics(e, dt);
         continue;
       }

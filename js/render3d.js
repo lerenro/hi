@@ -924,6 +924,9 @@
     v.phase = Math.random() * 6;
     v.face = e.face || 0;
     if (!v.baseColors) v.baseColors = v.mats.map((m) => m.color.clone());
+    // обесцвечивание (остановка времени) и слой силуэтов для кадра удара (J.Fx)
+    if (R3.fxPatch) v.mats.forEach((m) => R3.fxPatch(m));
+    if (J.Fx) J.Fx.layerView(v);
     if (e.mount) {
       v.horse = R3.buildCreature('horse', '#7a4a2a');
       R3.scene.add(v.horse.group);
@@ -968,15 +971,43 @@
     const spd = Math.hypot(e.vx || 0, e.vy || 0);
     if (spd > 0.2) v.phase += dt * (4 + spd * 1.6);
     const sw = spd > 0.2 ? Math.sin(v.phase) : 0;
-    if (v.legL) R3.animateRig(v, e, sw, spd, t, dt);
+    // в остановленном времени застывают и «дыхание», и парение стенда
+    const tl = e.st && e.st.timefrozen ? (e._tf === undefined ? (e._tf = t) : e._tf) : ((e._tf = undefined), t);
+    if (v.legL) R3.animateRig(v, e, sw, spd, tl, dt);
     if (v.legs) v.legs.forEach((l, i) => (l.rotation.x = (i % 2 ? sw : -sw) * 0.6));
-    if (v.kind === 'creature' && e.model === 'bug') v.group.position.y += 0.3 + Math.sin(t * 8 + v.phase) * 0.1;
-    // смерть
-    if (e.dead) {
+    if (v.kind === 'creature' && e.model === 'bug') v.group.position.y += 0.3 + Math.sin(tl * 8 + v.phase) * 0.1;
+    // смерть: люди падают через J.Anim (реакции), звери — набок
+    if (e.dead && (!v.legL || !J.Anim)) {
       v.group.rotation.z = Math.min(Math.PI / 2, (v.group.rotation.z || 0) + dt * 5);
     } else v.group.rotation.z = 0;
-    // цвет: вспышка урона / заморозка / невидимость
-    const flash = e.hitFlash > 0;
+    // перед исчезновением тело оседает в землю
+    if (e.dead && e.deadT > 2.4) {
+      v.group.position.y -= Math.min(1, (e.deadT - 2.4) / 0.6) * 0.3;
+      if (!v.sunk && J.Fx && J.Fx.ready) {
+        v.sunk = true;
+        J.Fx.dust(e.x, e.y, 6, 0.6);
+      }
+    }
+    // вспышка попадания — свечением (белым у врагов, красным у игрока), золотом — суперброня босса
+    const hk = e.dead ? 0 : J.clamp((e.hitFlash || 0) / 0.12, 0, 1);
+    const ak = !hk && e.armorFlash > 0 ? e.armorFlash / 0.15 : 0;
+    const ek = Math.round(hk * 20) + Math.round(ak * 20) * 100;
+    if (v.emK !== ek) {
+      v.emK = ek;
+      if (!v.baseEm) v.baseEm = v.mats.map((m) => (m.emissive ? m.emissive.clone() : null));
+      for (let i = 0; i < v.mats.length; i++) {
+        const m = v.mats[i], b = v.baseEm[i];
+        if (!b) continue;
+        if (hk > 0) {
+          const k = 0.9 * hk;
+          if (e.isPlayer) m.emissive.setRGB(b.r + k, b.g + k * 0.1, b.b + k * 0.1);
+          else m.emissive.setRGB(b.r + k, b.g + k, b.b + k);
+        } else if (ak > 0) m.emissive.setRGB(b.r + 0.8 * ak, b.g + 0.6 * ak, b.b + 0.1 * ak);
+        else m.emissive.copy(b);
+      }
+    }
+    // цвет: заморозка / невидимость
+    const flash = !J.Fx && e.hitFlash > 0;
     const frozen = e.st && (e.st.freeze > 0 || e.st.timefrozen);
     let op = 1;
     if (e.st && e.st.invis > 0) op = e.team === 'player' ? 0.3 : 0.06;
@@ -1014,29 +1045,52 @@
         }
         e.standView = R3.buildStand(sd);
         e.standView.id = sd.id;
-        e.standView.pos = new THREE.Vector3(e.x, gy + 0.3, e.y);
+        e.standView.pos = new THREE.Vector3(e.x, gy + 0.6 + (e.z || 0), e.y);
+        e.standView.spawnK = 0;
+        if (R3.fxPatch) e.standView.mats.forEach((m) => R3.fxPatch(m));
+        if (J.Fx) J.Fx.layerView(e.standView);
         R3.scene.add(e.standView.group);
         R3.burst(e.x, e.y, gy + 1.2, sd.c1, 18, 3, 0.6, 2);
       }
       const sv = e.standView;
       const fa = e.face;
       const fx = Math.cos(fa), fy = Math.sin(fa);
-      const attacking = e.anim && e.anim.t > 0 && e.anim.stand;
-      let ox, oy;
-      if (attacking) {
-        ox = fx * 0.95;
-        oy = fy * 0.95;
+      const an = e.anim && e.anim.t > 0 ? e.anim : null;
+      const attacking = !!(an && an.stand);
+      // стенд выбрасывается к цели (в пределах своей дальности), в бою стоит впереди-справа, вне боя — за плечом
+      const reach = 0.95 + J.rankNum(sd.st.rng) * 0.22;
+      let ox, oy, rate;
+      if (attacking || e.chg) {
+        let d = e.chg && !attacking ? 0.7 : reach;
+        let tg = an && an.tgt;
+        if (attacking && an.type === 'rush' && (!tg || tg.dead)) tg = an.tgt = J.nearestHostile(e, 3.6, 0.9, fa);
+        if (attacking && tg && !tg.dead) d = J.clamp(J.dist(e.x, e.y, tg.x, tg.y) - tg.r - (an.type === 'rush' ? 1.05 : 0.45), 0.6, reach);
+        ox = fx * d;
+        oy = fy * d;
+        rate = 30;
+      } else if (e.guard) {
+        ox = fx * 0.7;
+        oy = fy * 0.7;
+        rate = 20;
+      } else if (e.inCombat > 0) {
+        ox = fx * 0.55 - fy * 0.35;
+        oy = fy * 0.55 + fx * 0.35;
+        rate = 14;
       } else {
         // за плечом
         ox = -fx * 0.55 - fy * 0.55;
         oy = -fy * 0.55 + fx * 0.55;
+        rate = 9;
       }
-      const target = tmpP.set(e.x + ox, gy + 0.25 + Math.sin(t * 2.2) * 0.07 + (e.z || 0) + ride * 0.6, e.y + oy);
-      sv.pos.lerp(target, Math.min(1, dt * (attacking ? 22 : 9)));
+      const target = tmpP.set(e.x + ox, gy + 0.25 + Math.sin(tl * 2.2) * 0.07 + (e.z || 0) + ride * 0.6, e.y + oy);
+      sv.pos.lerp(target, 1 - Math.exp(-dt * rate));
       sv.group.position.copy(sv.pos);
       sv.group.rotation.y = Math.PI / 2 - fa;
       sv.group.visible = true;
-      const sc = sd.head === 'plane' ? 1 : 1.18;
+      // появление: вырастает из груди хозяина
+      if (sv.spawnK < 1) sv.spawnK = Math.min(1, sv.spawnK + dt / 0.25);
+      const sk = sv.spawnK < 1 && J.Anim ? Math.max(0.05, J.Anim.EASE.outBack(sv.spawnK)) : 1;
+      const sc = (sd.head === 'plane' ? 1 : 1.18) * sk;
       sv.group.scale.setScalar(sc);
       if (sv.kind === 'plane') {
         sv.group.position.y += 1.6;
@@ -1049,14 +1103,14 @@
           if (attacking) k.position.z += 0.6;
         });
       }
-      if (sv.armL) R3.animateStand(sv, e, attacking, t);
+      if (sv.armL) R3.animateStand(sv, e, attacking, tl, dt);
       const op = e.isPlayer && R3.cam.near ? 0.35 : 0.88;
       if (sv.op !== op) {
         sv.op = op;
         sv.mats.forEach((m) => (m.opacity = m.transparent ? op : m.opacity));
       }
       if (Math.random() < dt * 14) R3.aura(sv.pos.x, sv.pos.z, sv.pos.y, sd.c1);
-      if (attacking && e.anim.type === 'rush' && Math.random() < 0.7) {
+      if (!J.Fx && attacking && e.anim.type === 'rush' && Math.random() < 0.7) {
         const r = Math.random() * 0.5;
         R3.burst(e.x + fx * (1.3 + r) + (Math.random() - 0.5) * 0.6, e.y + fy * (1.3 + r) + (Math.random() - 0.5) * 0.6, gy + 1 + Math.random() * 0.7, sd.c2, 1, 0.5, 0.15, 0.2);
       }
@@ -1072,6 +1126,7 @@
 
   // Анимация скелета человека: ходьба, бег, удары, поза, верховая езда
   R3.animateRig = function (v, e, sw, spd, t, dt) {
+    if (J.Anim) return J.Anim.rig(v, e, sw, spd, t, dt);
     const amp = J.clamp(spd / 4.4, 0.55, 1.35);
     const moving = spd > 0.2;
     const cw = moving ? Math.cos(v.phase) : 0;
@@ -1117,7 +1172,8 @@
     v.body.rotation.z = bodyZ;
     v.body.position.y = moving && !e.mount ? Math.abs(Math.sin(v.phase)) * 0.035 * amp : Math.sin(t * 2 + v.phase) * 0.004;
   };
-  R3.animateStand = function (sv, e, attacking, t) {
+  R3.animateStand = function (sv, e, attacking, t, dt) {
+    if (J.Anim) return J.Anim.stand(sv, e, attacking, t, dt || 0);
     let aL = 0.18 + Math.sin(t * 2) * 0.05, aR = 0.18 - Math.sin(t * 2) * 0.05, fL = -0.5, fR = -0.5;
     if (attacking) {
       const ty = e.anim.type;

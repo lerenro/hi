@@ -331,7 +331,7 @@
   // ---------- Атаки с моментом контакта ----------
   // o: { clip, type, dur, at, fn, stand, tg, step, armor, kind }
   Cb.attack = function (e, o) {
-    e.atk = { t: 0, at: o.at, dur: o.dur, fn: o.fn, done: false, tg: o.tg || null, step: o.step || 0, armor: !!o.armor, kind: o.kind || 'light', glint: !!o.glint };
+    e.atk = { t: 0, at: o.at, dur: o.dur, fn: o.fn, done: false, tg: o.tg || null, step: o.step || 0, reach: o.reach || 0.7, armor: !!o.armor, kind: o.kind || 'light', glint: !!o.glint };
     e.anim = { type: o.type || 'punch', clip: o.clip, t: o.dur, max: o.dur, stand: !!o.stand, tgt: o.tg || null, ai: !!o.ai };
     if (o.threat !== false) Cb.threat(e, o.at, o.kind || 'light');
     return e.atk;
@@ -353,9 +353,9 @@
       // шаг вперёд к цели
       if (a.step && a.tg && !a.tg.dead) {
         const d = J.dist(e.x, e.y, a.tg.x, a.tg.y) - a.tg.r - e.r;
-        if (d > 0.7) {
+        if (d > a.reach) {
           const ang = Math.atan2(a.tg.y - e.y, a.tg.x - e.x);
-          const s = Math.min(d - 0.6, (a.step * dt) / Math.max(0.05, a.at));
+          const s = Math.min(d - a.reach + 0.1, (a.step * dt) / Math.max(0.05, a.at));
           J.moveEnt(e, Math.cos(ang) * s, Math.sin(ang) * s);
         }
       }
@@ -405,15 +405,16 @@
       if (sd.ranged || sd.basicFire) {
         fn = () => J.spawnProj(u, { ang: aimFor(u, 3).ang, speed: 14, dmg: dmg * 0.9, range: 10, shape: sd.basicFire ? 'flame' : 'orb', color: sd.c1, size: 0.18, fx: sd.basicFire ? { burn: 1.5 } : undefined, kind: sd.basicFire ? 'fire' : 'phys', stand: true });
       } else {
-        const range = 1.5 + J.rankNum(sd.st.rng) * 0.1;
+        // дальность считается от выброшенного вперёд стенда, а не от хозяина
+        const range = 0.75 + Cb.standReach(u);
         fn = () => {
           const a = aimFor(u, 3).ang;
           u.face = a;
-          const n = J.hitArc(u, a, range, 1.5, dmg, Object.assign({ knock: finisher ? 6 : 1.5, stun: finisher ? 0.4 : 0.14, finisher, melee: true, gdmg: finisher ? 35 : 12 }, cr));
+          const n = J.hitArc(u, a, range, 1.5, dmg, Object.assign({ knock: finisher ? 6 : 0.7, stun: finisher ? 0.4 : 0.16, finisher, melee: true, gdmg: finisher ? 35 : 12 }, cr));
           if (u.isPlayer && !n) u.whiff = g.t;
         };
       }
-      Cb.attack(u, { clip: clipName, dur, at, fn, stand: true, tg: aim.target, kind: finisher ? 'heavy' : 'light', step: 0.15 });
+      Cb.attack(u, { clip: clipName, dur, at, fn, stand: true, tg: aim.target, kind: finisher ? 'heavy' : 'light', step: 0.3, reach: sd.ranged || sd.basicFire ? 6 : 0.25 + Cb.standReach(u) });
       J.Sfx && u.isPlayer && J.Sfx.whoosh(0.12, true, 0.08);
       u.cds.basic = finisher ? dur + 0.28 : dur * 0.82;
       return true;
@@ -440,7 +441,7 @@
       const a = aimFor(u, 3).ang;
       u.face = a;
       if (kind === 'hamon') J.R3.burst(u.x + Math.cos(a), u.y + Math.sin(a), 1.1, '#ffd84a', 4, 1.5, 0.3);
-      const n = J.hitArc(u, a, (u.range || 1.35) + 0.05, 1.4, dmg, Object.assign({ knock: finisher ? 5 : 1.2, stun: finisher ? 0.35 : 0.12, kind, finisher, melee: true, gdmg: finisher ? 30 : 10, fx: u.poisonHit ? { poison: u.poisonHit } : undefined }, cr));
+      const n = J.hitArc(u, a, (u.range || 1.35) + 0.05, 1.4, dmg, Object.assign({ knock: finisher ? 5 : 0.6, stun: finisher ? 0.35 : 0.14, kind, finisher, melee: true, gdmg: finisher ? 30 : 10, fx: u.poisonHit ? { poison: u.poisonHit } : undefined }, cr));
       if (u.isPlayer) {
         if (n && u.style === 'vampire') u.hp = Math.min(u.maxHp, u.hp + dmg * 0.15);
         if (n) J.P.trainStat(u, 'str', 0.4);
@@ -485,7 +486,7 @@
       const sd = J.STANDS[u.stand.id];
       u.standOut = true;
       dmg = u.isPlayer ? (12 + J.rankNum(sd.st.pow) * 5) * J.P.standPower(u) / Math.max(0.8, 0.7 + J.rankNum(sd.st.pow) * 0.11) : u.dmg * (u.dmgMul || 1) * 2.4;
-      range = 1.8 + J.rankNum(sd.st.rng) * 0.1;
+      range = 0.95 + Cb.standReach(u);
     } else {
       dmg = u.isPlayer ? (10 + u.stats.str * 3.2) * (u.style === 'vampire' || u.style === 'ultimate' ? 1.6 : 1) : u.dmg * (u.dmgMul || 1) * 2.2;
       range = 1.5;
@@ -734,7 +735,9 @@
     const pr = Cb.prof(e);
     const spd = e.speed * J.speedMul(e);
     if (e.stand) e.standOut = true;
-    if (ai.rec > 0) ai.rec -= dt;
+    if (!(ai.rec > 0)) ai.rec = 0;
+    else ai.rec -= dt;
+    if (!(ai.atk > -9)) ai.atk = 0;
     engaged(e, 1);
     // заряд/замах идёт — стоим
     if (e.atk && !e.atk.done) {

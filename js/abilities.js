@@ -526,22 +526,24 @@
         if (e.stand) e.se -= 9 * dt;
       } else if (!held && c.ext > 0) c.t = Math.min(c.t, 0);
     }
-    // притяжение к цели в начале раша
-    if (c.mag > 0) {
-      c.mag -= dt;
-      const tg = J.nearestHostile(e, 3, 0.8, c.ang);
+    // притяжение к цели: в начале раша — рывком, дальше — шагом за отлетающей жертвой
+    {
+      const mag = c.mag > 0;
+      if (mag) c.mag -= dt;
+      const tg = J.nearestHostile(e, c.range + sf + 1.2, 0.8, c.ang);
       if (tg) {
         const d = J.dist(e.x, e.y, tg.x, tg.y) - tg.r;
-        if (d > sf + 0.5) {
+        if (d > sf + 0.55) {
           const a = Math.atan2(tg.y - e.y, tg.x - e.x);
-          J.moveEnt(e, Math.cos(a) * 3 * dt, Math.sin(a) * 3 * dt);
+          const sp = mag ? 3.2 : 1.8;
+          J.moveEnt(e, Math.cos(a) * sp * dt, Math.sin(a) * sp * dt);
         }
       }
     }
     if (c.tick <= 0) {
       c.tick = 1 / 11;
       c.n++;
-      J.hitArc(e, c.ang, c.range + sf, 1.4, c.dmg, { stun: 0.25, knock: 0.3, kind: c.kind, rushTick: true, melee: true, gdmg: 7 });
+      J.hitArc(e, c.ang, c.range + sf, 1.4, c.dmg, { stun: 0.25, knock: 0.18, kind: c.kind, rushTick: true, melee: true, gdmg: 7 });
       if (J.Sfx && J.Fx && J.Fx.nearPlayer(e, null, 20)) {
         J.Sfx.rushTick(c.n % 2 ? 0.25 : -0.25);
         if (c.n % 3 === 0) J.Sfx.rushTick(c.n % 2 ? -0.2 : 0.2);

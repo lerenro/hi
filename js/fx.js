@@ -140,6 +140,7 @@
   };
 
   // ---------- 3. DOM-слой: линии, вспышка, слова, колонки, баннеры, числа урона ----------
+  let gmEl = null, gmI = null;
   let root = null, linesA = null, linesB = null, flashEl = null, lbT = null, lbB = null, lowEl = null, cardEl = null, clashEl = null;
   const WORDS = [], COLS = [], BANS = [], NUMS = [], RINGS = [];
   let lineImgs = [];
@@ -198,12 +199,16 @@
     lbB = div('lbx bot');
     const wl = div('fxwords');
     for (let i = 0; i < 8; i++) WORDS.push({ el: div('ono', wl), life: 0, max: 0, act: false, prio: 0, sx: 0, sy: 0, dx: 0, dy: 0, rot: 0, hold: 0.4 });
-    for (let i = 0; i < 2; i++) COLS.push({ el: div('ono v col', root), life: 0, max: 0, act: false, side: i, text: '' });
+    for (let i = 0; i < 2; i++) COLS.push({ el: div('ono v col c' + i, root), life: 0, max: 0, act: false, side: i, text: '' });
     for (let i = 0; i < 2; i++) BANS.push({ el: div('rushb', root), u: null, t: 0, n: 0, txt: '', jit: 0, act: false, fin: 0, x: 0, y: 0 });
     const nl = div('fxnums');
     for (let i = 0; i < 6; i++) NUMS.push({ el: div('dnum', nl), t: null, life: 0, val: 0, n: 0, x: 0, y: 0, h: 0, txt: '', act: false, pop: 0, crit: false });
     for (let i = 0; i < 3; i++) RINGS.push({ el: div('fxring', root), life: 0, act: false });
     cardEl = div('namecard');
+    gmEl = div('');
+    gmEl.id = 'guardm';
+    gmI = document.createElement('i');
+    gmEl.appendChild(gmI);
     clashEl = div('clash');
     clashEl.innerHTML = '<div class="cbar"><i class="ca"></i><i class="cb"></i></div><div class="ctxt">ЖМИ! <b>ЛКМ</b> / <b>клавиша раша</b></div><button class="cbtn" type="button">ЖМИ!</button>';
     const btn = clashEl.querySelector('.cbtn');
@@ -495,7 +500,7 @@
     const p = J.G.player;
     if (!p || J.dist(t.x, t.y, p.x, p.y) > 30) return;
     let o = null;
-    for (const n of NUMS) if (n.act && n.t === t && n.life < (rushTick || n.n > 1 ? 0.6 : 0.35)) o = n;
+    for (const n of NUMS) if (n.act && n.t === t && n.life < 0.75) o = n;
     if (!o) {
       o = NUMS.find((n) => !n.act);
       if (!o) {
@@ -509,7 +514,7 @@
       o.crit = false;
       o.el.className = 'dnum' + (t.isPlayer ? ' hurt' : '');
       o.el.style.display = 'block';
-      o.dx = (rnd() - 0.5) * 40;
+      o.dx = (rnd() - 0.5) * 30;
     }
     o.val += dmg;
     o.n++;
@@ -536,7 +541,7 @@
         continue;
       }
       const t = o.t;
-      const s = proj(t.x, gy(t.x, t.y) + 2.15 + (t.z || 0) + o.life * 0.6, t.y);
+      const s = proj(t.x, gy(t.x, t.y) + 2.75 * (t.scale || 1) + (t.z || 0) + o.life * 0.5, t.y);
       if (!s.ok) {
         o.el.style.opacity = '0';
         continue;
@@ -1563,6 +1568,30 @@
     J.G.timers.push({ t: 0.35, fn });
   };
 
+  // ---------- Шкала блока игрока (над головой, пока не полная) ----------
+  const GM = { vis: false, w: -1, low: false };
+  function updateGuardMeter() {
+    const p = J.G.player;
+    const show = !!p && !p.dead && (p.guard || (p.gm !== undefined && p.gm < 99.5));
+    if (show !== GM.vis) {
+      GM.vis = show;
+      gmEl.style.display = show ? 'block' : 'none';
+    }
+    if (!show) return;
+    const s = proj(p.x, gy(p.x, p.y) + 2.25 + (p.z || 0), p.y);
+    if (s.ok) gmEl.style.transform = `translate(${(s.x - innerWidth / 2).toFixed(0)}px,${(s.y - innerHeight * 0.62).toFixed(0)}px)`;
+    const w = Math.round(J.clamp(p.gm === undefined ? 100 : p.gm, 0, 100));
+    if (w !== GM.w) {
+      GM.w = w;
+      gmI.style.width = w + '%';
+      const low = w < 30;
+      if (low !== GM.low) {
+        GM.low = low;
+        gmEl.classList.toggle('low', low);
+      }
+    }
+  }
+
   // ---------- Столкновение рашей ----------
   Fx.clash = function (c) {
     if (!root) return;
@@ -1615,6 +1644,49 @@
     }
   }
 
+
+  // ---------- Стирание времени (Король Багрового) ----------
+  Fx.timeskip = function (u, on) {
+    if (!Fx.ready || !nearPlayer(u, null, 40)) return;
+    if (on) {
+      Fx.column(0, 'ドドドド', '#c4283c', 99);
+      Fx.column(1, 'ドドドド', '#c4283c', 99);
+      J.Sfx && J.Sfx.menace(3, 0.5);
+      Fx.punchIn(0.1, 0.3);
+      Fx.wordAt('キング・クリムゾン!!', innerWidth / 2, innerHeight * 0.3, 'big', '#ffffff', '#b3122e');
+    } else {
+      Fx.columnOff(0);
+      Fx.columnOff(1);
+      Fx.flash('#000000', 0.12, 1);
+      Fx.hitstop(0.12);
+      Fx.trauma(0.45);
+      Fx.wordAt('ドン!', innerWidth / 2, innerHeight * 0.36, 'big', '#ffffff', '#b3122e');
+      J.Sfx && J.Sfx.heavy(false);
+    }
+  };
+
+  // ---------- Дорожный каток ДИО ----------
+  let rollerGeo = null;
+  R3.roller = function () {
+    if (!rollerGeo) {
+      const gb = new J.GB();
+      const Y = new THREE.Color('#e8b81c'), D = new THREE.Color('#2a2630'), Gr = new THREE.Color('#6a6a72'), Wd = new THREE.Color('#bfe6ff');
+      const M = (x, y, z) => new THREE.Matrix4().makeTranslation(x, y, z);
+      gb.geo(new THREE.BoxGeometry(2.2, 1.3, 3.0), M(0, 1.15, -0.2), Y);
+      gb.geo(new THREE.BoxGeometry(1.6, 0.9, 1.1), M(0, 2.2, -0.6), Y);
+      gb.geo(new THREE.BoxGeometry(1.5, 0.5, 0.05), M(0, 2.3, -0.04), Wd);
+      gb.geo(new THREE.CylinderGeometry(0.75, 0.75, 2.3, 16).rotateZ(Math.PI / 2), M(0, 0.75, 1.55), Gr);
+      gb.geo(new THREE.CylinderGeometry(0.6, 0.6, 2.3, 14).rotateZ(Math.PI / 2), M(0, 0.6, -1.4), D);
+      gb.geo(new THREE.BoxGeometry(2.0, 0.12, 0.6), M(0, 1.85, 1.55), Y);
+      rollerGeo = gb.build();
+    }
+    const m = new THREE.Mesh(rollerGeo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+    m.castShadow = true;
+    m.rotation.y = rnd() * TAU;
+    R3.fxGroup.add(m);
+    return m;
+  };
+
   // ---------- Инициализация ----------
   Fx.applySettings = function (s) {
     s = s || (J.Game && J.Game.settings) || {};
@@ -1666,7 +1738,7 @@
     const W = new THREE.Color(1, 1, 1);
     gb.geo(new THREE.BoxGeometry(0.15, 0.13, 0.16), new THREE.Matrix4(), W);
     gb.geo(new THREE.CylinderGeometry(0.05, 0.06, 0.42, 6).rotateX(Math.PI / 2), new THREE.Matrix4().makeTranslation(0, 0, -0.27), W);
-    FIST = new THREE.InstancedMesh(gb.build(), new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.5, depthWrite: false }), NF * 2);
+    FIST = new THREE.InstancedMesh(gb.build(), new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.7, depthWrite: false }), NF * 2);
     FIST.frustumCulled = false;
     FIST.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     for (let i = 0; i < NF * 2; i++) FIST.setColorAt(i, W);
@@ -1728,12 +1800,13 @@
     updateLetterbox(rdt);
     updateCard(rdt);
     updateLow(rdt);
+    updateGuardMeter();
     if (J.Sfx) J.Sfx.setSlow(Fx.scale < 0.95 ? 1 - Fx.scale : 0);
     // камера в бою на телефоне — ближе
     const p = J.G.player;
     if (J.Input && J.Input.touch && p && p.inCombat > 0 && !(Fx.so > 0) && !J.G.clash && CF.distT === 1) R3.cam.distMul += (6.8 / 8.5 - R3.cam.distMul) * Math.min(1, rdt * 2);
     // слой виден только когда что-то есть
-    const busy = LN.vis || FL.vis || LB.on || CARD.t > 0 || J.G.clash || LOW.op > 0.01 || WORDS.some((o) => o.act) || COLS.some((o) => o.act) || BANS.some((o) => o.act) || NUMS.some((o) => o.act) || RINGS.some((o) => o.act);
+    const busy = GM.vis || LN.vis || FL.vis || LB.on || CARD.t > 0 || J.G.clash || LOW.op > 0.01 || WORDS.some((o) => o.act) || COLS.some((o) => o.act) || BANS.some((o) => o.act) || NUMS.some((o) => o.act) || RINGS.some((o) => o.act);
     if (busy !== Fx._vis) {
       Fx._vis = busy;
       root.style.visibility = busy ? 'visible' : 'hidden';

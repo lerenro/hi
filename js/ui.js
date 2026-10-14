@@ -59,6 +59,8 @@
         <button data-k="atk" class="tb big">Удар</button>
         <button data-k="heavy" class="tb">Сил.</button>
         <button data-k="dash" class="tb">Рывок</button>
+        <button data-k="guard" class="tb">Блок</button>
+        <button data-k="rush" class="tb">Раш</button>
         <button data-k="q" class="tb">Q</button>
         <button data-k="e" class="tb">E</button>
         <button data-k="r" class="tb">R</button>
@@ -102,6 +104,11 @@
   UI.sound = true;
   UI.sfx = function (name) {
     if (!UI.sound) return;
+    // боевые звуки синтезирует J.Sfx (удары и остановку времени озвучивает J.Fx)
+    if (J.Sfx && J.Sfx.ac && J.Fx && J.Fx.ready) {
+      if (name === 'hit' || name === 'ts') return;
+      if (name === 'stand') return J.Sfx.summon();
+    }
     try {
       if (!UI.ac) UI.ac = new (window.AudioContext || window.webkitAudioContext)();
       const ac = UI.ac;
@@ -131,7 +138,7 @@
       return d;
     };
     UI.abEls = {
-      basic: mk('ЛКМ', 'basic'), heavy: mk('ПКМ', 'heavy'), s0: mk('Q', 's0'), s1: mk('E', 's1'), s2: mk('R', 's2'),
+      basic: mk('ЛКМ', 'basic'), heavy: mk('X', 'heavy'), s0: mk('Q', 's0'), s1: mk('E', 's1'), s2: mk('R', 's2'),
       g: mk('G', 'g'), y0: mk('1', 'y0'), y1: mk('2', 'y1'), y2: mk('3', 'y2'),
     };
   };
@@ -721,6 +728,12 @@
         <label class="opt"><span>Звук</span><input type="checkbox" id="o-snd"></label>
         <label class="opt"><span>Инверсия по вертикали</span><input type="checkbox" id="o-inv"></label>
         <label class="opt"><span>Камера сама разворачивается за спину</span><input type="checkbox" id="o-fol"></label>
+        <h3>Бой</h3>
+        <label class="opt"><span>Тряска камеры</span><select id="o-shk"><option value="1">Сильная</option><option value="0.5">Слабая</option><option value="0">Нет</option></select></label>
+        <label class="opt"><span>Вспышки, кадры удара, инверсия</span><input type="checkbox" id="o-fl"></label>
+        <label class="opt"><span>Замедление и стоп-кадры</span><input type="checkbox" id="o-sm"></label>
+        <label class="opt"><span>Щадящий режим (без вспышек и тряски)</span><input type="checkbox" id="o-rm"></label>
+        <label class="opt"><span>Качество эффектов</span><select id="o-fq"><option value="1">Высокое</option><option value="0">Низкое (быстрее)</option></select></label>
       </div></div>`;
       $('#o-q').value = String(set.quality);
       $('#o-sh').checked = set.shadows;
@@ -728,6 +741,11 @@
       $('#o-snd').checked = set.sound;
       $('#o-inv').checked = !!set.invert;
       $('#o-fol').checked = !!set.follow;
+      $('#o-shk').value = String(set.fx_shake === undefined ? 1 : set.fx_shake);
+      $('#o-fl').checked = set.fx_flash !== false;
+      $('#o-sm').checked = set.fx_slowmo !== false;
+      $('#o-rm').checked = !!set.fx_rm;
+      $('#o-fq').value = String(set.fx_q === undefined ? (set.quality === 0 ? 0 : 1) : set.fx_q);
       const apply = () => {
         set.quality = +$('#o-q').value;
         set.shadows = $('#o-sh').checked;
@@ -735,10 +753,15 @@
         set.sound = $('#o-snd').checked;
         set.invert = $('#o-inv').checked;
         set.follow = $('#o-fol').checked;
+        set.fx_shake = +$('#o-shk').value;
+        set.fx_flash = $('#o-fl').checked;
+        set.fx_slowmo = $('#o-sm').checked;
+        set.fx_rm = $('#o-rm').checked;
+        set.fx_q = +$('#o-fq').value;
         UI.sound = set.sound;
         J.Game.applySettings();
       };
-      ['o-q', 'o-sh', 'o-sens', 'o-snd', 'o-inv', 'o-fol'].forEach((id) => ($('#' + id).onchange = apply));
+      ['o-q', 'o-sh', 'o-sens', 'o-snd', 'o-inv', 'o-fol', 'o-shk', 'o-fl', 'o-sm', 'o-rm', 'o-fq'].forEach((id) => ($('#' + id).onchange = apply));
       $('#m-save').onclick = () => J.Game.save(true);
       $('#m-load').onclick = () => J.Game.loadFromStore();
       $('#m-help').onclick = () => UI.showHelp();
@@ -863,7 +886,8 @@
     UI.closePanel();
     UI.say('Как играть', [
       'WASD — движение (относительно камеры). Мышь — камера (кликни по игре, чтобы захватить мышь; Esc — отпустить). Без захвата — тяни правой кнопкой или крути стрелками ←/→. Колёсико — приближение.',
-      'ЛКМ — удар (стендом, если он есть). ПКМ или X — тяжёлый удар. Пробел — рывок. Shift — бег. G — призвать стенд. Q / E / R — способности стенда.',
+      'ЛКМ — удар (стендом, если он есть): серия из четырёх, последний — апперкот-добивание. X (или ПКМ без захвата мыши) — тяжёлый удар: держи, чтобы зарядить, отпусти — бьёшь; полный заряд подбрасывает врага, а удар об стену наносит дополнительный урон. Пробел — рывок-уклонение (тратит выносливость, на мгновение неуязвим; лёжа — быстрый подъём). Shift — бег. G — призвать стенд. Q / E / R — способности стенда.',
+      'Бой. Z или ПКМ (когда мышь захвачена) — блок: держи, он гасит урон спереди, но тратит шкалу блока; опустела — блок пробит и ты оглушён. Нажми блок прямо перед ударом врага — парирование: враг откинут и открыт, следующий твой удар — критический. Враги перед ударом замахиваются и сверкают — читай замах, уклоняйся или парируй, наказывай промахи. Раш (ОРА ОРА!): держи клавишу способности, чтобы продлить. Если два раша сталкиваются лицом к лицу — жми удар или клавишу раша как можно чаще, победитель отбрасывает проигравшего.',
       '1 / 2 / 3 — приёмы стиля (хамон, вампиризм, вращение). V — дыхание хамона (восстанавливает дыхание, лечит). T — сменить стиль. H — сесть на лошадь.',
       'F — говорить с людьми и входить в здания. В зданиях: работа, еда, сон, магазины, вокзалы для быстрых поездок.',
       'I — инвентарь, P — персонаж и стенд, L — журнал, M — карта, K — Стендопедия, Esc — меню и сохранение.',
