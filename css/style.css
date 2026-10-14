@@ -407,6 +407,10 @@ body.is-touch #abilities, body.is-touch #hint { display: none; }
   #tracker { display: none; }
   #minimap { width: 96px; height: 96px; }
   #hud-right { width: 96px; }
+  /* телефон в альбомной ориентации: меню/карта/бег — колонкой слева от боевых кнопок, кнопки ниже */
+  body.is-touch #ttop { top: auto; bottom: calc(16px + var(--sab)); right: calc(308px + var(--sar)); }
+  .tb { height: 40px; }
+  .tb.sm { height: 34px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
