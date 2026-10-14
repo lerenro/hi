@@ -204,6 +204,11 @@
       return 0;
     }
     if (t.kind === 'civ') return 0;
+    // в машине кузов принимает часть удара на себя
+    if (t.isPlayer && t.inCar && !opt.dot) {
+      J.Veh.damage(t.inCar, amount * 0.6, src);
+      amount *= 0.4;
+    }
     const so = src ? J.ownerOf(src) : null;
     // Реквием: возврат к нулю
     if (t.st.zero > 0 && so && so !== t && !opt.dot) {
@@ -268,6 +273,11 @@
     if (t.st.sleep > 0) t.st.sleep = 0;
     if (t.ai && so && so !== t && J.hostile(t, so)) t.ai.target = so;
     if (t.ai && t.ai.civ) t.ai.fear = 6;
+    // драка рядом — прохожие разбегаются
+    if (!opt.dot && g.t - (J._scareT || -9) > 0.4) {
+      J._scareT = g.t;
+      J.scare(t.x, t.y, 12);
+    }
     if (!opt.silent) {
       const near = g.player && J.dist(t.x, t.y, g.player.x, g.player.y) < 30;
       if (near) J.R3.text(t.x, t.y, (crit ? '!' : '') + Math.round(dmg), crit ? 'tcrit' : t.isPlayer ? 'thurt' : 'tdmg', 0.8, 2.1);
@@ -560,6 +570,12 @@
   function civAI(e, dt) {
     const ai = e.ai;
     const g = G();
+    // сбит машиной — лежит, потом встаёт и убегает
+    if (e.downT > 0) {
+      e.downT -= dt;
+      e.vx = e.vy = 0;
+      return;
+    }
     if (ai.still) {
       e.vx = e.vy = 0;
       if (J.dist(e.x, e.y, g.player.x, g.player.y) < 6) e.face = Math.atan2(g.player.y - e.y, g.player.x - e.x);
@@ -568,7 +584,9 @@
     if (ai.fear > 0) {
       ai.fear -= dt;
       const p = g.player;
-      steer(e, e.x + (e.x - p.x), e.y + (e.y - p.y), e.speed * 2.2, dt);
+      const fx = ai.fx !== undefined ? ai.fx : p.x, fy = ai.fy !== undefined ? ai.fy : p.y;
+      steer(e, e.x + (e.x - fx), e.y + (e.y - fy), e.speed * 2.2, dt);
+      if (ai.fear <= 0) ai.fx = ai.fy = undefined;
       if (Math.random() < dt * 0.6) J.R3.text(e.x, e.y, J.R.pick(['Аааа!', 'Помогите!', 'Бежим!']), 'tsay', 0.9);
       return;
     }
@@ -578,6 +596,15 @@
       e.face = Math.atan2(g.player.y - e.y, g.player.x - e.x);
       return;
     }
+    // в городе — по тротуарам и переходам (граф тротуаров), иначе — блуждание
+    if (ai.sw === undefined || ai.sw < 0) {
+      ai.swT = (ai.swT || 0) - dt;
+      if (ai.swT <= 0) {
+        ai.swT = 2;
+        if (g.world.cityAt(e.x, e.y)) J.Traffic.attachPed(e);
+      }
+    }
+    if (ai.sw >= 0 && J.Traffic.pedStep(e, dt)) return;
     ai.wander -= dt;
     if (ai.wander <= 0) {
       ai.wander = 3 + Math.random() * 6;

@@ -1,7 +1,7 @@
 'use strict';
 // Главный модуль: ввод, цикл, время, население, путешествия, сон, смерть, сохранения.
 (function () {
-  const G = (J.G = { ents: [], projs: [], fields: [], traps: [], pickups: [], timers: [], t: 0, time: 480, day: 1 });
+  const G = (J.G = { ents: [], vehs: [], projs: [], fields: [], traps: [], pickups: [], timers: [], t: 0, time: 480, day: 1 });
   const Game = (J.Game = {});
   Game.SAVE_KEY = 'jojo_bizarre_life_save_v1';
   const SET_KEY = 'jojo_bizarre_life_settings_v1';
@@ -121,6 +121,8 @@
     }
     Input.touchHold[k] = down;
     if (!down) return;
+    // за рулём: только выход, меню и карта (газ/руль — джойстиком, ручник и сигнал — удержанием)
+    if (p.inCar && !['f', 'menu', 'map'].includes(k)) return;
     switch (k) {
       case 'heavy': J.P.heavyAttack(p); break;
       case 'dash': J.P.dash(p, p.vx, p.vy); break;
@@ -179,7 +181,15 @@
       return;
     }
     if (tabKey) return UI.openPanel(tabKey);
+    // за рулём: удары и способности недоступны
+    if (p.inCar) {
+      if (code === 'KeyF' || code === 'Enter') J.Veh.exit(p);
+      else if (code === 'Escape') UI.openPanel('menu');
+      else if (code === 'F1') UI.showHelp();
+      return;
+    }
     switch (code) {
+      case 'Enter': Game.interact(); break;
       case 'Escape': UI.openPanel('menu'); break;
       case 'F1': UI.showHelp(); break;
       case 'KeyQ': J.P.standAbility(p, 0); break;
@@ -228,6 +238,7 @@
     J.R3.quality = Game.settings.quality;
     J.R3.shadows = Game.settings.shadows;
     J.R3.init(document.getElementById('game'));
+    J.R3.initCars();
     J.R3.setQuality(Game.settings.quality, Game.settings.shadows);
     J.R3.warmup();
     J.UI.build();
@@ -311,6 +322,7 @@
   };
 
   Game.resetWorld = function (seed, keepWorld) {
+    J.Veh.clear();
     J.R3.clearAll();
     for (const e of G.ents) J.R3.dropView(e);
     for (const pk of G.pickups) J.R3.removeMesh(pk.mesh);
@@ -377,6 +389,8 @@
     Input.mdx = Input.mdy = 0;
     J.R3.clearAll();
     J.R3.updateChunks(p.x, p.y, true);
+    J.Traffic.ensure(G.world); // граф полос и тротуаров строится один раз на мир
+    J.Traffic.reset();
     Game.popT = 0;
   };
 
@@ -385,6 +399,7 @@
     Game.state = 'title';
     J.UI.hudShow(false);
     document.getElementById('touch').hidden = true;
+    J.Veh.clear();
     for (const e of G.ents) J.R3.dropView(e);
     G.ents = [];
     J.UI.showTitle();
@@ -510,6 +525,7 @@
   // ---------- Путешествия ----------
   Game.travelTo = function (regionId, mins) {
     const p = G.player;
+    J.Veh.clear();
     Game.passTime(mins);
     const w = G.world;
     const b = w.buildings.find((x) => x.region === regionId && x.type === 'station');
@@ -532,6 +548,8 @@
   // ---------- Смерть ----------
   Game.onPlayerDeath = function () {
     const p = G.player;
+    J.Veh.forceExit(p);
+    p.wanted = 0;
     p.standOut = false;
     p.channel = null;
     G.timestop = null;
@@ -556,6 +574,7 @@
     p.dash = null;
     const lost = Math.floor(p.money * 0.15);
     p.money -= lost;
+    J.Veh.clear();
     Game.passTime(240);
     const dp = J.doorPt(b);
     p.x = dp.x;
@@ -570,6 +589,7 @@
   };
   Game.collapse = function (msg) {
     const p = G.player;
+    J.Veh.clear();
     p.hp = Math.max(1, Math.round(p.maxHp * 0.25));
     Game.passTime(12 * 60);
     const hs = G.world.buildings.filter((b) => b.type === 'hospital').sort((a, b) => J.dist(a.x, a.y, p.x, p.y) - J.dist(b.x, b.y, p.x, p.y));
@@ -591,6 +611,7 @@
   Game.interactTarget = function () {
     const p = G.player;
     if (!p || p.dead) return null;
+    if (p.inCar) return { exit: p.inCar };
     let best = null, bd = 2.1;
     for (const e of G.ents) {
       if (e === p || e.dead || (e.kind !== 'civ' && e.kind !== 'story')) continue;
@@ -603,12 +624,16 @@
     if (best) return { ent: best };
     const b = G.world.doorNear(p.x, p.y, 1.9);
     if (b) return { b };
+    const v = J.Veh.near(p, 1.3);
+    if (v) return { car: v };
     return null;
   };
   Game.interact = function () {
     const it = Game.interactTarget();
     if (!it) return;
-    if (it.ent) J.Story.talk(it.ent);
+    if (it.exit) J.Veh.exit(G.player);
+    else if (it.car) J.Veh.enter(G.player, it.car);
+    else if (it.ent) J.Story.talk(it.ent);
     else J.UI.openBuilding(it.b);
   };
 
@@ -634,7 +659,8 @@
     if (city) {
       const want = Math.round(Math.min(24, city.city * 0.8) * (G.isNight ? 0.4 : 1));
       for (let i = 0; i < 3 && civs < want; i++) {
-        const pos = w.randomWalkable(p.x, p.y, 34, J.R, { street: true });
+        // прохожие появляются на тротуарах (дальше 14 м — не на глазах)
+        const pos = J.Traffic.pedSpawnPoint(p.x, p.y, 16, 40) || w.randomWalkable(p.x, p.y, 34, J.R, { street: true });
         if (!pos || J.dist(pos.x, pos.y, p.x, p.y) < 14) continue;
         J.addEnt(J.makeCivilian(pos.x, pos.y, w.regionAt(pos.x, pos.y)));
         civs++;
@@ -780,12 +806,18 @@
       const m = Game.moveInput();
       const inp = { mx: m.mx, my: m.my, sprint: Input.keys.ShiftLeft || Input.keys.ShiftRight || Input.runToggle, breathe: Input.keys.KeyV || Input.touchHold.v };
       const tsFrozen = G.timestop && G.timestop.by !== p && !(p.tsMove > 0);
-      if (!tsFrozen) {
+      if (p.inCar) {
+        // за рулём: потребности и реген идут как обычно, движение — у машины
+        inp.mx = inp.my = 0;
+        inp.sprint = inp.breathe = false;
+        J.P.update(p, dt, inp);
+      } else if (!tsFrozen) {
         J.P.update(p, dt, inp);
         if ((Input.mouse.l || Input.touchHold.atk) && !p.dead) J.P.basicAttack(p);
       } else {
         p.vx = p.vy = 0;
       }
+      J.Veh.update(dt, J.Veh.input());
       J.updateEnts(dt);
       J.updateProjs(dt);
       J.updateFields(dt);
@@ -825,6 +857,8 @@
     R3.viewBudget = 1;
     R3.rankCasters(G.ents, p.x, p.y);
     for (const e of G.ents) R3.updateView(e, blocking ? 0 : dt, G.t, hasStand);
+    R3.updateCars(G.vehs, G.t, p.inCar);
+    R3.updateSignals(G.world, G.t);
     if (!blocking) {
       R3.updateParticles(dt);
       R3.updateFx(dt);
@@ -840,11 +874,19 @@
       const ax = (k.ArrowRight ? 1 : 0) - (k.ArrowLeft ? 1 : 0), ay = (k.ArrowDown ? 1 : 0) - (k.ArrowUp ? 1 : 0);
       if (ax || ay) R3.rotateCam(ax * 2.4 * dt * Game.settings.sens, ay * 1.4 * dt * Game.settings.sens);
     }
-    const moving = !blocking && Math.hypot(p.vx, p.vy) > 0.5 && !Input.touchHold.atk && !Input.mouse.l;
-    R3.updateCamera(p.x, p.y, G.world.groundY(p.x, p.y) + (p.z || 0), dt, { mode: 'foot', heading: p.face, moving });
+    const car = p.inCar;
+    if (car) {
+      // в машине: камера дальше и выше для больших машин, сама заходит за спину
+      const vt = car.vt;
+      R3.updateCamera(car.x, car.y, car.gy + Math.max(0, vt.H - 1.45) * 0.8, dt, { mode: 'car', heading: car.ang, speed: Math.abs(car.vf), scale: Math.max(1, vt.L / 4.6) * 0.85 + 0.15 });
+    } else {
+      const moving = !blocking && Math.hypot(p.vx, p.vy) > 0.5 && !Input.touchHold.atk && !Input.mouse.l;
+      R3.updateCamera(p.x, p.y, G.world.groundY(p.x, p.y) + (p.z || 0), dt, { mode: 'foot', heading: p.face, moving });
+    }
     R3.render();
     Game.updateLabels();
     UI.update(dt);
+    J.Veh.hud(p);
   };
 
   window.addEventListener('load', () => {

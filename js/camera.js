@@ -118,7 +118,7 @@
     // направление штанги
     const cp = Math.cos(c.pitch), sp = Math.sin(c.pitch);
     const dx = -Math.cos(c.yaw) * cp, dz = -Math.sin(c.yaw) * cp, dy = sp;
-    const want = mode === 'car' ? c.carDist + Math.min(4, Math.abs(opts.speed || 0) * 0.12) : mode === 'title' ? 26 : c.dist;
+    const want = mode === 'car' ? c.carDist * (opts.scale || 1) + Math.min(4, Math.abs(opts.speed || 0) * 0.12) : mode === 'title' ? 26 : c.dist;
     // смещение за правое плечо (уменьшается при близкой камере); само плечо тоже не должно входить в стену
     let sh = mode === 'foot' ? 0.42 * J.clamp(c.arm / 4, 0.3, 1) : 0;
     const rx = -Math.sin(c.yaw), rz = Math.cos(c.yaw);

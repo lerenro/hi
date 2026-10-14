@@ -580,7 +580,7 @@
 
   A.useStyle = function (p, slot) {
     const style = p.style;
-    if (!style) return false;
+    if (!style || p.inCar) return false;
     const S = A.STYLES[style];
     const sl = S.slots[slot];
     if (!sl) return false;

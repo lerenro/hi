@@ -1109,6 +1109,12 @@
   R3.viewBudget = 99;
   R3.updateView = function (e, dt, t, playerHasStand) {
     const w = J.G.world;
+    // за рулём персонажа не видно (стёкла тонированные), стенд спрятан
+    if (e.inCar) {
+      if (e.view) e.view.group.visible = false;
+      if (e.standView) e.standView.group.visible = false;
+      return;
+    }
     // дальше тумана — не рисуем и не анимируем
     const cdx = e.x - R3.cam.tx, cdy = e.y - R3.cam.tz, d2 = cdx * cdx + cdy * cdy;
     const far = R3.scene.fog.far + 5;
@@ -1146,9 +1152,9 @@
     if (v.legs) v.legs.forEach((l, i) => (l.rotation.x = (i % 2 ? sw : -sw) * 0.6));
     if (v.kind === 'creature' && e.model === 'bug') v.group.position.y += 0.3 + Math.sin(t * 8 + v.phase) * 0.1;
     // смерть
-    if (e.dead) {
-      v.group.rotation.z = Math.min(Math.PI / 2, (v.group.rotation.z || 0) + dt * 5);
-    } else v.group.rotation.z = 0;
+    if (e.dead || e.downT > 0) {
+      v.group.rotation.z = Math.min(Math.PI / 2, (v.group.rotation.z || 0) + dt * (e.downT > 0 ? 9 : 5));
+    } else v.group.rotation.z = Math.max(0, (v.group.rotation.z || 0) - dt * 4);
     // цвет: вспышка урона / заморозка / невидимость
     const flash = e.hitFlash > 0;
     const frozen = e.st && (e.st.freeze > 0 || e.st.timefrozen);

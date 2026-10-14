@@ -311,6 +311,7 @@
   };
 
   P.toggleMount = function (p) {
+    if (p.inCar) return;
     if (!P.hasItem(p, 'horse')) return;
     p.mount = !p.mount;
     J.UI.toast(p.mount ? 'Ты в седле! Вне города скорость выше.' : 'Ты спешился.', 'normal');
@@ -456,7 +457,7 @@
 
   // ---------- Атаки ----------
   P.basicAttack = function (p) {
-    if (p.cds.basic > 0 || !p.canAct() || p.channel || p.dash) return;
+    if (p.inCar || p.cds.basic > 0 || !p.canAct() || p.channel || p.dash) return;
     const aim = P.aim(p, 3);
     p.face = aim.ang;
     p.combo = ((p.combo || 0) + 1) % 4;
@@ -500,7 +501,7 @@
     p.cds.basic = 0.4;
   };
   P.heavyAttack = function (p) {
-    if (p.cds.heavy > 0 || !p.canAct() || p.channel || p.dash) return;
+    if (p.inCar || p.cds.heavy > 0 || !p.canAct() || p.channel || p.dash) return;
     const aim = P.aim(p, 3);
     p.face = aim.ang;
     const st = p.stamina;
@@ -525,6 +526,7 @@
     p.cds.heavy = 2;
   };
   P.standAbility = function (p, i) {
+    if (p.inCar) return;
     if (!p.stand) {
       J.UI.toast('У тебя нет стенда. Стрела, диск, части Святого Трупа... способов много.', 'muted');
       return;
@@ -562,6 +564,7 @@
     P.standXp(p, 3);
   };
   P.toggleStand = function (p) {
+    if (p.inCar) return;
     if (!p.stand) {
       J.UI.toast('У тебя нет стенда.', 'muted');
       return;
@@ -574,7 +577,7 @@
     }
   };
   P.dash = function (p, dx, dy) {
-    if (p.cds.dash > 0 || p.stamina < 22 || !p.canMove()) return;
+    if (p.inCar || p.cds.dash > 0 || p.stamina < 22 || !p.canMove()) return;
     let ang = Math.hypot(dx, dy) > 0.1 ? Math.atan2(dy, dx) : p.face;
     p.stamina -= 22;
     p.cds.dash = 0.6;
