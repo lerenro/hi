@@ -103,7 +103,8 @@
     const e = new Ent({
       kind: 'enemy', team: 'enemy', x, y, name,
       look: (opts && opts.look) || rndLook(R),
-      maxHp: Math.round((110 + lvl * 28) * (opts && opts.hpMul ? opts.hpMul : 1)),
+      // обычные стенд-юзеры живут дольше — бой на несколько обменов, а не на одну серию
+      maxHp: Math.round((110 + lvl * 28) * (opts && opts.hpMul > 1 ? opts.hpMul : 1.4)),
       speed: 3.6, dmg: 7 + lvl * 1.6, xp: 40 + lvl * 14, money: [30 + lvl * 10, 90 + lvl * 25],
       rate: 0.9, range: 1.6, dmgMul: 0.75 + lvl * 0.07,
       stand: { id: sid, lvl: Math.min(10, Math.max(1, Math.round(lvl * 0.8))) }, standOut: false, standUser: true,
@@ -248,6 +249,12 @@
     }
     let mul = 1;
     const kind = opt.kind || 'phys';
+    if (t.isPlayer && src && J.Cb) {
+      const bo = J.ownerOf(src);
+      if (bo && bo.boss) mul *= J.Cb.BOSS_VS_PLAYER;
+    }
+    // удар по лежачему слабее
+    if (t.react && (t.react.type === 'down' || t.react.type === 'slump') && !opt.dot) mul *= 0.4;
     if (kind === 'hamon') {
       if (t.undead || t.vamp || t.pillar) mul *= t.pillar ? 2.5 : 3.2;
       else mul *= 0.9;
@@ -718,11 +725,26 @@
     for (const p of g.projs) {
       if (g.timestop && (p.owner !== g.timestop.by || (p.tsAge = (p.tsAge || 0) + dt) > 0.08)) {
         // ножи ДИО замирают в воздухе, едва покинув руку
+        if (p.owner === g.timestop.by) p.held = true;
         out.push(p);
         J.R3.updateProj(p, dt);
         continue;
       }
-      if (!g.timestop) p.tsAge = 0;
+      if (!g.timestop) {
+        p.tsAge = 0;
+        // время пошло: зависшие ножи дрожат миг, прежде чем сорваться, — успей поставить блок или отскочить
+        if (p.held) {
+          p.held = false;
+          p.thaw = 0.22;
+        }
+        if (p.thaw > 0) {
+          p.thaw -= dt;
+          out.push(p);
+          J.R3.updateProj(p, dt);
+          if (p.view) p.view.position.x += (Math.random() - 0.5) * 0.06;
+          continue;
+        }
+      }
       p.life -= dt;
       if (p.life <= 0) {
         if (p.explode) explodeProj(p);

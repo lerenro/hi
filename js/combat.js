@@ -63,6 +63,8 @@
     return Math.abs(J.angDiff(a.face, ab)) < tol && Math.abs(J.angDiff(b.face, ab + Math.PI)) < tol;
   };
   const rushing = (e) => !!(e && e.channel && e.channel.type === 'rush' && !(e.channel.fin > 0));
+  // Боссы бьют игрока слабее (у них в 3 раза больше здоровья) — бой длинный, но проходимый
+  Cb.BOSS_VS_PLAYER = 0.45;
   Cb.preHurt = function (t, amount, src, opt) {
     if (opt.rushTick && src && rushing(t) && rushing(src) && facing(t, src, 0.6)) return -1;
     if (opt.dot || opt.pierceDef || opt.unblockable || !src) return amount;
@@ -155,7 +157,9 @@
     c.n++;
     c.t = g.t;
     const sc = opt.rushTick ? 1 : Math.max(0.35, 1 - 0.11 * (c.n - 1));
-    const armor = t.boss && !killed && !opt.clashWin;
+    // замах ИИ после вспышки уже не сбить лёгким ударом — вспышку надо читать (блок, парирование, уклонение), а не долбить
+    const committed = !!(t.ai && t.atk && !t.atk.done && t.atk.glinted && !opt.launch && !opt.rushTick && tier !== 'big' && tier !== 'fin');
+    const armor = (t.boss || committed) && !killed && !opt.clashWin;
     const knock = opt.knock || 0;
     // отбрасывание
     if (knock && !armor) {
@@ -165,7 +169,7 @@
       t.kx += Math.cos(ang) * knock * 0.25;
       t.ky += Math.sin(ang) * knock * 0.25;
     }
-    if (opt.stun) {
+    if (opt.stun && !(t.react && (t.react.type === 'down' || t.react.type === 'slump'))) {
       const s = armor ? (tier === 'big' || tier === 'fin' ? opt.stun * 0.4 : 0) : opt.stun * sc;
       if (s > 0) t.st.stun = Math.max(t.st.stun || 0, s);
     }
@@ -180,6 +184,8 @@
       else setReact(t, 'death', 0.7);
       return;
     }
+    // лежачего добивают, но он остаётся лежать (без сброса в «вздрагивание»)
+    if (t.react && (t.react.type === 'down' || t.react.type === 'slump') && !air) return;
     if (air && !opt.dot) {
       // жонглирование: каждый удар подбрасывает слабее
       const j = t.jug || 0;
@@ -262,12 +268,14 @@
           else {
             setReact(e, 'getup', 0.45);
             e.st.gup = 0.6;
+            if (e.ai) e.ai.wake = true;
           }
         } else if (ty === 'slump') {
           if (e.dead) setReact(e, 'dead', 99);
           else {
             setReact(e, 'getup', 0.45);
             e.st.gup = 0.6;
+            if (e.ai) e.ai.wake = true;
           }
         } else e.react = null;
       }
@@ -577,6 +585,21 @@
       const d = J.dist(a.x, a.y, o.x, o.y);
       if (d > (kind === 'rush' ? 4.5 : kind === 'shot' ? 12 : 4)) continue;
       const ai = o.ai;
+      // в блоке: долбить в блок опасно — ИИ ловит удар парированием
+      if (o.guard && (kind === 'light' || kind === 'heavy') && d < 3.2 && rnd() < Cb.prof(o).parry * 2.5) {
+        o.guardAt = g.t + delay - 0.08;
+        ai.guardT = Math.max(ai.guardT || 0, delay + 0.1);
+        continue;
+      }
+      // предугадывание: свободный стенд-юзер или босс может закрыться ещё до первого удара серии
+      if (kind === 'light' && (o.standUser || o.boss) && !o.model && !o.guard && !o.react && d < 3.2 && !Cb.busy(o) && o.canAct() && rnd() < Cb.prof(o).guard * 0.5) {
+        Cb.setGuard(o, true);
+        if (o.guard) {
+          o.guardAt = g.t - 1; // это не парирование
+          ai.guardT = 0.5 + rnd() * 0.5;
+          continue;
+        }
+      }
       if (ai.th && ai.th.at > g.t) continue;
       ai.th = { by: a, at: g.t + delay, kind, readAt: g.t + Cb.prof(o).react };
     }
@@ -721,7 +744,7 @@
     const ang0 = Math.atan2(tg.y - e.y, tg.x - e.x);
     e.face = ang0;
     const fx = e.poisonHit ? { poison: e.poisonHit } : undefined;
-    const dmg = e.dmg * (e.dmgMul || 1) * (so ? 1.3 : 1) * (heavy ? 1.9 : 1) * (e.boss ? 0.85 : 1);
+    const dmg = e.dmg * (e.dmgMul || 1) * (so ? 1.3 : 1) * (heavy ? 1.9 : 1) * (e.boss ? 0.7 : 1);
     const range = (e.range || 1.2) + (so ? 0.75 : 0.15);
     const fn = () => {
       const a = Math.atan2(tg.y - e.y, tg.x - e.x);
@@ -796,6 +819,26 @@
     if (e.bstun > 0) {
       e.vx = e.vy = 0;
       return true;
+    }
+    // подъём после падения: стенд-юзеры и боссы встают в блок или отскакивают — бесконечно давить серией не выйдет
+    if (ai.wake) {
+      ai.wake = false;
+      if (!e.model && !e.gun && (e.standUser || e.boss || e.hamonHunter) && e.canAct()) {
+        const r = rnd();
+        if (r < pr.guard * 1.3 && d < 4) {
+          Cb.setGuard(e, true);
+          ai.guardT = 0.6 + rnd() * 0.4;
+          return true;
+        }
+        if (r < pr.guard * 1.3 + pr.dodge + 0.1 && d < 3 && e.canMove()) {
+          const a = ang + Math.PI + (rnd() - 0.5) * 1.6;
+          e.dash = { t: 0.2, vx: Math.cos(a) * 12, vy: Math.sin(a) * 12, dmg: 0, hit: new Set(), dodge: true };
+          e.st.invuln = Math.max(e.st.invuln || 0, 0.2);
+          e.dodgeDir = 'b';
+          ai.atk = Math.min(ai.atk, 0.25);
+          return true;
+        }
+      }
     }
     // чтение угрозы
     if (ai.th && g.t >= ai.th.readAt) readThreat(e, ai, pr, g);
