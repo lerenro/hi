@@ -664,6 +664,7 @@
     // движение
     if (!p.canMove() || p.dash) {
       if (!p.dash) p.vx = p.vy = 0;
+      p.mvx = p.mvy = 0;
       return;
     }
     if (p.st.void > 0) {
@@ -685,16 +686,29 @@
       const mag = Math.min(1, Math.hypot(inp.mx, inp.my));
       dx = (dx / L) * mag;
       dy = (dy / L) * mag;
+      // разгон: скорость догоняет желаемую за ~0.1 с — шаги и развороты без рывков
+      const a = 1 - Math.exp(-14 * dt);
+      p.mvx = (p.mvx || 0) + (dx * spd - (p.mvx || 0)) * a;
+      p.mvy = (p.mvy || 0) + (dy * spd - (p.mvy || 0)) * a;
       const ox = p.x, oy = p.y;
-      J.moveEnt(p, dx * spd * dt, dy * spd * dt);
+      J.moveEnt(p, p.mvx * dt, p.mvy * dt);
       p.vx = (p.x - ox) / dt;
       p.vy = (p.y - oy) / dt;
       const busy = (p.anim && p.anim.t > 0 && p.anim.type !== 'pose') || p.channel;
       if (!busy) p.face = Math.atan2(dy, dx);
       p.lastMoveAng = Math.atan2(dy, dx);
       if (sprint && Math.random() < dt * 2) P.trainStat(p, 'agi', 0.3);
+    } else if (Math.abs(p.mvx || 0) + Math.abs(p.mvy || 0) > 0.05) {
+      // торможение
+      const a = 1 - Math.exp(-20 * dt);
+      p.mvx -= p.mvx * a;
+      p.mvy -= p.mvy * a;
+      const ox = p.x, oy = p.y;
+      J.moveEnt(p, p.mvx * dt, p.mvy * dt);
+      p.vx = (p.x - ox) / dt;
+      p.vy = (p.y - oy) / dt;
     } else {
-      p.vx = p.vy = 0;
+      p.vx = p.vy = p.mvx = p.mvy = 0;
     }
   };
 

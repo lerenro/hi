@@ -11,6 +11,7 @@
     keys: {},
     mouse: { l: false, r: false },
     mx: 0, my: 0, tmx: 0, tmy: 0,
+    mdx: 0, mdy: 0, // накопленные за кадр движения мыши (применяются один раз в начале кадра)
     touch: false,
     locked: false,
     sprint: false, breathe: false,
@@ -27,6 +28,14 @@
   Input.rotateCam = function (dx, dy) {
     const s = Game.settings.sens;
     J.R3.rotateCam(dx * 0.0024 * s, dy * 0.002 * s * (Game.settings.invert ? -1 : 1));
+  };
+  Input.requestLock = function (cv) {
+    try {
+      const r = cv.requestPointerLock({ unadjustedMovement: true });
+      if (r && r.catch) r.catch(() => { try { cv.requestPointerLock(); } catch (e) {} });
+    } catch (e) {
+      try { cv.requestPointerLock(); } catch (e2) {}
+    }
   };
   Input.applyFollow = function () {
     J.R3.cam.follow = Input.touch || Input.lockFailed || !!Game.settings.follow;
@@ -51,17 +60,18 @@
     cv.addEventListener('mousedown', (e) => {
       if (Game.state !== 'play' || J.UI.blocking()) return;
       if (e.button === 0) {
-        if (!Input.locked && !Input.touch && Game.settings.lock) {
-          try {
-            const r = cv.requestPointerLock();
-            if (r && r.catch) r.catch(() => {});
-          } catch (er) {}
+        // клик для захвата мыши не должен бить
+        if (!Input.locked && !Input.touch && Game.settings.lock && !Input.lockFailed) {
+          Input.requestLock(cv);
+          return;
         }
         Input.mouse.l = true;
       }
       if (e.button === 2) {
         Input.mouse.r = true;
-        Input.rDrag = { x: e.clientX, y: e.clientY, moved: 0 };
+        // с захваченной мышью тяжёлый удар — сразу по нажатию; без захвата ПКМ ещё и вращает камеру
+        if (Input.locked) J.P.heavyAttack(G.player);
+        else Input.rDrag = { x: e.clientX, y: e.clientY, moved: 0 };
       }
     });
     window.addEventListener('mouseup', (e) => {
@@ -69,18 +79,22 @@
       if (e.button === 2) {
         Input.mouse.r = false;
         if (Input.rDrag && Input.rDrag.moved < 6 && Game.state === 'play' && !J.UI.blocking()) J.P.heavyAttack(G.player);
-        if (Input.locked && Game.state === 'play' && !J.UI.blocking() && !Input.rDrag) J.P.heavyAttack(G.player);
         Input.rDrag = null;
       }
     });
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('mousemove', (e) => {
-      if (Game.state !== 'play') return;
-      if (Input.locked) Input.rotateCam(e.movementX, e.movementY);
-      else if (Input.rDrag) {
-        Input.rDrag.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
-        Input.rotateCam(e.movementX * 1.4, e.movementY * 1.4);
+      if (Game.state !== 'play' || (!Input.locked && !Input.rDrag)) return;
+      let dx = e.movementX || 0, dy = e.movementY || 0;
+      if (Math.abs(dx) > 400 || Math.abs(dy) > 400) return; // скачки Chrome при захвате мыши
+      if (!Input.locked) {
+        Input.rDrag.moved += Math.abs(dx) + Math.abs(dy);
+        dx *= 1.4;
+        dy *= 1.4;
       }
+      // копим и применяем раз за кадр: камера двигается ровно, без лишних пересчётов
+      Input.mdx += dx;
+      Input.mdy += dy;
     });
     cv.addEventListener('wheel', (e) => {
       e.preventDefault();
@@ -88,6 +102,7 @@
     }, { passive: false });
     document.addEventListener('pointerlockchange', () => {
       Input.locked = document.pointerLockElement === cv;
+      Input.mdx = Input.mdy = 0;
     });
     // захват мыши запрещён (например, во встроенном фрейме) — включаем следящую камеру
     document.addEventListener('pointerlockerror', () => {
@@ -359,9 +374,11 @@
     c.tx = p.x;
     c.tz = p.y;
     c.dist = Input.touch ? 6.5 : 5.6;
-    c.arm = c.dist;
     c.pitch = 0.24;
     c.idle = 9;
+    c.mode = 'foot';
+    J.R3.snapCamera();
+    Input.mdx = Input.mdy = 0;
     J.R3.clearAll();
     J.R3.updateChunks(p.x, p.y, true);
     Game.popT = 0;
@@ -510,6 +527,7 @@
     for (const e of G.ents) if (e.summon) { e.x = p.x; e.y = p.y; }
     J.R3.cam.tx = p.x;
     J.R3.cam.tz = p.y;
+    J.R3.snapCamera();
     J.R3.clearAll();
     J.R3.updateChunks(p.x, p.y, true);
     J.UI.bigBanner(J.REGION[regionId].name, `${J.REGION[regionId].country}. Прибытие в ${J.fmtClock(G.time)}, день ${G.day}.`);
@@ -549,6 +567,7 @@
     p.lastSafe = { x: p.x, y: p.y };
     for (const e of G.ents) if (e !== p && e.team === 'enemy') e.despawn = true;
     J.R3.dropView(p);
+    J.R3.snapCamera();
     J.R3.clearAll();
     J.R3.updateChunks(p.x, p.y, true);
     J.UI.bigBanner('ВОЗРОЖДЕНИЕ', `${msg} Потеряно: ${J.fmtMoney(lost)}. ${here.name !== w.regionAt(p.x, p.y).name ? '' : ''}`);
@@ -562,6 +581,7 @@
       const dp = J.doorPt(hs[0]);
       p.x = dp.x;
       p.y = dp.y;
+      J.R3.snapCamera();
       J.R3.clearAll();
       J.R3.updateChunks(p.x, p.y, true);
     }
@@ -724,6 +744,11 @@
     const UI = J.UI;
     const R3 = J.R3;
     const blocking = UI.blocking();
+    // мышь: все движения за кадр — одним поворотом
+    if (Input.mdx || Input.mdy) {
+      if (!blocking) Input.rotateCam(Input.mdx, Input.mdy);
+      Input.mdx = Input.mdy = 0;
+    }
     if (!blocking) {
       G.t += dt;
       // время

@@ -963,7 +963,8 @@
         if (d < rr) {
           const push = (rr - d) * 0.5;
           const ux = dx / d, uy = dy / d;
-          const wa = a.boss ? 0.2 : 1, wb = b.boss ? 0.2 : 1;
+          // игрока толпа почти не толкает — камера жёстко следует за ним и не должна дёргаться
+          const wa = a.boss ? 0.2 : a.isPlayer && !b.boss ? 0.25 : 1, wb = b.boss ? 0.2 : b.isPlayer && !a.boss ? 0.25 : 1;
           if (!a.st.timefrozen) J.moveEnt(a, -ux * push * wa, -uy * push * wa);
           if (!b.st.timefrozen) J.moveEnt(b, ux * push * wb, uy * push * wb);
         }
