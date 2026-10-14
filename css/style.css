@@ -347,7 +347,7 @@ body.is-touch .ono.col.c0 { top: 18vh; left: calc(160px + var(--sal)); }
 .dnum.hurt { color: #ff6b7a; }
 .dnum.crit { color: #ffe14a; font-size: 28px; }
 .fxring { left: 0; top: 0; width: 120px; height: 120px; display: none; border: 6px solid #fff; border-radius: 50%; box-shadow: 0 0 12px rgba(255,255,255,0.7); will-change: transform, opacity; }
-.namecard { left: 0; top: 0; display: none; font-family: var(--font-display); font-size: 28px; color: #fff; background: linear-gradient(90deg, transparent, rgba(10,4,18,0.85) 12%, rgba(10,4,18,0.85) 88%, transparent); border-bottom: 3px solid var(--oc, #ff5d73); padding: 4px 28px; white-space: nowrap; -webkit-text-stroke: 1px #1a0a2a; }
+.namecard { left: calc(5vw + var(--sal)); bottom: calc(13vh + var(--sab)); display: none; font-family: var(--font-display); font-size: 28px; color: #fff; background: linear-gradient(90deg, transparent, rgba(10,4,18,0.85) 12%, rgba(10,4,18,0.85) 88%, transparent); border-bottom: 3px solid var(--oc, #ff5d73); padding: 4px 28px; white-space: nowrap; -webkit-text-stroke: 1px #1a0a2a; }
 .clash { left: 50%; bottom: 24vh; transform: translateX(-50%); display: none; width: min(520px, 80vw); text-align: center; pointer-events: auto; }
 .clash .cbar { position: relative; height: 18px; border: 3px solid #fff; background: #1a0a2a; display: flex; box-shadow: 0 0 0 2px #1a0a2a; transform: skewX(-12deg); overflow: hidden; }
 .clash .cbar i { display: block; height: 100%; width: 50%; transition: width 0.05s linear; }

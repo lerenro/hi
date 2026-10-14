@@ -1215,8 +1215,9 @@
     if (opt.rushTick) return 'tick';
     const knock = opt.knock || 0;
     if (opt.finisher || knock >= 7) return 'fin';
-    if (knock >= 5 || dmg > t.maxHp * 0.18) return 'big';
-    if (knock >= 2.5 || crit) return 'mid';
+    // тяжесть — по силе удара; слабым врагам лёгкий удар не даёт кадра удара
+    if (knock >= 5 || (dmg > t.maxHp * 0.35 && knock >= 1.5)) return 'big';
+    if (knock >= 2.5 || crit || dmg > t.maxHp * 0.18) return 'mid';
     return 'light';
   };
   // kind: 'hit' | 'block' | 'parry' | 'gbreak' | 'pdodge'
@@ -1460,7 +1461,7 @@
     J.G.timers.push({ t: 1.6, fn: () => (CF.distT = 1) });
     Fx.so = 1.6;
     const tt = TAUNT[e.bossKey];
-    if (tt && tt.aggro) Fx.say(e, tt.aggro);
+    if (tt && tt.aggro) J.G.timers.push({ t: 1.5, fn: () => !e.dead && Fx.say(e, tt.aggro) });
   };
   // отмена противостояния вводом игрока
   Fx.cancelStandoff = function () {
@@ -1481,9 +1482,10 @@
       cardEl.style.display = 'none';
       return;
     }
-    const s = proj(e.x, gy(e.x, e.y) + 2.5 * (e.scale || 1), e.y);
-    const k = Math.min(1, (2.2 - CARD.t) / 0.15), o = Math.min(1, CARD.t / 0.3);
-    if (s.ok) cardEl.style.transform = `translate(${s.x.toFixed(0)}px,${s.y.toFixed(0)}px) translate(-50%,-100%) skewX(-8deg) scale(${(0.6 + 0.4 * k).toFixed(3)})`;
+    // подпись выезжает слева над нижней полосой леттербокса, как титр в аниме
+    const k = Math.min(1, (2.2 - CARD.t) / 0.25), o = Math.min(1, CARD.t / 0.3);
+    const x = -60 * (1 - J.Anim.EASE.outQuad(k));
+    cardEl.style.transform = `translateX(${x.toFixed(1)}px) skewX(-8deg)`;
     cardEl.style.opacity = Math.min(k, o).toFixed(3);
   }
   const TAUNT = (Fx.TAUNT = {
@@ -1761,7 +1763,29 @@
     invScene.add(invQuad);
     invCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     blackMat = new THREE.MeshBasicMaterial({ color: 0x0b0610, fog: false });
+    Fx.warm();
     Fx.ready = true;
+  };
+  // Компиляция шейдеров эффектов заранее: первый кадр удара или раш не должны давать фриз
+  Fx.warm = function () {
+    const r = R3.renderer, sc = R3.scene, cam = R3.camera;
+    const objs = [SPK.mesh, DST.mesh, DEB, FIST, sphere];
+    for (const s of STARS) objs.push(s.sp);
+    for (const d of DECALS) objs.push(d.m);
+    const vis = objs.map((o) => o.visible);
+    for (const o of objs) o.visible = true;
+    FIST.count = 1;
+    const tmp = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), blackMat);
+    tmp.position.set(0, -60, 0);
+    sc.add(tmp);
+    try {
+      r.compile(sc, cam);
+      r.compile(invScene, invCam);
+    } catch (e) {}
+    sc.remove(tmp);
+    tmp.geometry.dispose();
+    objs.forEach((o, i) => (o.visible = vis[i]));
+    FIST.count = 0;
   };
 
   // Слой 1 — для силуэтного кадра удара
@@ -1839,6 +1863,17 @@
       o.el.style.display = 'none';
     }
     for (const em of EMIT) em.u = null;
+    for (const d of DECALS) {
+      d.life = 0;
+      d.m.visible = false;
+    }
+    for (const d of DP) d.life = 0;
+    if (DEB) {
+      M4.makeScale(0, 0, 0);
+      for (const d of DP) DEB.setMatrixAt(d.i, M4);
+      DEB.instanceMatrix.needsUpdate = true;
+      DEB.visible = false;
+    }
     LB.t = 0;
     CARD.t = 0;
     if (cardEl) cardEl.style.display = 'none';

@@ -57,7 +57,14 @@
   };
 
   // До урона: блок, парирование. Возвращает новый урон; -1 — удар полностью отражён
+  // Два раша лицом к лицу: кулаки сталкиваются, урона нет — дальше решает столкновение (Cb.update)
+  const facing = (a, b, tol) => {
+    const ab = Math.atan2(b.y - a.y, b.x - a.x);
+    return Math.abs(J.angDiff(a.face, ab)) < tol && Math.abs(J.angDiff(b.face, ab + Math.PI)) < tol;
+  };
+  const rushing = (e) => !!(e && e.channel && e.channel.type === 'rush' && !(e.channel.fin > 0));
   Cb.preHurt = function (t, amount, src, opt) {
+    if (opt.rushTick && src && rushing(t) && rushing(src) && facing(t, src, 0.6)) return -1;
     if (opt.dot || opt.pierceDef || opt.unblockable || !src) return amount;
     if (!t.guard || !t.canAct()) return amount;
     const so = J.ownerOf(src);
@@ -121,6 +128,21 @@
       t.lastHitBy = so;
     }
     const killed = t.hp <= 0;
+    if (opt.rushTick) {
+      t.rushHitT = g.t;
+      t.rushHitBy = so;
+      // стенд-юзер ИИ может ответить встречным рашем (один шанс на чужой раш)
+      if (!killed && t.ai && !t.ai.civ && t.stand && so && rushing(so) && t._crCh !== so.channel) {
+        t._crCh = so.channel;
+        const ra = ab(t, 'rush');
+        if (ra && !(t.cds[ra.name] > 0) && !(t.st.silence > 0) && rnd() < (t.boss ? 0.6 : 0.3) && Cb.counterRush(t)) {
+          t.standOut = true;
+          J.Abil.use(t, ra, J.Abil.aimAt(t, so));
+          t.cds[ra.name] = ra.cd || 6;
+          return;
+        }
+      }
+    }
     const ang = opt.ang !== undefined ? opt.ang : so ? Math.atan2(t.y - so.y, t.x - so.x) : rnd() * Math.PI * 2;
     if (blocked) {
       if (fxOk()) Fx().dmgNum(t, dmg, false, opt.rushTick);
@@ -279,12 +301,17 @@
       const mx = e.kx * dt, my = e.ky * dt;
       const ox = e.x, oy = e.y;
       J.moveEnt(e, mx, my);
-      if (sp > 6 && !e.slammed) {
+      if (sp > (e.airborne ? 3.5 : 5.5) && !e.slammed) {
         const bx = Math.abs(mx) > 0.02 && Math.abs(e.x - ox) < Math.abs(mx) * 0.3;
         const by = Math.abs(my) > 0.02 && Math.abs(e.y - oy) < Math.abs(my) * 0.3;
-        if (bx || by) wallSlam(e, bx ? -Math.sign(e.kx) : 0, by ? -Math.sign(e.ky) : 0, sp);
+        if (bx || by) {
+          // только о настоящую преграду (стена, дерево, камень), не о кромку воды
+          const nx = bx ? -Math.sign(e.kx) : 0, ny = by ? -Math.sign(e.ky) : 0;
+          const w = G().world, hx = e.x - nx * (e.r + 0.3), hy = e.y - ny * (e.r + 0.3);
+          if (w.solid(hx, hy) && !w.isWater(hx, hy)) wallSlam(e, nx, ny, sp);
+        }
       }
-      const fr = e.airborne ? 0.3 : 0.02;
+      const fr = e.airborne ? 0.5 : 0.02;
       const f = Math.pow(fr, dt);
       e.kx *= f;
       e.ky *= f;
@@ -317,6 +344,16 @@
       }
     }
   }
+  // Ответный раш: под чужим рашем можно сразу начать свой — кулаки столкнутся
+  Cb.counterRush = function (u) {
+    const s = u.st;
+    if (!(u.rushHitT > G().t - 0.4) || u.dead || u.airborne || Cb.isDown(u)) return false;
+    if (s.freeze > 0 || s.sleep > 0 || s.book > 0 || s.timefrozen || s.stun > 0.4) return false;
+    s.stun = 0;
+    const by = u.rushHitBy;
+    if (by && !by.dead) u.face = Math.atan2(by.y - u.y, by.x - u.x);
+    return true;
+  };
   // Подъём с земли рывком (игрок)
   Cb.tech = function (e) {
     const r = e.react;
@@ -703,11 +740,22 @@
   function readThreat(e, ai, pr, g) {
     const th = ai.th;
     ai.th = null;
-    if (!th || th.by.dead || g.t > th.at + 0.05) return;
+    if (!th || th.by.dead) return;
+    // раш читается, пока он идёт; остальное — только до удара
+    if (th.kind === 'rush' ? !rushing(th.by) : g.t > th.at + 0.05) return;
     if ((e.atk && !e.atk.done) || e.channel || e.dash || ai.rec > 0.15) return;
     const d = J.dist(e.x, e.y, th.by.x, th.by.y);
     const left = th.at - g.t;
     const r = rnd();
+    // встречный раш — столкновение кулаков
+    if (th.kind === 'rush' && e.stand && standOn(e) && d < 3.4 && (e.canAct() || Cb.counterRush(e))) {
+      const ra = ab(e, 'rush');
+      if (ra && !(e.cds[ra.name] > 0) && r < (e.boss ? 0.65 : 0.35)) {
+        J.Abil.use(e, ra, J.Abil.aimAt(e, th.by));
+        e.cds[ra.name] = ra.cd || 6;
+        return;
+      }
+    }
     // парирование: блок ровно к удару
     if (left > 0.02 && th.kind !== 'rush' && th.kind !== 'shot' && r < pr.parry) {
       ai.parryAt = th.at - PARRY_WIN * 0.5;
@@ -912,13 +960,24 @@
       const ts = g.timestop;
       if (ts && ts.by === e) {
         const ai = e.ai;
+        e.face = ang;
+        // пока раскрывается сфера — стоит в позе
+        if (ts.intro > 0) {
+          e.vx = e.vy = 0;
+          return true;
+        }
         ai.tsT = (ai.tsT || 0) + dt;
-        if (!ai.knives && ai.tsT > 0.6 && d < 11) {
-          ai.knives = true;
-          const k = ab(e, 'shoot');
-          if (k) {
-            J.Abil.use(e, k, J.Abil.aimAt(e, tg));
-            Fx().taunt && Fx().taunt(e, 'ts');
+        if (!ai.knives) {
+          // отходит на дистанцию и метает ножи — они зависают в воздухе
+          if (d < 4.2 && ai.tsT < 1.4) {
+            J.steer(e, e.x - Math.cos(ang) * 3, e.y - Math.sin(ang) * 3, e.speed * 1.3, dt);
+            return true;
+          }
+          e.vx = e.vy = 0;
+          if (ai.tsT > 0.25 && d < 11) {
+            ai.knives = true;
+            const k = ab(e, 'shoot');
+            if (k) J.Abil.use(e, k, J.Abil.aimAt(e, tg));
           }
           return true;
         }

@@ -1401,7 +1401,9 @@
     tmp.add(h.group);
     const st = R3.buildStand(J.STANDS.star_platinum);
     tmp.add(st.group);
-    tmp.add(R3.buildCreature('coyote', '#aa8855').group);
+    const cr = R3.buildCreature('coyote', '#aa8855');
+    if (R3.fxPatch) cr.mats.forEach((m) => R3.fxPatch(m));
+    tmp.add(cr.group);
     tmp.add(R3.pickupMesh('#ffffff'));
     tmp.add(new THREE.Mesh(sphGeo, new THREE.MeshBasicMaterial({ color: '#fff', transparent: true, opacity: 0.5, depthWrite: false })));
     tmp.add(new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: '#fff', transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false })));

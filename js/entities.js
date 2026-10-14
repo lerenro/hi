@@ -716,13 +716,13 @@
     const w = g.world;
     const out = [];
     for (const p of g.projs) {
-      if (g.timestop && (p.owner !== g.timestop.by || (p.tsAge = (p.tsAge || 0) + dt) > 0.12)) {
+      if (g.timestop && (p.owner !== g.timestop.by || (p.tsAge = (p.tsAge || 0) + dt) > 0.08)) {
         // ножи ДИО замирают в воздухе, едва покинув руку
         out.push(p);
         J.R3.updateProj(p, dt);
         continue;
       }
-      p.tsAge = 0;
+      if (!g.timestop) p.tsAge = 0;
       p.life -= dt;
       if (p.life <= 0) {
         if (p.explode) explodeProj(p);

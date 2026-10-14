@@ -476,10 +476,12 @@
       J.UI.toast('У тебя нет стенда. Стрела, диск, части Святого Трупа... способов много.', 'muted');
       return;
     }
-    if (!p.canAct() || p.channel) return;
+    if (p.channel) return;
     const sd = J.STANDS[p.stand.id];
     const ab = sd.abil[i];
     if (!ab) return;
+    // под чужим рашем можно ответить своим (столкновение рашей)
+    if (!p.canAct() && !(ab.kind === 'rush' && p.stand.lvl >= ab.lvl && !(p.cds['s' + i] > 0) && J.Cb.counterRush(p))) return;
     if (p.stand.lvl < ab.lvl) {
       J.UI.toast(`«${ab.name}» откроется на ${ab.lvl} уровне стенда.`, 'muted');
       return;
