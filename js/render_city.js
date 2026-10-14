@@ -876,7 +876,7 @@
       const L = cum[k + 1] - cum[k];
       if (L < 1e-3) continue;
       const ns = Math.max(1, Math.ceil(L / 2));
-      const fx = (b.x - a.x) / L, fz = (b.y - a.y) / L;
+
       for (let s = 0; s < ns; s++) {
         const t0 = s / ns, t1 = (s + 1) / ns;
         const d0 = cum[k] + L * t0, d1 = cum[k] + L * t1;
@@ -943,7 +943,6 @@
         }
       }
     }
-    void fx; void fz;
   };
 
   // ---------- Здания по архетипам ----------
