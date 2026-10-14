@@ -531,6 +531,7 @@
       const mag = c.mag > 0;
       if (mag) c.mag -= dt;
       const tg = J.nearestHostile(e, c.range + sf + 1.2, 0.8, c.ang);
+      c.tg = tg; // для шквала кулаков: бьют до тела, а не насквозь
       if (tg) {
         const d = J.dist(e.x, e.y, tg.x, tg.y) - tg.r;
         if (d > sf + 0.55) {

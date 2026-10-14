@@ -34,6 +34,7 @@
   // ---------- Блок ----------
   Cb.setGuard = function (e, on) {
     if (!on) {
+      if (e.guard) e.guardOff = G().t;
       e.guard = false;
       return;
     }
@@ -42,7 +43,8 @@
     if (e.gm === undefined) e.gm = 100;
     if (e.gm < 10) return;
     e.guard = true;
-    e.guardAt = G().t;
+    // окно парирования только у «честного» нажатия: дёргать блок без перерыва бесполезно
+    e.guardAt = G().t - (e.guardOff || -9) < 0.35 ? G().t - 1 : G().t;
     engaged(e, 2);
   };
   const guardBreak = (t, src) => {
@@ -208,8 +210,15 @@
       setReact(t, 'stagger', 0.5);
       t.st.stun = Math.max(t.st.stun || 0, 0.45 * sc);
       t.face = ang + Math.PI;
-    } else if (tier === 'tick') setReact(t, 'jitter', 0.08);
-    else if (tier === 'mid') setReact(t, 'flinch', 0.3, 1.4);
+    } else if (tier === 'tick') {
+      // под рашем: голову мотает от каждого кулака, жертву понемногу отжимает назад
+      const r0 = t.react;
+      const r = r0 && r0.type === 'pummel' ? r0 : setReact(t, 'pummel', 0.32);
+      if (r !== r0) r.n = 0;
+      r.t = 0;
+      r.n++;
+      t.face = ang + Math.PI;
+    } else if (tier === 'mid') setReact(t, 'flinch', 0.3, 1.4);
     else setReact(t, 'flinch', 0.22);
     if (tier !== 'tick') t.face = ang + Math.PI;
   };
@@ -749,7 +758,8 @@
     const fn = () => {
       const a = Math.atan2(tg.y - e.y, tg.x - e.x);
       e.face = a;
-      J.hitArc(e, a, range, heavy ? 1.6 : 1.3, dmg, { knock: heavy ? 7 : 2, stun: heavy ? 0.6 : 0.2, fx, melee: true, gdmg: heavy ? 55 : 14 });
+      // тяжёлый удар обычного противника отшвыривает и шатает, подбрасывают только боссы
+      J.hitArc(e, a, range, heavy ? 1.6 : 1.3, dmg, { knock: heavy ? (e.boss ? 7 : 5.5) : 2, stun: heavy ? 0.6 : 0.2, fx, melee: true, gdmg: heavy ? 55 : 14 });
     };
     // анимация: замах, держим, резкий удар
     const clip = heavy ? 'heavy' : e.model ? 'jab' : J.Anim.CHAIN[(e.ai.ci = ((e.ai.ci || 0) + 1) % 3)];

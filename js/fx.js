@@ -264,9 +264,10 @@
     kill: ['バーン!'], block: ['ガキィン!', 'ガッ'], wall: ['ズガァン!', 'ドガァ!'], boom: ['ドグォォン!'], shoot: ['バシュッ', 'ドスッ'],
   };
   Fx.WSET = WSET;
-  const WSIZE = { light: [28, 20], mid: [40, 28], big: [64, 44], fin: [96, 62], kill: [110, 70], ts: [120, 72], tick: [34, 26], sm: [26, 20], md: [48, 32] };
+  const WSIZE = { light: [28, 20], mid: [38, 26], big: [58, 40], fin: [84, 54], kill: [96, 62], ts: [120, 72], tick: [34, 26], sm: [26, 20], md: [48, 32] };
   const WPRIO = { fin: 3, kill: 3, ts: 3, big: 2 };
-  const WHOLD = { light: 0.35, mid: 0.45, big: 0.6, fin: 0.9, kill: 1.0, ts: 1.4, tick: 0.4, sm: 0.4, md: 0.6 };
+  // короткое удержание: звук-картинка вспыхивает и уходит, не закрывая следующий обмен ударами
+  const WHOLD = { light: 0.28, mid: 0.34, big: 0.42, fin: 0.55, kill: 0.7, ts: 1.4, tick: 0.4, sm: 0.4, md: 0.5 };
   // Слово на экране в точке sx, sy
   Fx.wordAt = function (text, sx, sy, sizeKey, color, stroke) {
     if (!root) return null;
@@ -312,14 +313,13 @@
     if (!root) return null;
     const s = proj(x, h, y);
     if (!s.ok) return null;
-    const cx = innerWidth / 2, cy = innerHeight / 2;
-    let dx = s.x - cx, dy = s.y - cy;
-    const L = Math.hypot(dx, dy) || 1;
-    const off = 40 + rnd() * 40;
-    dx = (dx / L) * off;
-    dy = (dy / L) * off;
-    if (L < 2) dx = (rnd() < 0.5 ? -1 : 1) * off;
-    return Fx.wordAt(text, s.x + dx, s.y + dy - 30, sizeKey, color, stroke);
+    // сбоку и выше точки удара, чтобы не закрывать бойцов: сторона — от центра экрана
+    const sx = s.x, sy = s.y;
+    const sz = (WSIZE[sizeKey] || WSIZE.mid)[phone() ? 1 : 0];
+    const hw = Math.min(innerWidth * 0.45, text.length * sz * 0.5);
+    const side = Math.abs(sx - innerWidth / 2) > 40 ? Math.sign(sx - innerWidth / 2) : rnd() < 0.5 ? -1 : 1;
+    const off = hw * 0.55 + 24 + rnd() * 24;
+    return Fx.wordAt(text, sx + side * off, sy - sz * 0.5 - 20 - rnd() * 20, sizeKey, color, stroke);
   };
   Fx.pick = (k) => {
     const a = WSET[k] || WSET.mid;
@@ -521,7 +521,7 @@
     o.crit = o.crit || crit;
     o.life = 0;
     o.pop = 0.12;
-    const txt = (o.n > 1 ? '×' + o.n + '  ' : '') + (o.crit ? '!' : '') + Math.round(o.val);
+    const txt = (o.n > 1 ? '×' + o.n + '\u2002' : '') + Math.round(o.val) + (o.crit ? '!' : '');
     if (txt !== o.txt) {
       o.txt = txt;
       o.el.textContent = txt;
@@ -729,7 +729,7 @@
   // ---------- Обломки стен и трещины ----------
   let DEB = null;
   const DP = [];
-  const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), E3 = new THREE.Euler(), S3 = new THREE.Vector3(), P3 = new THREE.Vector3();
+  const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), EF = new THREE.Euler(0, 0, 0, 'YXZ'), E3 = new THREE.Euler(), S3 = new THREE.Vector3(), P3 = new THREE.Vector3();
   Fx.debris = function (x, h, z, nx, nz, n, color) {
     if (!DEB) return;
     if (Fx.q < 1) n = Math.ceil(n * 0.5);
@@ -888,29 +888,37 @@
       const fx = Math.cos(a), fy = Math.sin(a);
       const ox = hasSv ? sv.pos.x : u.x + fx * 0.6;
       const oz = hasSv ? sv.pos.z : u.y + fy * 0.6;
-      const oy = (hasSv ? sv.pos.y : gy(u.x, u.y) + (u.z || 0)) + 1.35 * (hasSv ? 1.18 : 1);
+      // кулаки летят от плеч стенда в корпус и лицо жертвы (грудь ≈ 1.25 м над землёй)
+      const sh = (hasSv ? sv.pos.y : gy(u.x, u.y) + (u.z || 0)) + 1.35 * (hasSv ? 1.18 : 1);
+      const oy = gy(u.x, u.y) + (u.z || 0) + 1.25 * (u.scale || 1);
       const sd = u.stand ? J.STANDS[u.stand.id] : null;
       const c1 = sd ? sd.c1 : '#ffd84a', c2 = sd ? sd.c2 : '#fff2a8';
       const reach = clash && (clash.a === u || clash.b === u) ? 0.75 : 1;
       const frozen = !!u.st.timefrozen;
+      // кулаки останавливаются у тела цели
+      const tg = ch.tg && !ch.tg.dead ? ch.tg : null;
+      const lim = tg ? J.clamp(Math.hypot(tg.x - ox, tg.y - oz) - tg.r - 0.5, 0.25, 1.1) / 1.1 : 1;
       for (let i = 0; i < NF; i++) {
         let f = em.f[i];
         if (!frozen) f.t -= dt;
         if (f.t <= 0) {
           f.life = f.t = 0.07 + rnd() * 0.07;
           f.ox = (rnd() - 0.5) * 1.0;
-          f.oy = -0.25 + rnd() * 0.75;
+          f.oy = -0.3 + rnd() * 0.62;
           f.ext = (0.55 + rnd() * 0.55) * reach;
           f.c = rnd() < 0.5 ? 1 : 2;
           FIST.setColorAt(n, tmpC.set(f.c === 1 ? c1 : c2));
         } else if (f.slot !== n) FIST.setColorAt(n, tmpC.set(f.c === 1 ? c1 : c2));
         f.slot = n;
         const k = 1 - f.t / f.life;
-        const ext = f.ext * Math.sin(Math.min(1, k * 1.6) * Math.PI * 0.5);
-        P3.set(ox + fx * (0.45 + ext) - fy * f.ox, oy + f.oy, oz + fy * (0.45 + ext) + fx * f.ox);
-        E3.set(0, Math.PI / 2 - a, 0);
-        Q.setFromEuler(E3);
-        S3.set(1.15, 1.15, 0.8 + ext * 0.9);
+        const ke = Math.sin(Math.min(1, k * 1.6) * Math.PI * 0.5);
+        const ext = f.ext * ke * lim;
+        // от плеча вниз к цели: высота и наклон по ходу выпада
+        const h0 = sh + f.oy * 0.4, h1 = oy + f.oy;
+        P3.set(ox + fx * (0.45 + ext) - fy * f.ox, h0 + (h1 - h0) * (0.35 + 0.65 * ke), oz + fy * (0.45 + ext) + fx * f.ox);
+        EF.set(Math.atan2(h0 - h1, 0.45 + f.ext), Math.PI / 2 - a, 0);
+        Q.setFromEuler(EF);
+        S3.set(1.1, 1.1, 0.85 + ext * 0.45);
         M4.compose(P3, Q, S3);
         FIST.setMatrixAt(n, M4);
         n++;
@@ -946,6 +954,7 @@
     b.el.style.setProperty('--os', (phone() ? 30 : 50) + 'px');
     b.el.style.display = 'block';
     if (u === pl) {
+      Fx._pr = u;
       const jp = CRY_JP[b.cry];
       Fx.column(0, 'ドドドドド', sd ? sd.c1 : '#b06bff', 99);
       Fx.column(1, jp ? jp + jp + jp : 'ドドドド', '#f2c230', 99);
@@ -963,7 +972,8 @@
       b.el.textContent = t;
       b.txt = t;
     }
-    if (u === J.G.player) {
+    if (u === J.G.player || u === Fx._pr) {
+      Fx._pr = null;
       Fx.columnOff(0);
       Fx.columnOff(1);
       CF.yawHold = 0.4;
@@ -1739,9 +1749,11 @@
     // кулаки
     const gb = new J.GB();
     const W = new THREE.Color(1, 1, 1);
-    gb.geo(new THREE.BoxGeometry(0.15, 0.13, 0.16), new THREE.Matrix4(), W);
-    gb.geo(new THREE.CylinderGeometry(0.05, 0.06, 0.42, 6).rotateX(Math.PI / 2), new THREE.Matrix4().makeTranslation(0, 0, -0.27), W);
-    FIST = new THREE.InstancedMesh(gb.build(), new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.7, depthWrite: false }), NF * 2);
+    gb.geo(new THREE.BoxGeometry(0.16, 0.12, 0.15), new THREE.Matrix4(), W);
+    gb.geo(new THREE.BoxGeometry(0.05, 0.05, 0.09), new THREE.Matrix4().makeTranslation(0.085, -0.035, 0.0), W);
+    gb.geo(new THREE.CylinderGeometry(0.05, 0.065, 0.42, 6).rotateX(Math.PI / 2), new THREE.Matrix4().makeTranslation(0, 0, -0.27), W);
+    // освещённые кулаки (объём читается) с лёгким свечением, полупрозрачные — шлейф скорости
+    FIST = new THREE.InstancedMesh(gb.build(), new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.78, depthWrite: false, emissive: new THREE.Color(0.22, 0.22, 0.26) }), NF * 2);
     FIST.frustumCulled = false;
     FIST.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     for (let i = 0; i < NF * 2; i++) FIST.setColorAt(i, W);
@@ -1830,6 +1842,18 @@
     // камера в бою на телефоне — ближе
     const p = J.G.player;
     if (J.Input && J.Input.touch && p && p.inCombat > 0 && !(Fx.so > 0) && !J.G.clash && CF.distT === 1) R3.cam.distMul += (6.8 / 8.5 - R3.cam.distMul) * Math.min(1, rdt * 2);
+    // раш игрока оборвался без добивания (оглушение, парирование, проигранное столкновение, смерть) — вернуть камеру и колонки
+    const pr = Fx._pr;
+    if (pr && (pr.dead || !pr.channel || pr.channel.type !== 'rush')) Fx.rushEnd(pr);
+    // каток упал рядом: камера отъезжает и смотрит сверху, а не изнутри катка
+    const rr = J.G.roller;
+    if (rr && p && J.dist(rr.x, rr.y, p.x, p.y) < 5) {
+      CF.rollerCam = true;
+      CF.distT = 1.75;
+    } else if (CF.rollerCam) {
+      CF.rollerCam = false;
+      CF.distT = 1;
+    }
     // слой виден только когда что-то есть
     const busy = GM.vis || LN.vis || FL.vis || LB.on || CARD.t > 0 || J.G.clash || LOW.op > 0.01 || WORDS.some((o) => o.act) || COLS.some((o) => o.act) || BANS.some((o) => o.act) || NUMS.some((o) => o.act) || RINGS.some((o) => o.act);
     if (busy !== Fx._vis) {
@@ -1882,6 +1906,9 @@
     CF.trauma = CF.punch = CF.roll = CF.rollT = CF.kickX = CF.kickV = 0;
     CF.focus = null;
     CF.distT = 1;
+    CF.yawT = CF.yawHold = CF.fovT = CF.fovHold = 0;
+    CF.rollerCam = false;
+    Fx._pr = null;
     clearHits();
   };
 })();

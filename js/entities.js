@@ -288,7 +288,14 @@
     if (opt.pierceDef) armor = 0;
     const dmg = Math.max(1, amount * mul * (1 - armor));
     t.hp -= dmg;
-    if (!blocked) t.hitFlash = 0.12;
+    if (!blocked) {
+      // сила вспышки: от яда и горения — лёгкий отсвет, от тиков раша — вполсилы, от удара — белым
+      const hk = opt.dot ? 0.2 : opt.rushTick ? 0.45 : 1;
+      if (!(t.hitFlash > 0) || hk >= (t.hitK || 0)) {
+        t.hitK = hk;
+        t.hitFlash = 0.12;
+      }
+    }
     if (t.st.sleep > 0) t.st.sleep = 0;
     if (t.ai && so && so !== t && J.hostile(t, so)) t.ai.target = so;
     if (t.ai && t.ai.civ) t.ai.fear = 6;
@@ -494,6 +501,8 @@
     }
     const spd = e.speed * speedMul(e);
     if (!tg) {
+      // цель пропала (убита, невидима) — выйти из блока
+      e.guard = false;
       // возврат домой / блуждание
       const dh = J.dist(e.x, e.y, ai.home.x, ai.home.y);
       if (dh > 3) steer(e, ai.home.x, ai.home.y, spd * 0.6, dt);

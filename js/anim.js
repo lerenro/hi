@@ -169,6 +169,20 @@
       case 'jitter':
         RX.jit = Math.sin(t * 190) * 0.03 * (1 - k);
         break;
+      case 'pummel': {
+        // под рашем: откинут назад, голова мотается от каждого кулака, руки болтаются
+        const env = 1 - EASE.inOut(k);
+        lerpInto(out, P.stagger, 0.65 * env);
+        const s = r.n & 1 ? 1 : -1;
+        out[HDY] += s * 0.5 * env;
+        out[HDX] -= 0.2 * env;
+        out[SPY] += s * 0.16 * env;
+        out[SPZ] += s * 0.1 * env;
+        out[ARML] += Math.sin(t * 37) * 0.4 * env;
+        out[ARMR] += Math.sin(t * 41 + 1) * 0.4 * env;
+        RX.jit = Math.sin(t * 190) * 0.035 * env;
+        break;
+      }
       case 'flinch':
         addInto(out, P.flinch, Math.sin(Math.PI * k) * (r.amp || 1));
         break;
@@ -378,7 +392,7 @@
     RX.jit = 0;
     if (r && r.max > 0) {
       const k = J.clamp(r.t / r.max, 0, 1);
-      if (r.type === 'flinch' || r.type === 'jitter') addInto(OUT, P.flinch, Math.sin(Math.PI * k) * 0.6);
+      if (r.type === 'flinch' || r.type === 'jitter' || r.type === 'pummel') addInto(OUT, P.flinch, Math.sin(Math.PI * k) * 0.6);
       else if (r.type === 'block') OUT[SPX] -= 0.15 * Math.sin(Math.PI * k);
       else if (r.type === 'stagger' || r.type === 'parried' || r.type === 'gbreak') lerpInto(OUT, P.stagger, Math.sin(Math.PI * k));
     }

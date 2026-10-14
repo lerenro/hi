@@ -989,7 +989,7 @@
       }
     }
     // вспышка попадания — свечением (белым у врагов, красным у игрока), золотом — суперброня босса
-    const hk = e.dead ? 0 : J.clamp((e.hitFlash || 0) / 0.12, 0, 1);
+    const hk = e.dead ? 0 : J.clamp((e.hitFlash || 0) / 0.12, 0, 1) * (e.hitK === undefined ? 1 : e.hitK);
     const ak = !hk && e.armorFlash > 0 ? e.armorFlash / 0.15 : 0;
     const ek = Math.round(hk * 20) + Math.round(ak * 20) * 100;
     if (v.emK !== ek) {
