@@ -1097,7 +1097,8 @@
       J.Sfx && J.Sfx.timestop();
       Fx.linesAt(u.x, u.y, gy(u.x, u.y) + 1.4, 0.8, 0.8, true);
     }
-    if (!Fx.set.flash || !sphere) J.UI.timestopFx(true);
+    // без вспышек сфера не рисуется — мир просто плавно сереет (uDesat), ДИО остаётся цветным
+    if (!sphere) J.UI.timestopFx(true);
   };
   function updateTimestop(rdt, dt) {
     const g = J.G;
