@@ -771,13 +771,14 @@
             }
           }
           if (sp.lot && type === 'van' && hk > 0.5) type = 'hatch';
-          // на обочине — чуть ближе к бордюру, чтобы не мешать потоку
+          // у бордюра: борт в 8 см от него (центр места — в 1 м от бордюра), широкие машины — дальше от столбов
           let x = sp.x, y = sp.y;
           if (!sp.lot) {
             const nx = -Math.sin(sp.ang), ny = Math.cos(sp.ang);
             const sgn = (J.GRID[style] || J.GRID.usa).drive === 'R' ? 1 : -1;
-            x += nx * 0.12 * sgn;
-            y += ny * 0.12 * sgn;
+            const sh = 1.0 - (J.VTYPES[type].W / 2 + 0.08);
+            x += nx * sh * sgn;
+            y += ny * sh * sgn;
           }
           const v = J.Veh.make(type, x, y, sp.ang + (sp.lot && h < 0.25 ? Math.PI : 0), { mode: 'parked', region: style, colorHash: J.hash2(Math.floor(sp.x * 4), Math.floor(sp.y * 4), 5) });
           v.spot = sp;

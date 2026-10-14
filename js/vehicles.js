@@ -464,7 +464,8 @@
         // скорость кузова в точке касания, вдоль нормали к человеку
         const vpx = v.vx - v.yawRate * ry, vpy = v.vy + v.yawRate * rx;
         const vn = vpx * nx + vpy * ny;
-        if (vn > 3.2 && !(e._carHit > g.t)) {
+        // только что выскочивший водитель не попадает под собственную машину
+        if (vn > 3.2 && !(e._carHit > g.t) && !(e === v.exDriver && g.t < v.exT)) {
           e._carHit = g.t + 0.8;
           const dmg = 6 + vn * vn * 0.75;
           const ang = Math.atan2(ny + v.vy * 0.05, nx + v.vx * 0.05);
@@ -614,6 +615,8 @@
     v.mode = 'free';
     v.restT = 0;
     v.siren = false;
+    v.exDriver = p;
+    v.exT = G().t + 2;
     if (thrown) {
       p.kx = (Math.random() - 0.5) * 8;
       p.ky = (Math.random() - 0.5) * 8;
@@ -760,6 +763,18 @@
         Veh.physics(v, dt, c.thr, c.st, c.hb);
         Veh.move(v, dt);
         Veh.ground(v, dt, true);
+        // машина несётся по тротуару или очень быстро — прохожие впереди отпрыгивают
+        if ((mine || v.chase) && Math.abs(v.vf) > 5) {
+          v.scareT = (v.scareT || 0) - dt;
+          if (v.scareT <= 0) {
+            v.scareT = 0.25;
+            const onRoad = w.tile(v.x, v.y) === J.T.ROAD;
+            if (!onRoad || Math.abs(v.vf) > 12) {
+              const k = Math.sign(v.vf) * (onRoad ? 5 : 7);
+              J.scare(v.x + Math.cos(v.ang) * k, v.y + Math.sin(v.ang) * k, onRoad ? 3.5 : 7, v.x, v.y, Math.cos(v.ang), Math.sin(v.ang));
+            }
+          }
+        }
         // свободная машина остановилась — водитель возвращается в поток (если рядом своя полоса)
         if (!mine && !v.chase && v.mode === 'free') {
           if (Math.hypot(v.vx, v.vy) < 0.4) {
@@ -837,7 +852,8 @@
   };
 
   // ---------- Пугаем прохожих ----------
-  J.scare = function (x, y, r, fx, fy) {
+  // hx, hy — курс машины: тогда люди бегут в сторону от её пути, а не вперёд по нему
+  J.scare = function (x, y, r, fx, fy, hx, hy) {
     const ents = G().ents;
     for (let i = 0; i < ents.length; i++) {
       const e = ents[i];
@@ -847,6 +863,11 @@
       e.ai.fear = Math.max(e.ai.fear || 0, 5 + Math.random() * 3);
       e.ai.fx = fx !== undefined ? fx : x;
       e.ai.fy = fy !== undefined ? fy : y;
+      if (hx !== undefined) {
+        const t = (e.x - fx) * hx + (e.y - fy) * hy;
+        e.ai.fx = fx + hx * t;
+        e.ai.fy = fy + hy * t;
+      }
       e.ai.sw = -1;
     }
   };
@@ -970,7 +991,7 @@
     a.hg.gain.setTargetAtTime(on ? 0.05 : 0, a.ac.currentTime, 0.02);
     if (on) {
       const p = G().player;
-      if (p && p.inCar) J.scare(p.inCar.x + Math.cos(p.inCar.ang) * 8, p.inCar.y + Math.sin(p.inCar.ang) * 8, 6, p.inCar.x, p.inCar.y);
+      if (p && p.inCar) J.scare(p.inCar.x + Math.cos(p.inCar.ang) * 8, p.inCar.y + Math.sin(p.inCar.ang) * 8, 6, p.inCar.x, p.inCar.y, Math.cos(p.inCar.ang), Math.sin(p.inCar.ang));
     }
   };
   // короткий сигнал чужой машины (громкость по расстоянию до камеры)

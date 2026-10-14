@@ -390,3 +390,7 @@ body.driving #tbtns .tb:not(.drv):not([data-k="f"]) { display: none; }
 body.driving #touch .tb.drv { display: block; }
 body.driving #tbtns .tb[data-k="f"] { grid-column: span 2; }
 body.is-touch #speedo { right: auto; left: calc(50% - 84px); bottom: calc(14px + var(--sab)); width: 168px; }
+body.driving #ttop { top: auto; bottom: calc(128px + var(--sab)); flex-direction: row; }
+body.driving #ttop .tb[data-k="run"] { display: none; }
+body.is-touch #speedo { width: 150px; padding: 4px 8px 6px; }
+body.is-touch #speedo .sp-v b { font-size: 30px; min-width: 58px; }
