@@ -1140,7 +1140,7 @@
       t: 0.7,
       fn: () => {
         if (e.dead) return;
-        if (tg.st.mark > 0 && tg.sv.markBy === e) J.Abil.use(e, b, J.Abil.aimAt(e, tg));
+        if (tg.st.mark > 0 && tg.sv.markBy === e) J.Abil.use(e, b, J.Abil.aimAt(e, tg), { det: true });
       },
     });
   };

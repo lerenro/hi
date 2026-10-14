@@ -210,7 +210,7 @@
     $('#h-region').textContent = rg.name + (city ? '' : ' · окрестности');
     // статусы
     const sts = [];
-    const nm = { stun: 'Оглушён', freeze: 'Заморожен', poison: 'Отравлен', burn: 'Горит', bleed: 'Кровотечение', slow: 'Замедлен', heavy: 'Тяжесть', age: 'Старение', invis: 'Невидим', invuln: 'Неуязвим', haste: 'Ускорен', power: 'Сила+', armor: 'Броня', fly: 'Полёт', silence: 'Стенд заблокирован', dodge: 'Эпитафия', zero: 'Реквием', lovetrain: 'Поезд Любви', heaven: 'Небеса', luck: 'Удача', regen: 'Регенерация', void: 'Пустота', sleep: 'Сон', reflect: 'Отражение', dino: 'Динозавр', infinite: 'Бесконечное вращение' };
+    const nm = { stun: 'Оглушён', freeze: 'Заморожен', poison: 'Отравлен', burn: 'Горит', bleed: 'Кровотечение', slow: 'Замедлен', heavy: 'Тяжесть', age: 'Старение', invis: 'Невидим', invuln: 'Неуязвим', haste: 'Ускорен', power: 'Сила+', armor: 'Броня', fly: 'Полёт', silence: 'Стенд заблокирован', dodge: 'Эпитафия', zero: 'Реквием', lovetrain: 'Поезд Любви', heaven: 'Небеса', luck: 'Удача', regen: 'Регенерация', void: 'Пустота', sleep: 'Сон', reflect: 'Отражение', dino: 'Динозавр', infinite: 'Бесконечное вращение', counter: 'Контрудар!' };
     for (const k in p.st) if (p.st[k] > 0 && nm[k]) sts.push(`<span class="chip">${nm[k]} ${Math.ceil(p.st[k])}с</span>`);
     if (p.hunger < 15 && !p.vampire) sts.push('<span class="chip red">Голоден</span>');
     if (p.energy < 15) sts.push('<span class="chip red">Устал</span>');
