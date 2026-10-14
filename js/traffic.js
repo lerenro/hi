@@ -163,7 +163,7 @@
           if (!(path.len > 2)) continue;
           const L = Object.assign(path, {
             id: lanes.length, kind: 'lane', e: e.id, dir, k, nl, cls: e.cls, from: dir > 0 ? a : b, to: dir > 0 ? b : a,
-            vmax: VMAX[e.cls] || 13.4, out: [], axis: 'ns', city: e.city || null, busS: -1, hEnd: 0,
+            vmax: VMAX[e.cls] || 13.4, out: [], axis: 'ns', city: e.city || null, busS: -1, hEnd: 0, rh,
           });
           L.hEnd = headAt(L, true);
           L.axis = Math.abs(Math.cos(L.hEnd)) > Math.abs(Math.sin(L.hEnd)) ? 'ew' : 'ns';
@@ -180,6 +180,8 @@
         const Lin = lanes[li];
         const aIn = Lin.hEnd;
         const ex = Lin.pts[Lin.pts.length - 2], ey = Lin.pts[Lin.pts.length - 1];
+        // второй проход без дисциплины полос — если иначе полоса упирается в тупик (угол квартала)
+        for (let pass = 0; pass < 2 && !Lin.out.length; pass++)
         for (const lo of N.outs) {
           const Lout = lanes[lo];
           const uTurn = Lout.e === Lin.e;
@@ -191,8 +193,8 @@
           const rh = (net.edges[Lin.e].drive || 'R') === 'R';
           const inner = Lin.k === 0, outer = Lin.k === Lin.nl - 1;
           const nearSide = rh ? 'r' : 'l', farSide = rh ? 'l' : 'r';
-          if (Lin.nl > 1 && ((turn === farSide && !inner) || (turn === nearSide && !outer))) continue;
-          if (Lout.nl > 1 && ((turn === farSide && Lout.k !== 0) || (turn === nearSide && Lout.k !== Lout.nl - 1) || (turn === 's' && Lout.k !== Math.min(Lin.k, Lout.nl - 1)))) continue;
+          if (pass === 0 && Lin.nl > 1 && ((turn === farSide && !inner) || (turn === nearSide && !outer))) continue;
+          if (pass === 0 && Lout.nl > 1 && ((turn === farSide && Lout.k !== 0) || (turn === nearSide && Lout.k !== Lout.nl - 1) || (turn === 's' && Lout.k !== Math.min(Lin.k, Lout.nl - 1)))) continue;
           const sx = Lout.pts[0], sy = Lout.pts[1];
           const P = bezier(ex, ey, aIn, sx, sy, aOut);
           const C = Object.assign(P, {
@@ -213,8 +215,11 @@
     // автобусные карманы: внешняя полоса проспекта напротив остановки
     for (const L of lanes) {
       if (L.cls !== 'ave' || L.k !== L.nl - 1) continue;
-      for (let i = 0; i < L.pts.length / 2; i++) {
-        const x = Math.floor(L.pts[i * 2]), y = Math.floor(L.pts[i * 2 + 1]);
+      const n = L.pts.length / 2;
+      for (let i = 0; i < n - 1; i++) {
+        // клетка на метр ближе к бордюру (справа по ходу при правостороннем движении)
+        const dx = L.pts[i * 2 + 2] - L.pts[i * 2], dy = L.pts[i * 2 + 3] - L.pts[i * 2 + 1], dl = Math.hypot(dx, dy) || 1;
+        const x = Math.floor(L.pts[i * 2] - (dy / dl) * L.rh * 1.1), y = Math.floor(L.pts[i * 2 + 1] + (dx / dl) * L.rh * 1.1);
         if (w.inb(x, y) && w.rf[y * w.W + x] & J.RF.BUSBAY) {
           L.busS = L.cum[i] + 3;
           break;
@@ -489,10 +494,12 @@
     let vT = P.vmax * v.cruise;
     const halfL = vt.L / 2;
     v.waitWhy = 0;
+    v.stopD = 1e9;
     const stopAt = (d) => {
       // плавная остановка: скорость, с которой ещё успеваем встать за d метров
       const vs = d <= 0 ? 0 : Math.sqrt(2 * vt.brk * 0.55 * d);
       if (vs < vT) vT = vs;
+      if (d < v.stopD) v.stopD = d;
     };
     if (P.kind === 'lane') {
       const dEnd = P.len - v.s;
@@ -507,7 +514,7 @@
         const N = tr.nodes[P.to];
         if (N.ctrl === 'signal') {
           const st = TR.signal(N, P.axis, t);
-          const dStop = dEnd - halfL - 0.4;
+          const dStop = dEnd - halfL - 0.8;
           // нос уже за стоп-линией или на жёлтый не успеть встать — проезжаем
           if (dStop < 0.3 && st === 'G') v.commit = true;
           if (st === 'Y' && !v.commit && (v.vf * v.vf) / (2 * vt.brk * 0.8) >= dStop + 0.5) v.commit = true;
@@ -528,7 +535,7 @@
             }
           }
         } else if (N.ctrl === 'stop' && !v.stopDone) {
-          const dStop = dEnd - halfL - 0.4;
+          const dStop = dEnd - halfL - 0.8;
           stopAt(dStop);
           if (dStop < 1.2 && v.vf < 0.3) {
             v.stopT += dt;
@@ -576,6 +583,14 @@
         v.waitWhy = 3;
       }
     }
+    // стоящая поперёк полосы машина (авария, брошенная, игрок) — объезжаем по соседней полосе
+    const b = v.blk;
+    // на объезде навстречу едет машина — возвращаемся в свою полосу и ждём
+    if (v.latT && b && b.mode === 'ai' && Math.cos(b.ang - v.ang) < -0.5) {
+      v.latT = 0;
+      v.blockT = 0;
+    }
+    v.blockT = b && b.mode !== 'ai' && Math.abs(b.vf) < 0.3 && v.vf < 1 ? v.blockT + dt : b && v.latT ? v.blockT : 0;
     const ents = G().ents;
     for (let i = 0; i < ents.length; i++) {
       const e = ents[i];
@@ -602,7 +617,12 @@
     const vt = v.vt;
     const vT = aiTarget(v, tr, t, dt);
     const dv = vT - v.vf;
-    const acc = dv > 0 ? Math.min(vt.acc * (1 - (v.vf / (vt.vmax + 1)) * 0.6), dv * 2.5) : Math.max(-vt.brk * 1.4, dv * 3);
+    let acc = dv > 0 ? Math.min(vt.acc * (1 - (v.vf / (vt.vmax + 1)) * 0.6), dv * 2.5) : Math.max(-vt.brk * 1.4, dv * 3);
+    // точная остановка у стоп-линии: замедление, которого хватает ровно до неё
+    if (v.stopD < 40 && v.vf > 0.05) {
+      const need = (v.vf * v.vf) / (2 * Math.max(0.05, v.stopD));
+      if (need > -acc) acc = -Math.min(need, vt.brk * 2);
+    }
     v.vf = Math.max(0, v.vf + acc * dt);
     v.braking = acc < -1.2 || (v.vf < 0.2 && vT < 0.5);
     v.accel = acc;
@@ -638,9 +658,19 @@
     }
     TR.sample(v.path, v.s, S, v.hint);
     const pa = v.ang;
-    v.x = S.x;
-    v.y = S.y;
-    v.ang = S.a;
+    // объезд: смещение к оси дороги (вправо по ходу — отрицательное для правостороннего)
+    const rh = v.path.kind === 'lane' ? v.path.rh : tr.lanes[v.path.from].rh;
+    if (v.blockT > 2.5 && !v.latT) v.latT = -rh * 3.2;
+    else if (v.latT && !v.blk && v.vf > 2) {
+      v.latClr = (v.latClr || 0) + dt;
+      if (v.latClr > 2.2) v.latT = 0;
+    } else v.latClr = 0;
+    if (v.path.kind === 'conn' && v.latT) v.latT = 0; // на перекрёстке — по своей траектории
+    v.lat += (v.latT - v.lat) * Math.min(1, dt * (0.5 + v.vf * 0.2));
+    if (Math.abs(v.lat) < 0.01 && !v.latT) v.lat = 0;
+    v.x = S.x - Math.sin(S.a) * v.lat;
+    v.y = S.y + Math.cos(S.a) * v.lat;
+    v.ang = S.a + (v.latT ? J.clamp((v.latT - v.lat) * 0.12, -0.25, 0.25) : 0);
     const yr = J.angDiff(pa, v.ang) / Math.max(dt, 1e-3);
     v.steer += (J.clamp(Math.atan((yr * vt.wb) / Math.max(1, v.vf)), -vt.steer, vt.steer) - v.steer) * Math.min(1, dt * 8);
     v.vx = Math.cos(v.ang) * v.vf;
@@ -698,7 +728,8 @@
       const v = J.Veh.make(type, S.x, S.y, S.a, { mode: 'ai', region: region ? region.style : 'usa' });
       v.hint = { i: 0 };
       TR.setLane(v, L, s);
-      v.vf = L.vmax * 0.6;
+      // скорость появления — такая, чтобы успеть остановиться до конца полосы
+      v.vf = Math.min(L.vmax * 0.6, Math.sqrt(2 * v.vt.brk * 0.5 * Math.max(0, L.len - s - v.vt.L / 2 - 2)));
       v.cruise = 0.85 + Math.random() * 0.2;
       return v;
     }

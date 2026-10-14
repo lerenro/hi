@@ -328,6 +328,7 @@
     }
     const pl = g.player;
     const killer = src ? J.ownerOf(src) : null;
+    if (t.cop && killer && killer.isPlayer) J.Veh.crime(1, t.x, t.y); // убийство полицейского
     if (t.team === 'enemy' || t.origTeam === 'enemy') {
       if (killer && (killer.isPlayer || killer.team === 'player')) {
         J.P.gainXp(pl, t.xp || 10);

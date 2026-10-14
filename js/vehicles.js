@@ -27,7 +27,7 @@
       x, y, ang, vx: 0, vy: 0, vf: 0, vl: 0, yawRate: 0, steer: 0, spin: 0, gy: J.ROAD_H, pitch: 0, roll: 0, bob: 0, accel: 0,
       hp: vt.hp, maxHp: vt.hp, braking: false, reverse: false, siren: false, lightsOn: true,
       driver: o.mode === 'ai' ? true : null, owned: false, spot: null, view: null, d2: 0,
-      path: null, s: 0, hint: { i: 0 }, nextC: null, cruise: 1, waitT: 0, honkT: 0, stuckT: 0, stopT: 0, busT: 0, blk: null, blkEnt: null,
+      path: null, s: 0, hint: { i: 0 }, nextC: null, cruise: 1, lat: 0, latT: 0, blockT: 0, waitT: 0, honkT: 0, stuckT: 0, stopT: 0, busT: 0, blk: null, blkEnt: null,
       dead: false, restT: 0, smokeT: 0, fire: false, hitCD: 0, waitWhy: 0, stopDone: false, busDone: false,
     };
     v.gy = G().world.groundY(x, y);
@@ -239,10 +239,33 @@
   };
 
   // ---------- Урон машине ----------
+  // разбитая машина сначала загорается (несколько секунд, чтобы успеть выскочить), потом взрывается;
+  // мгновенный взрыв — только от огромного разового урона (другой взрыв, способности)
   Veh.damage = function (v, amt, src) {
     if (v.hp <= 0 || !(amt > 0)) return;
     v.hp -= amt;
-    if (v.hp <= 0) Veh.explode(v, src);
+    if (v.hp <= 0 && amt > v.maxHp * 0.9) return Veh.explode(v, src);
+    if (v.hp <= v.maxHp * 0.12 && !v.fire) {
+      v.fire = true;
+      v.burnT = 0;
+      v.hp = Math.max(1, v.hp);
+      if (v.driver && v.driver.isPlayer) J.UI.toast('Машина горит! Выходи (F), пока не рванула!', 'red');
+      else if (v.driver === true && v.mode !== 'player') {
+        // водитель выскакивает и убегает
+        Veh.doorPoint(v, driverSide(v), DP);
+        const w = G().world;
+        if (!w.solid(DP.x, DP.y)) {
+          const d = J.makeCivilian(DP.x, DP.y, w.regionAt(DP.x, DP.y));
+          d.ai.fear = 10;
+          d.ai.fx = v.x;
+          d.ai.fy = v.y;
+          J.addEnt(d);
+        }
+        v.driver = null;
+        if (v.mode === 'ai') Veh.toFree(v);
+      }
+    }
+    v.hp = Math.max(1, v.hp);
   };
   Veh.explode = function (v, src) {
     v.hp = 0;
@@ -284,7 +307,7 @@
     if (v.driver && v.driver.isPlayer) {
       R3.cam.shake = Math.max(R3.cam.shake, Math.min(0.5, imp * 0.04));
       // водитель тоже получает удар при сильном столкновении
-      if (imp > 12) J.hurt(v.driver, (imp - 12) * 3, null, { dot: true, kind: 'pure', silent: true });
+      if (imp > 14) J.hurt(v.driver, (imp - 14) * 1.6, null, { dot: true, kind: 'pure', silent: true });
     }
     if (dCam < 45) Veh.crashSound(imp, dCam);
     if (imp > 6) J.scare(x, y, 14);
@@ -450,7 +473,7 @@
           Veh.thump(Math.hypot(e.x - J.R3.cam.tx, e.y - J.R3.cam.tz));
           if (e.kind === 'civ') {
             Veh.knockDown(e, dmg, ang, force, drv);
-            if (drv) Veh.crime(e.dead ? 2 : 1, e.x, e.y);
+            if (drv) Veh.crime(e.dead ? 1.1 : 0.45, e.x, e.y);
           } else if (e.kind === 'story' && !e.storyTag) {
             e.kx += nx * force;
             e.ky += ny * force;
@@ -520,7 +543,7 @@
       J.addEnt(d);
       J.R3.text(pos.x, pos.y, J.R.pick(['Эй! Моя машина!', 'Не трогай меня!', 'Забирай, только не бей!', 'Полиция!']), 'tsay', 1.4);
       J.scare(v.x, v.y, 14, p.x, p.y);
-      Veh.crime(v.type === 'police' ? 2 : 1, v.x, v.y);
+      Veh.crime(v.type === 'police' ? 2 : Veh.copNear(v.x, v.y, 45) ? 1 : 0.35, v.x, v.y);
       J.UI.toast(`Ты угнал машину: ${v.vt.name.toLowerCase()}.`, 'red');
     } else if (!v.owned) J.UI.toast(`Ты сел в машину: ${v.vt.name.toLowerCase()}.`, 'normal');
     if (v.mode === 'ai') Veh.toFree(v);
@@ -598,16 +621,28 @@
   };
 
   // ---------- Розыск (лёгкий): угон и сбитые пешеходы привлекают полицию ----------
+  // n — тяжесть: 1 — звезда розыска; мелочи копятся (свидетели звонят в полицию)
   Veh.crime = function (n, x, y) {
     const p = G().player;
     if (!p) return;
     const before = Math.floor(p.wanted || 0);
-    p.wanted = Math.min(3, (p.wanted || 0) + n * 0.6);
+    p.wanted = Math.min(3, (p.wanted || 0) + n);
     p.wantedT = 40;
-    if (Math.floor(p.wanted) > before) J.UI.toast('Полиция ищет тебя: ' + '★'.repeat(Math.max(1, Math.floor(p.wanted))), 'red');
+    if (Math.floor(p.wanted) > before) J.UI.toast('Полиция ищет тебя: ' + '★'.repeat(Math.floor(p.wanted)), 'red');
+  };
+  Veh.copNear = function (x, y, r) {
+    for (const v of G().vehs) if (v.type === 'police' && v.driver === true && Math.hypot(v.x - x, v.y - y) < r) return true;
+    for (const e of G().ents) if (e.cop && !e.dead && Math.hypot(e.x - x, e.y - y) < r) return true;
+    return false;
   };
   Veh.updateWanted = function (dt, p) {
     if (!(p.wanted > 0)) return;
+    if (p.wanted < 1) {
+      // меньше звезды — просто забывается
+      p.wantedT -= dt;
+      if (p.wantedT <= 0) p.wanted = 0;
+      return;
+    }
     // полиция рядом — розыск не спадает
     let seen = false;
     for (const v of G().vehs) if (v.type === 'police' && v.hp > 0 && v.driver === true && Math.hypot(v.x - p.x, v.y - p.y) < 45) seen = true;
@@ -615,8 +650,9 @@
     if (p.wantedT <= 0) {
       p.wanted = Math.max(0, p.wanted - 1);
       p.wantedT = 25;
-      if (p.wanted < 0.5) {
+      if (p.wanted < 1) {
         p.wanted = 0;
+        Veh.calmDown(p);
         J.UI.toast('Полиция потеряла твой след.', 'green');
       }
     }
@@ -632,6 +668,15 @@
       if (v) Veh.startChase(v);
     }
     for (const v of G().vehs) if (v.type === 'police' && v.driver === true && !v.chase && v.hp > 0 && Math.hypot(v.x - p.x, v.y - p.y) < 40) Veh.startChase(v);
+  };
+  // розыск снят: погони прекращаются, патрульные уходят
+  Veh.calmDown = function (p) {
+    for (const v of G().vehs) if (v.chase) {
+      v.chase = false;
+      v.siren = false;
+      v.restT = 0;
+    }
+    for (const e of G().ents) if (e.cop && !e.dead && Math.hypot(e.x - p.x, e.y - p.y) > 15) e.despawn = true;
   };
   Veh.startChase = function (v) {
     if (v.mode === 'ai') Veh.toFree(v);
@@ -733,9 +778,10 @@
           if (v.hp > 0) J.R3.burst(v.x + ca * f, v.y + sa * f, v.gy + v.vt.H * 0.75, k < 0.2 ? '#ff8a30' : '#6a6a6a', 1, 0.8, 0.9, 1.6);
           else J.R3.burst(v.x, v.y, v.gy + v.vt.H * 0.6, '#2a2a2a', 1, 0.6, 1.2, 1.8);
           // горит — через несколько секунд взрыв
-          if (v.hp > 0 && k < 0.12) {
+          if (v.hp > 0 && v.fire) {
             v.burnT = (v.burnT || 0) + 0.05;
-            if (v.burnT > 4) Veh.explode(v, mine ? p : null);
+            if (Math.random() < 0.5) J.R3.burst(v.x, v.y, v.gy + v.vt.H * 0.6, '#ff6a20', 2, 1.4, 0.5, 2.2);
+            if (v.burnT > 5) Veh.explode(v, mine ? p : null);
           }
         }
       }
@@ -880,6 +926,18 @@
     }
     return A;
   }
+  // звук создаём заранее (на экране загрузки), а не в момент посадки — без рывка кадра;
+  // браузер запускает аудио только после жеста пользователя — возобновляем при первом нажатии
+  Veh.warmAudio = function () {
+    audio();
+  };
+  const resume = () => {
+    const ac = J.UI && J.UI.ac;
+    if (ac && ac.state === 'suspended') ac.resume().catch(() => {});
+  };
+  window.addEventListener('keydown', resume, { passive: true });
+  window.addEventListener('mousedown', resume, { passive: true });
+  window.addEventListener('touchstart', resume, { passive: true });
   Veh.sound = function (v, on) {
     const a = A || (on ? audio() : null);
     if (!a) return;
@@ -986,7 +1044,7 @@
       Veh._hudH = el.querySelector('.sp-hp i');
       Veh._hudN = el.querySelector('.sp-n');
     }
-    const ws = p.wanted >= 0.5 ? '★'.repeat(Math.max(1, Math.floor(p.wanted))) : '';
+    const ws = p.wanted >= 1 ? '★'.repeat(Math.floor(p.wanted)) : '';
     if (Veh._lastW !== ws) {
       Veh._lastW = ws;
       Veh._wantEl.textContent = ws;

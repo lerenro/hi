@@ -391,6 +391,7 @@
     J.R3.updateChunks(p.x, p.y, true);
     J.Traffic.ensure(G.world); // граф полос и тротуаров строится один раз на мир
     J.Traffic.reset();
+    J.Veh.warmAudio();
     Game.popT = 0;
   };
 

@@ -69,16 +69,18 @@
       [zR + 0.14, c], [zF - 0.14, c], [zF, c + 0.2], [zF, yHood - 0.1], [zF - 0.2, yHood],
       [zWin, yBelt], [zDeck, yBelt], [zR + (hatch ? 0.06 : 0.18), yTrunk], [zR, yTrunk - 0.12], [zR, c + 0.2],
     ];
-    const chamfer = (z) => (z > zF - 0.05 || z < zR + 0.05 ? 0.13 : z > zF - 0.25 || z < zR + 0.2 ? 0.05 : 0);
-    prism(gb, lower, (z) => hw - chamfer(z), second || paint, (i) => (i === 0 ? UNDER : i === 2 || i === 8 ? P2 : paint));
+    // боковины плоские (неплоская крышка многоугольника давала тёмные складки на дверях)
+    const chamfer = () => 0;
+    prism(gb, lower, () => hw, second || paint, (i) => (i === 0 ? UNDER : i === 2 || i === 8 ? P2 : paint));
     if (second) {
       // полоса основного цвета под окнами
       for (const s of [1, -1]) face(gb, [V(s * (hw + 0.003), yBelt - 0.22, zWin), V(s * (hw + 0.003), yBelt, zWin), V(s * (hw + 0.003), yBelt, zDeck), V(s * (hw + 0.003), yBelt - 0.22, zDeck)], V(s, 0, 0), paint);
     }
     // салон (сужается кверху)
-    const cabin = [[zWin, yBelt], [zRoof0, H], [zRoof1, H], [zDeck, hatch ? yTrunk : yBelt]];
+    // у хэтчбека — наклонная дверь багажника до самого верха задка
+    const cabin = hatch ? [[zWin, yBelt], [zRoof0, H], [zRoof1, H], [zDeck, yTrunk], [zDeck, yBelt]] : [[zWin, yBelt], [zRoof0, H], [zRoof1, H], [zDeck, yBelt]];
     const hwc = (z, y) => hw - P.tumble * ((y - yBelt) / (H - yBelt)) - 0.04;
-    prism(gb, cabin, hwc, GLASS, (i) => (i === 1 ? paint : i === 3 && !hatch ? null : GLASS));
+    prism(gb, cabin, hwc, GLASS, (i) => (i === 1 ? paint : hatch ? (i === 3 ? paint : i === 4 ? null : GLASS) : i === 3 ? null : GLASS));
     // стойки A, B, C
     const pil = (z0, y0, z1, y1, w) => {
       for (const s of [1, -1]) {
@@ -147,7 +149,7 @@
     const yB = 1.05, zHood = zF - 0.55, zWs = zF - 1.25;
     const P2 = paint.clone().multiplyScalar(0.82);
     const lower = [[zR, c], [zF - 0.1, c], [zF, c + 0.25], [zF, yB - 0.12], [zF - 0.1, yB], [zR, yB]];
-    prism(gb, lower, (z) => hw - (z > zF - 0.12 ? 0.08 : 0), paint, (i) => (i === 0 ? UNDER : i === 5 ? null : paint));
+    prism(gb, lower, () => hw, paint, (i) => (i === 0 ? UNDER : i === 5 ? null : paint));
     // верх: лобовое стекло наклонное, дальше — глухой короб
     const upper = [[zR, yB], [zHood, yB], [zWs, H], [zR, H]];
     const hwu = (z, y) => hw - 0.03 - 0.05 * ((y - yB) / (H - yB));
@@ -186,7 +188,7 @@
     const zF = L / 2, zR = -L / 2, c = wr * 0.5, hw = W / 2;
     const yBelt = H * 0.42, yTop = H - 0.28;
     const P2 = paint.clone().multiplyScalar(0.8);
-    prism(gb, [[zR, c], [zF, c], [zF, yBelt], [zR, yBelt]], (z) => hw - (z > zF - 0.05 ? 0.06 : 0), paint, (i) => (i === 0 ? UNDER : paint));
+    prism(gb, [[zR, c], [zF, c], [zF, yBelt], [zR, yBelt]], () => hw, paint, (i) => (i === 0 ? UNDER : paint));
     prism(gb, [[zR, yBelt], [zF, yBelt], [zF - 0.12, yTop], [zR, yTop]], () => hw - 0.02, GLASS, (i) => (i === 0 ? null : GLASS));
     prism(gb, [[zR, yTop], [zF - 0.12, yTop], [zF - 0.3, H], [zR + 0.1, H]], () => hw - 0.02, paint, (i) => (i === 0 ? null : P2));
     for (let z = zR + 0.2; z < zF - 0.4; z += 1.25) for (const s of [1, -1]) boxC(gb, s * (hw - 0.02), yBelt, z - 0.06, s * (hw + 0.006), yTop, z + 0.06, paint);
@@ -212,7 +214,7 @@
     const cabL = 2.1, yCabBelt = 1.75, yCabTop = 2.65;
     const P2 = paint.clone().multiplyScalar(0.8);
     const CAB = col('#e8e8ea');
-    prism(gb, [[zF - cabL, c + 0.2], [zF - 0.1, c + 0.2], [zF, c + 0.4], [zF, yCabBelt], [zF - cabL, yCabBelt]], (z) => hw - 0.05 - (z > zF - 0.05 ? 0.08 : 0), CAB, (i) => (i === 0 ? UNDER : CAB));
+    prism(gb, [[zF - cabL, c + 0.2], [zF - 0.1, c + 0.2], [zF, c + 0.4], [zF, yCabBelt], [zF - cabL, yCabBelt]], () => hw - 0.05, CAB, (i) => (i === 0 ? UNDER : CAB));
     prism(gb, [[zF - cabL, yCabBelt], [zF - 0.05, yCabBelt], [zF - 0.3, yCabTop], [zF - cabL, yCabTop]], () => hw - 0.1, GLASS, (i) => (i === 0 ? null : i === 2 ? CAB : GLASS));
     boxC(gb, -hw + 0.15, yCabTop, zF - cabL + 0.1, hw - 0.15, yCabTop + 0.06, zF - 0.4, CAB);
     for (const s of [1, -1]) boxC(gb, s * (hw - 0.1), yCabBelt, zF - cabL + 0.05, s * (hw - 0.04), yCabTop, zF - cabL + 0.35, CAB);
@@ -279,30 +281,32 @@
     const MAXV = 64;
     R3.carMat = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 80, specular: new THREE.Color(0.35, 0.35, 0.35) });
     R3.carGlow = { value: 0 };
-    R3.carMat.onBeforeCompile = (sh) => {
-      sh.uniforms.uGlow = R3.carGlow;
+    R3.carGlowOff = { value: 0.12 };
+    const glowShader = (u) => (sh) => {
+      sh.uniforms.uGlow = u;
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aGlow;\nvarying float vGlow;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow;');
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uGlow;\nvarying float vGlow;').replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vColor * vGlow * uGlow;');
     };
+    R3.carMat.onBeforeCompile = glowShader(R3.carGlow);
+    // припаркованные машины без водителя: фары не горят (тот же шейдер — без лишней компиляции)
+    R3.carMatOff = R3.carMat.clone();
+    R3.carMatOff.onBeforeCompile = glowShader(R3.carGlowOff);
     R3.carBrakeMat = new THREE.MeshBasicMaterial({ vertexColors: true });
     R3.carBrakeMat.color.setRGB(1.25, 1.25, 1.25);
     R3.sirenMats = [new THREE.MeshBasicMaterial({ vertexColors: true }), new THREE.MeshBasicMaterial({ vertexColors: true })];
     R3.wreckMat = new THREE.MeshLambertMaterial({ color: '#2a2622' });
     // все колёса — один InstancedMesh: колесо радиуса 1 и ширины 1, ось — локальный x
     const wg = new J.GB(1024);
-    const tire = new THREE.CylinderGeometry(1, 1, 1, 16, 1);
+    const tire = new THREE.CylinderGeometry(1, 1, 1, 14, 1);
     tire.rotateZ(Math.PI / 2);
     wg.geo(tire, new THREE.Matrix4(), col('#161618'));
-    const rim = new THREE.CylinderGeometry(0.64, 0.64, 1.04, 12, 1);
+    const rim = new THREE.CylinderGeometry(0.64, 0.64, 1.04, 10, 1);
     rim.rotateZ(Math.PI / 2);
     wg.geo(rim, new THREE.Matrix4(), col('#8a9098'));
-    const hub = new THREE.CylinderGeometry(0.2, 0.2, 1.1, 8, 1);
-    hub.rotateZ(Math.PI / 2);
-    wg.geo(hub, new THREE.Matrix4(), col('#c8ccd2'));
-    for (let k = 0; k < 5; k++) {
-      // спицы — чтобы было видно вращение
-      const m = new THREE.Matrix4().makeRotationX((k / 5) * J.TAU).multiply(new THREE.Matrix4().makeTranslation(0, 0.36, 0));
-      wg.geo(new THREE.BoxGeometry(1.08, 0.5, 0.15), m, col('#4a4e56'));
+    for (let k = 0; k < 3; k++) {
+      // спицы (через центр) — чтобы было видно вращение
+      const m = new THREE.Matrix4().makeRotationX((k / 3) * Math.PI);
+      wg.geo(new THREE.BoxGeometry(1.08, 1.1, 0.14), m, col('#4a4e56'));
     }
     R3.wheelIM = new THREE.InstancedMesh(shared(wg.build()), new THREE.MeshLambertMaterial({ vertexColors: true }), MAXV * 4);
     R3.wheelIM.count = 0;
@@ -383,7 +387,7 @@
     const flash = Math.sin(t * 14) > 0;
     R3.sirenMats[0].color.setScalar(flash ? 2.6 : 0.3);
     R3.sirenMats[1].color.setScalar(flash ? 0.3 : 2.6);
-    const far = R3.scene.fog.far + 10, far2 = far * far;
+    const far = R3.scene.fog.far * 0.88, far2 = far * far; // дальше — в тумане, не рисуем
     const cx = R3.cam.tx, cz = R3.cam.tz;
     const maxCast = R3.shadows && R3.preset.shadows ? Math.max(2, R3.charCast) : 0;
     casters.length = 0;
@@ -407,7 +411,9 @@
       const wreck = v.hp <= 0;
       vw.brake.visible = !wreck && (v.braking || v.reverse);
       if (vw.siren) vw.siren[0].visible = vw.siren[1].visible = !!v.siren;
-      if (wreck && vw.body.material !== R3.wreckMat) vw.body.material = R3.wreckMat;
+      const lit = !wreck && !!v.driver;
+      const mat = wreck ? R3.wreckMat : lit ? R3.carMat : R3.carMatOff;
+      if (vw.body.material !== mat) vw.body.material = mat;
       if (v.d2 < 900 && maxCast) casters.push(v);
       // колёса: матрица машины × T(локально) × Ry(-руль, передние) × Rx(вращение) × S(ширина, r, r)
       const hwT = vt.tr / 2, hz = vt.wb / 2, r = vt.wr, zoff = vw.geo.zoff;
@@ -421,7 +427,7 @@
         R3.wheelIM.setMatrixAt(wi++, mW);
       }
       // пятно света фар
-      if (night > 0.25 && !wreck && v.lightsOn !== false && pi < 64) {
+      if (night > 0.25 && lit && pi < 64) {
         const ca = Math.cos(v.ang), sa = Math.sin(v.ang), d = vt.L / 2 + 4.2;
         pp.set(v.x + ca * d, v.gy + 0.07, v.y + sa * d);
         qq.setFromAxisAngle(THREE.Object3D.DefaultUp, Math.PI / 2 - v.ang);
