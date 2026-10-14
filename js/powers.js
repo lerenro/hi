@@ -409,6 +409,15 @@
       blob(36, 'rgba(0,0,0,1)', 'rgba(0,0,0,0.9)');
     } else if (kind === 'sand') {
       blob(62, 'rgba(210,180,120,0.9)', 'rgba(210,180,120,0)');
+    } else if (kind === 'virus') {
+      for (let i = 0; i < 36; i++) {
+        const a = R() * TAU, r = R() * 50, rr = 5 + R() * 12;
+        const g = c.createRadialGradient(Math.cos(a) * r, Math.sin(a) * r, 0, Math.cos(a) * r, Math.sin(a) * r, rr);
+        g.addColorStop(0, 'rgba(170,80,230,0.85)');
+        g.addColorStop(1, 'rgba(90,30,140,0)');
+        c.fillStyle = g;
+        c.fillRect(-64, -64, 128, 128);
+      }
     } else if (kind === 'gold') {
       blob(62, 'rgba(255,220,90,0.7)', 'rgba(255,200,60,0)');
       cracks(10, 2, 'rgba(255,250,200,0.8)');
@@ -623,10 +632,13 @@
       vec2 p = vUv * 2.0 - 1.0;
       float body = 1.0 - length(p * vec2(1.05, 0.82));
       float fl = n2(vec2(vUv.x * 5.0, vUv.y * 3.0 - uT * 2.0)) * 0.62 + n2(vec2(vUv.x * 12.0, vUv.y * 8.0 - uT * 3.6)) * 0.38;
-      float a = body * 1.5 + (fl - 0.5) * 1.1 + (vUv.y - 0.35) * 0.3;
-      a = smoothstep(0.08, 0.75, a) * (1.0 - smoothstep(0.8, 0.98, vUv.y)) * smoothstep(0.0, 0.35, body);
-      float edge = smoothstep(0.0, 0.25, a) * (1.0 - smoothstep(0.25, 0.75, a));
-      vec3 c = mix(uC1, uC2, fl * 0.8) * (a * 0.55 + edge * 0.9);
+      // языки пламени тянутся вверх, к краям — на нет (без видимой границы)
+      float rise = n2(vec2(vUv.x * 7.0, vUv.y * 2.5 - uT * 2.8));
+      float a = body + (fl - 0.5) * 0.7 + (rise - 0.5) * 0.5 * vUv.y;
+      a = smoothstep(0.0, 0.7, a);
+      a *= a;
+      a *= 1.0 - smoothstep(0.7, 0.98, vUv.y);
+      vec3 c = mix(uC1, uC2, fl * 0.7) * a;
       gl_FragColor = vec4(c * uA, 1.0);
     }`;
   const auraGeo = new THREE.PlaneGeometry(2, 2);
@@ -1344,7 +1356,7 @@
       for (let i = 0; i < 3; i++) Pw.hoop(x, g0 + 0.4 + i * 0.55, z, 0.75 - Math.abs(i - 1) * 0.12, 0.012, '#cfefff', true, 16);
       if (k && rnd() < 0.3) Pw.glow(x + (rnd() - 0.5) * 1.2, g0 + rnd() * 1.8, z + (rnd() - 0.5) * 1.2, 1, '#ffffff', 0.3, 0.06, 0.5, 0);
     }
-    if (s.invuln > 0) {
+    if (s.invuln > 0.6 && !(G().timeskip && G().timeskip.by === e)) {
       const c = e.sv.invulnRoot ? '#c9ccd6' : '#ffe9a8';
       for (let i = 0; i < 3; i++) Pw.hoop(x, g0 + 0.3 + i * 0.6, z, 0.65 - Math.abs(i - 1) * 0.1, 0.02, c, true, 14, Math.sin(t * 2 + i) * 0.05);
       if (e.sv.invulnRoot) Pw.sph(x, g0 + 0.9, z, 0.62, '#8a8f9a', 1.4);
@@ -1597,6 +1609,7 @@
     Pw.ready = true;
     Pw.warm();
   };
+  Pw.stats = () => ({ add: ADD.next, alp: ALP.next, simT: +Pw.simT.toFixed(2), act: ACT.length, im: Object.keys(IM).map((k) => k + ':' + IM[k].n).join(' ') });
   // прогрев шейдеров: первая сила в бою не должна давать фриз компиляции
   Pw.warm = function () {
     const r = R3.renderer, sc = R3.scene, cam = R3.camera;
@@ -1746,6 +1759,12 @@
       if (each) each(p, i);
     }
   };
+  // угол выстрела в момент срабатывания: цель, выбранная при нажатии, если она ещё жива; иначе — прицел
+  const fireAng = (u, aim, range) => {
+    const t = aim.target;
+    if (t && !t.dead && J.dist(u.x, u.y, t.x, t.y) < (range || 8) + 3) return Math.atan2(t.y - u.y, t.x - u.x);
+    return u.isPlayer ? J.P.aim(u, range || 8).ang : aim.ang;
+  };
   // целевая сущность для силы (из прицела или ближайшая)
   const pickTarget = (u, aim, range, cone) => (aim.target && !aim.target.dead && J.dist(u.x, u.y, aim.target.x, aim.target.y) < range + 0.6 ? aim.target : J.nearestHostile(u, range, cone || 0.7, aim.ang));
   Pw.use = function (u, ab, aim, extra, pw, kind) {
@@ -1759,7 +1778,7 @@
   POW.starFinger = {
     use(u, ab, aim, c) {
       return windup(u, aim, 0.14, ab.color || '#c7b6ff', () => {
-        const a = u.isPlayer ? J.P.aim(u, ab.range || 6).ang : aim.ang;
+        const a = fireAng(u, aim, ab.range || 6);
         u.face = a;
         u.anim = { type: 'punch', t: 0.35, max: 0.35, stand: true };
         const L = freeLen(u.x, u.y, a, ab.range || 6);
@@ -1788,9 +1807,9 @@
             const h = Pw.hand(u);
             const ca = Math.cos(this.a), sa = Math.sin(this.a);
             const tx = h.x + ca * this.ext, tz = h.z + sa * this.ext, th = h.h - 0.1 * (this.ext / 6);
-            Pw.seg(h.x, h.h, h.z, tx, th, tz, 0.045, c1Of(u));
-            Pw.gseg(h.x, h.h, h.z, tx, th, tz, 0.12, ab.color || '#c7b6ff');
-            Pw.orb(tx, th, tz, 0.13, '#ffffff');
+            Pw.seg(h.x, h.h, h.z, tx, th, tz, 0.06, c1Of(u));
+            Pw.gseg(h.x, h.h, h.z, tx, th, tz, 0.17, ab.color || '#c7b6ff');
+            Pw.orb(tx, th, tz, 0.2, '#e8dcff');
           },
         });
       });
@@ -1801,7 +1820,7 @@
   POW.ankh = {
     use(u, ab, aim, c) {
       return windup(u, aim, 0.12, '#ff7b1c', () => {
-        const a = u.isPlayer ? J.P.aim(u, ab.range || 9).ang : aim.ang;
+        const a = fireAng(u, aim, ab.range || 9);
         u.face = a;
         const h = Pw.hand(u);
         Pw.fire(h.x, h.h - 0.1, h.z, 8, 0.15, 1.2, 0.4);
@@ -1837,7 +1856,7 @@
   POW.crossfire = {
     use(u, ab, aim, c) {
       return windup(u, aim, 0.3, '#ff9b2c', () => {
-        const a = u.isPlayer ? J.P.aim(u, ab.range || 10).ang : aim.ang;
+        const a = fireAng(u, aim, ab.range || 10);
         u.face = a;
         u.anim = { type: 'pose', t: 0.5, max: 0.5 };
         shout(u, 'クロスファイヤーハリケーン!!', '#ffd08a', '#5a0a00');
@@ -1896,11 +1915,14 @@
               const k = this.grow;
               const ex = h.x + (b.x - h.x) * k, eh = h.h + (b.h - h.h) * k + Math.sin(k * Math.PI) * 0.4, ez = h.z + (b.z - h.z) * k;
               C.set('#ff6a1a').multiplyScalar(fade);
-              Pw.gseg(h.x, h.h, h.z, ex, eh, ez, 0.07, C);
-              if (dt > 0 && rnd() < 0.6) {
-                const f = rnd() * k;
-                Pw.fire(h.x + (b.x - h.x) * f, h.h + (b.h - h.h) * f, h.z + (b.z - h.z) * f, 1, 0.05, 0.8, 0.22);
-              }
+              // верёвка: тёмно-красная сердцевина в огненной оболочке
+              Pw.seg(h.x, h.h, h.z, ex, eh, ez, 0.035, '#8a1a08');
+              Pw.gseg(h.x, h.h, h.z, ex, eh, ez, 0.13, C);
+              if (dt > 0)
+                for (let q = 0; q < 2; q++) {
+                  const f = rnd() * k;
+                  Pw.fire(h.x + (ex - h.x) * f, h.h + (eh - h.h) * f, h.z + (ez - h.z) * f, 1, 0.05, 0.9, 0.3);
+                }
               if (this.bound) {
                 Pw.hoop(b.x, b.h - 0.2, b.z, 0.32, 0.05, C, true, 10, 0.08);
                 Pw.hoop(b.x, b.h + 0.25, b.z, 0.3, 0.05, C, true, 10, -0.08);
@@ -2073,7 +2095,7 @@
             while (this.acc > 0.035 && this.i < this.n) {
               this.acc -= 0.035;
               this.i++;
-              const a = (u.isPlayer ? J.P.aim(u, ab.range || 10).ang : u.ai && u.ai.target ? Math.atan2(u.ai.target.y - u.y, u.ai.target.x - u.x) : u.face) + (rnd() - 0.5) * ((ab.spread || 40) * Math.PI) / 180;
+              const a = fireAng(u, aim, ab.range || 10) + (rnd() - 0.5) * ((ab.spread || 40) * Math.PI) / 180;
               u.face = a;
               const p = J.spawnProj(u, { ang: a, speed: (ab.speed || 12) * (0.9 + rnd() * 0.3), dmg: ab.dmg * c.pw * 0.55, range: ab.range || 10, shape: 'emerald', color: '#3dff8a', size: ab.size || 0.22, kind: c.kind, stand: !!u.stand });
               p.h = 1 + (rnd() - 0.5) * 0.35;
@@ -2244,7 +2266,7 @@
   POW.bladeShot = {
     use(u, ab, aim, c) {
       return windup(u, aim, 0.22, '#e8eefc', () => {
-        const a = u.isPlayer ? J.P.aim(u, ab.range || 9).ang : aim.ang;
+        const a = fireAng(u, aim, ab.range || 9);
         u.face = a;
         u.anim = { type: 'punch', t: 0.3, max: 0.3, stand: true };
         snd(u, 'whoosh', 0.2, false, 0.16);
@@ -2709,7 +2731,7 @@
   POW.elecBeam = {
     use(u, ab, aim, c) {
       return windup(u, aim, 0.1, ab.color || '#ffe14a', () => {
-        const a = u.isPlayer ? J.P.aim(u, ab.range || 7).ang : aim.ang;
+        const a = fireAng(u, aim, ab.range || 7);
         u.face = a;
         u.anim = { type: 'cast', t: 0.35, max: 0.35, stand: true };
         const L = freeLen(u.x, u.y, a, ab.range || 7);
@@ -2812,7 +2834,7 @@
   POW.waterJet = {
     use(u, ab, aim, c) {
       return windup(u, aim, 0.16, '#7fc4ff', () => {
-        const a = u.isPlayer ? J.P.aim(u, ab.range || 10).ang : aim.ang;
+        const a = fireAng(u, aim, ab.range || 10);
         u.face = a;
         const L = freeLen(u.x, u.y, a, ab.range || 10);
         hitLine(u, u.x, u.y, a, L, (ab.width || 0.5) + 0.2, ab.dmg * c.pw, { fx: ab.fx, kind: c.kind, knock: 3 });
@@ -2877,7 +2899,7 @@
   const ECHO_W = ['ドジュウウ', 'ボヨヨン', 'ドドドド', 'ズキュン', 'ドゴォン'];
   POW.soundWord = {
     use(u, ab, aim, c) {
-      const a = u.isPlayer ? J.P.aim(u, ab.range || 12).ang : aim.ang;
+      const a = fireAng(u, aim, ab.range || 12);
       u.face = a;
       u.anim = { type: 'cast', t: 0.3, max: 0.3, stand: true };
       snd(u, 'word');
@@ -3632,7 +3654,7 @@
       const k = f.t < 0.4 ? f.t / 0.4 : f.t > f.dur - 0.8 ? Math.max(0, (f.dur - f.t) / 0.8) : 1;
       if (!f._dec && vis !== 'fog' && vis !== 'vacuum' && vis !== 'calamity') {
         f._dec = true;
-        const dk = { gas: 'void', virus: 'mold', rain: 'water', mold: 'mold', quicksand: 'sand', fire: 'scorch', mist: 'water' }[vis];
+        const dk = { gas: 'virus', virus: 'virus', rain: 'water', mold: 'mold', quicksand: 'sand', fire: 'scorch', mist: 'water' }[vis];
         if (dk && !f.follow) Pw.decal(dk, f.x, f.y, R * 2, f.dur + 1);
       }
       if (dt <= 0) continue;
@@ -3640,7 +3662,8 @@
       const rx = () => (rnd() - 0.5) * 2 * R * 0.85;
       switch (vis) {
         case 'fog':
-          if (rnd() < rate * 0.5) Pw.puff(f.x + rx(), h + 0.3 + rnd() * 1.4, f.y + rx(), (rnd() - 0.5) * 0.4, 0.05, (rnd() - 0.5) * 0.4, 2.2, 1.2, 2.2, '#dfe3ec', null, 0, 0.32 * k, false);
+          // густой туман Правосудия: клубы у земли, сквозь них едва видно
+          for (let i = 0; i < 2; i++) if (rnd() < rate * 0.6) Pw.puff(f.x + rx(), h + 0.2 + rnd() * 1.6, f.y + rx(), (rnd() - 0.5) * 0.4, 0.05, (rnd() - 0.5) * 0.4, 2.6, 1.6, 3, '#aeb4c2', '#c8ccd8', 0, 0.55 * k, false);
           break;
         case 'gas':
           if (rnd() < rate * 0.45) Pw.puff(f.x + rx(), h + 0.2 + rnd() * 1.2, f.y + rx(), 0, 0.2, 0, 1.6, 0.6, 1.4, '#8a6ab8', '#5a3a7a', -0.1, 0.35 * k, false);
