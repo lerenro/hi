@@ -481,11 +481,15 @@
           `vec4 emissiveColor = ${samp('emissiveMap')};
           emissiveColor.rgb = emissiveMapTexelToLinear(emissiveColor).rgb;
           vec2 wId = floor(vUv) + floor(vCell * 8.0 + 0.5) * 61.0; // целые числа: интерполяция varying не даёт шума
-          float litW = step(0.52, fract(sin(dot(wId, vec2(12.9898, 78.233))) * 43758.5453));
-          // у каждого окна своя яркость и оттенок (тёплые лампы, холодный свет экранов), сверху светлее
+          float litW = step(0.6, fract(sin(dot(wId, vec2(12.9898, 78.233))) * 43758.5453));
+          // у каждого окна своя яркость и оттенок (тёплые лампы, холодный свет экранов)
           float wr = fract(sin(dot(wId, vec2(39.3468, 11.135))) * 24634.6345);
           vec3 wt = mix(vec3(1.0, 0.86, 0.66), vec3(0.78, 0.88, 1.0), step(0.72, wr));
-          totalEmissiveRadiance *= emissiveColor.rgb * litW * (0.3 + 0.7 * wr) * wt * (0.7 + 0.3 * fract(vUv.y));
+          // интерьер: светильники под потолком, низ комнаты темнее; у части окон опущены жалюзи
+          float wy = fract(vUv.y);
+          float room = 0.3 + 0.7 * smoothstep(0.1, 0.92, wy);
+          float blinds = mix(1.0, 0.45 + 0.55 * step(0.42, fract(wy * 11.0)), step(0.55, fract(wr * 7.31)));
+          totalEmissiveRadiance *= emissiveColor.rgb * litW * (0.3 + 0.7 * wr) * wt * room * blinds;
           // тёмное стекло отражает небо (сильнее под острым углом — Френель)
           float gLum = dot(texelColor.rgb, vec3(0.3, 0.59, 0.11));
           float glassK = (1.0 - wallMask) * (1.0 - smoothstep(0.06, 0.3, gLum)) * (1.0 - litW * step(0.01, dot(totalEmissiveRadiance, vec3(1.0))));
