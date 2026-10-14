@@ -1345,11 +1345,13 @@
     el.className = 'ftxt ' + (cls || '');
     el.textContent = text;
     R3.labelLayer.appendChild(el);
-    R3.textFx.push({ el, x, y, h: J.G.world.groundY(x, y) + h, life, max: life, dx: (Math.random() - 0.5) * 30 });
+    const o = { el, x, y, h: J.G.world.groundY(x, y) + h, life, max: life, dx: (Math.random() - 0.5) * 30 };
+    R3.textFx.push(o);
     if (R3.textFx.length > 60) {
-      const o = R3.textFx.shift();
-      o.el.remove();
+      const q = R3.textFx.shift();
+      q.el.remove();
     }
+    return o;
   };
   R3.updateText = function (dt) {
     let j = 0;

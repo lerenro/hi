@@ -789,6 +789,7 @@
     G.titleCam.y += Math.sin(G.t * 0.04) * dt * 1.5;
     J.R3.updateChunks(G.titleCam.x, G.titleCam.y);
     J.R3.setTime(1140 + Math.sin(G.t * 0.02) * 60, G.titleCam.x, G.titleCam.y, 'temperate', null);
+    if (J.Fx && J.Fx.SEE) J.Fx.SEE.on.value = 0;
     J.R3.updateCamera(G.titleCam.x, G.titleCam.y, 0, dt, { mode: 'title' });
     J.R3.render();
   };
@@ -888,7 +889,7 @@
     let wth = G.weather;
     if (!wth && rg.biome === 'tundra') wth = 'snow';
     R3.setTime(G.time, R3.cam.tx, R3.cam.tz, rg.biome, wth);
-    if (Fx && Fx.tsK > 0) Fx.desatSky(Fx.tsK);
+    if (Fx && (Fx.tsK > 0 || Fx.skipK > 0)) Fx.desatSky(Fx.tsK);
     R3.updateWeather(Fx && Fx.tsK > 0.5 ? 0 : rdt, wth === 'fog' ? null : wth, R3.cam.tx, R3.cam.tz);
     // стрелки вращают камеру
     if (!blocking) {
@@ -898,7 +899,10 @@
     }
     const moving = !blocking && Math.hypot(p.vx, p.vy) > 0.5 && !Input.touchHold.atk && !Input.mouse.l;
     R3.updateCamera(p.x, p.y, G.world.groundY(p.x, p.y) + (p.z || 0), rdt, { mode: 'foot', heading: p.face, moving });
-    if (Fx) Fx.applyCamera(R3.camera, rdt);
+    if (Fx) {
+      Fx.applyCamera(R3.camera, rdt);
+      Fx.updateSee();
+    }
     if (!Fx || !Fx.renderOverride()) R3.render();
     Game.updateLabels();
     UI.update(rdt);

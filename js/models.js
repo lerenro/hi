@@ -133,10 +133,13 @@
 
   // Обесцвечивание (остановка времени): uniform uDesat подмешивается в конец фрагментного шейдера.
   // Патч ставится один раз при создании материала; во время игры меняется только значение uniform.
-  const DESAT = '#include <dithering_fragment>\n{ float l = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114)); gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(l) * vec3(0.86, 0.9, 1.12), uDesat); }';
+  // оттенок общий для всех: серо-голубой у остановки времени, багровый у стирания времени (Король Багрового)
+  R3.uTint = R3.uTint || { value: new THREE.Vector3(0.86, 0.9, 1.12) };
+  const DESAT = '#include <dithering_fragment>\n{ float l = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114)); gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(l) * uTint, uDesat); }';
   R3.fxPatchShader = function (sh, uni) {
     sh.uniforms.uDesat = uni;
-    sh.fragmentShader = 'uniform float uDesat;\n' + sh.fragmentShader.replace('#include <dithering_fragment>', DESAT);
+    sh.uniforms.uTint = R3.uTint;
+    sh.fragmentShader = 'uniform float uDesat; uniform vec3 uTint;\n' + sh.fragmentShader.replace('#include <dithering_fragment>', DESAT);
   };
   R3.fxPatch = function (mat, uni) {
     if (!mat || !mat.isMaterial) return null;

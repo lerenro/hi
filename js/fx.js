@@ -1079,7 +1079,63 @@
   // ---------- 7. Остановка времени ----------
   R3.uDesat = R3.uDesat || { value: 0 };
   const TS = (Fx.TS = { ph: null, t: 0, by: null, sx: 0, sy: 0, sh: 0, n: 0, sec: 0, out: 0 });
+  // ---------- Сквозной обзор: столбы, деревья и знаки между камерой и героем растворяются ----------
+  // (стены камера и так обходит, а тонкие предметы закрывали бой целиком)
+  const SEE = { a: { value: new THREE.Vector3() }, b: { value: new THREE.Vector3() }, c: { value: new THREE.Vector3() }, on: { value: 0 } };
+  Fx.SEE = SEE;
+  const seePatch = (m) => {
+    if (!m || !m.isMaterial || m.userData.see) return;
+    m.userData.see = true;
+    const prev = m.onBeforeCompile;
+    const prevKey = m.customProgramCacheKey.call(m);
+    m.onBeforeCompile = function (sh, r) {
+      if (prev) prev.call(this, sh, r);
+      sh.uniforms.uSeeA = SEE.a;
+      sh.uniforms.uSeeB = SEE.b;
+      sh.uniforms.uSeeC = SEE.c;
+      sh.uniforms.uSeeOn = SEE.on;
+      sh.vertexShader = 'varying vec3 vSeeW;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n{ vec4 sp = vec4(transformed, 1.0);\n#ifdef USE_INSTANCING\nsp = instanceMatrix * sp;\n#endif\nvSeeW = (modelMatrix * sp).xyz; }');
+      // два отрезка: камера → герой и камера → противник (в бою)
+      sh.fragmentShader = 'uniform vec3 uSeeA; uniform vec3 uSeeB; uniform vec3 uSeeC; uniform float uSeeOn; varying vec3 vSeeW;\nfloat seeD(vec3 b) { vec3 ab = b - uSeeA; float t = clamp(dot(vSeeW - uSeeA, ab) / max(dot(ab, ab), 1e-4), 0.0, 1.0); return (t > 0.03 && t < 0.9) ? length(vSeeW - uSeeA - ab * t) : 9.0; }\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif (uSeeOn > 0.5) { float d = min(seeD(uSeeB), uSeeOn > 1.5 ? seeD(uSeeC) : 9.0); if (d < 0.75) { vec2 q = mod(floor(gl_FragCoord.xy), 2.0); if (q.x + q.y != 1.0 || d < 0.45) discard; } }');
+    };
+    m.customProgramCacheKey = () => 'see|' + prevKey;
+    m.needsUpdate = true;
+  };
+  Fx.updateSee = function () {
+    const p = J.G.player, cam = R3.camera;
+    if (!p || !cam || J.Game.state !== 'play') {
+      SEE.on.value = 0;
+      return;
+    }
+    SEE.a.value.copy(cam.position);
+    SEE.b.value.set(p.x, gy(p.x, p.y) + (p.z || 0) + 1.1, p.y);
+    // ближайший противник в бою (раз в 6 кадров), чтобы и его не закрывал столб
+    if (!(SEE.k-- > 0)) {
+      SEE.k = 5;
+      SEE.t = null;
+      if (p.inCombat > 0) {
+        let bd = 100;
+        for (const e of J.G.ents) {
+          if (e.dead || e === p || !J.hostile(p, e)) continue;
+          const d = (e.x - p.x) * (e.x - p.x) + (e.y - p.y) * (e.y - p.y);
+          if (d < bd) {
+            bd = d;
+            SEE.t = e;
+          }
+        }
+      }
+    }
+    const t = SEE.t;
+    if (t && !t.dead) {
+      SEE.c.value.set(t.x, gy(t.x, t.y) + (t.z || 0) + 1.1, t.y);
+      SEE.on.value = 2;
+    } else SEE.on.value = 1;
+  };
   Fx.patchWorld = function () {
+    // столбы, светофоры, знаки (buildMat), деревья (decoMat), плафоны (lightMat)
+    seePatch(R3.buildMat);
+    seePatch(R3.decoMat);
+    seePatch(R3.lightMat);
     // все общие материалы мира получают общий uniform обесцвечивания (до первой отрисовки)
     const patch = (m) => { if (m && m.isMaterial && !m.isPointsMaterial && !m.isShaderMaterial && !m.isRawShaderMaterial) R3.fxPatch(m, R3.uDesat); };
     for (const k in R3) patch(R3[k]);
@@ -1125,6 +1181,10 @@
       }
       J.UI.timestopFx(false);
     }
+    // стирание времени: мир багровеет, остаётся в цвете только тот, кто стёр время
+    const sk = g.timeskip;
+    Fx.skipK = sk ? Math.min(0.8, (Fx.skipK || 0) + rdt * 3) : Math.max(0, (Fx.skipK || 0) - rdt * 4);
+    Fx.skipBy = sk ? sk.by : Fx.skipK > 0 ? Fx.skipBy : null;
     if (ts && TS.ph === null) Fx.timestopIntro(ts.by, ts.t);
     if (!TS.ph) {
       Fx.tsK = Math.max(0, Fx.tsK - rdt * 4);
@@ -1181,6 +1241,15 @@
   Fx.desatSky = function (k) {
     const sc = R3.scene;
     const bg = sc.background;
+    if (bg && bg.isColor && Fx.skipK > k) {
+      // багровая пустота
+      const q = Fx.skipK;
+      bg.r += (0.16 - bg.r) * q;
+      bg.g += (0.025 - bg.g) * q;
+      bg.b += (0.09 - bg.b) * q;
+      if (sc.fog) sc.fog.color.copy(bg);
+      return;
+    }
     if (bg && bg.isColor) {
       const l = bg.r * 0.299 + bg.g * 0.587 + bg.b * 0.114;
       bg.r += (l * 0.86 - bg.r) * k;
@@ -1192,12 +1261,20 @@
   // Обесцвечивание: мир — по tsK, персонажи — только застывшие
   function updateDesat() {
     const k = Fx.tsK;
+    const sk = Fx.skipK || 0;
     let world = k;
     const p = J.G.player;
     if (Fx.lowK > 0 && !J.G.timestop) world = Math.max(world, 0.25 * Fx.lowK);
+    const skip = sk > k;
+    if (skip) world = Math.max(world, sk);
     R3.uDesat.value = world;
+    if (skip) R3.uTint.value.set(1.05, 0.2, 0.3);
+    else R3.uTint.value.set(0.86, 0.9, 1.12);
+    const by = Fx.skipBy;
     for (const e of J.G.ents) {
-      const want = k > 0 && e.st && e.st.timefrozen ? k : e === p ? 0 : k > 0 ? 0 : world;
+      let want;
+      if (skip) want = e === by || (by && e.owner === by) ? 0 : sk;
+      else want = k > 0 && e.st && e.st.timefrozen ? k : e === p ? 0 : k > 0 ? 0 : world;
       setDesat(e.view, want);
       setDesat(e.standView, want);
     }
@@ -1426,7 +1503,10 @@
   };
   // Реплика над головой
   Fx.say = function (e, text) {
-    R3.text(e.x, e.y, text, 'tsay', 1.6, 2.4 * (e.scale || 1));
+    // новая реплика сменяет прежнюю (счёт секунд не громоздится стопкой)
+    const o = e._say;
+    if (o && o.life > 0.15) o.life = 0.15;
+    e._say = R3.text(e.x, e.y, text, 'tsay', 1.6, 2.4 * (e.scale || 1));
   };
   // Блик-предупреждение перед ударом врага
   Fx.glint = function (e) {
@@ -1866,6 +1946,8 @@
     Fx.hs = 0;
     Fx.slow = null;
     Fx.tsK = 0;
+    Fx.skipK = 0;
+    Fx.skipBy = null;
     TS.ph = null;
     R3.uDesat.value = 0;
     if (sphere) sphere.visible = false;
@@ -1909,6 +1991,7 @@
     CF.yawT = CF.yawHold = CF.fovT = CF.fovHold = 0;
     CF.rollerCam = false;
     Fx._pr = null;
+    SEE.t = null;
     clearHits();
   };
 })();

@@ -355,6 +355,8 @@
     } else c.classList.remove('ts', 'ts-flash');
   };
   UI.timeskipFx = function (on) {
+    // с эффектами боя мир багровеет через шейдер (J.Fx); CSS-фильтр — запасной вариант
+    if (J.Fx && J.Fx.worldPatched) on = false;
     $('#game').classList.toggle('tskip', !!on);
   };
   UI.rewindFx = function () {
