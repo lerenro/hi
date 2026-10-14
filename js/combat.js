@@ -66,7 +66,7 @@
   };
   const rushing = (e) => !!(e && e.channel && e.channel.type === 'rush' && !(e.channel.fin > 0));
   // Боссы бьют игрока слабее (у них в 3 раза больше здоровья) — бой длинный, но проходимый
-  Cb.BOSS_VS_PLAYER = 0.45;
+  Cb.BOSS_VS_PLAYER = 0.36;
   Cb.preHurt = function (t, amount, src, opt) {
     if (opt.rushTick && src && rushing(t) && rushing(src) && facing(t, src, 0.6)) return -1;
     if (opt.dot || opt.pierceDef || opt.unblockable || !src) return amount;
@@ -88,6 +88,16 @@
       so.kx += Math.cos(ang) * 2.5;
       so.ky += Math.sin(ang) * 2.5;
       engaged(t);
+      // ИИ сразу наказывает за парированный удар (иначе вечный цикл «бьёшь в блок — тебя парируют»)
+      if (t.ai) {
+        t.guard = false;
+        t.guardOff = g.t;
+        t.ai.guardT = 0;
+        t.ai.parryAt = 0;
+        t.ai.atk = Math.min(t.ai.atk || 0, 0.12);
+        t.ai.rec = 0;
+        t.ai.counter = true;
+      }
       if (fxOk()) Fx().onHit(t, src, 0, opt, false, false, 'parry');
       if (t.isPlayer) J.P.trainStat(t, 'agi', 1);
       return -1;
@@ -594,8 +604,8 @@
       const d = J.dist(a.x, a.y, o.x, o.y);
       if (d > (kind === 'rush' ? 4.5 : kind === 'shot' ? 12 : 4)) continue;
       const ai = o.ai;
-      // в блоке: долбить в блок опасно — ИИ ловит удар парированием
-      if (o.guard && (kind === 'light' || kind === 'heavy') && d < 3.2 && rnd() < Cb.prof(o).parry * 2.5) {
+      // в блоке: долбить в блок лёгкими опасно — ИИ ловит удар парированием (тяжёлый — ответ на блок, его не парируют)
+      if (o.guard && kind === 'light' && d < 3.2 && rnd() < Cb.prof(o).parry * 1.8) {
         o.guardAt = g.t + delay - 0.08;
         ai.guardT = Math.max(ai.guardT || 0, delay + 0.1);
         continue;
