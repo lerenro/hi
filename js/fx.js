@@ -267,7 +267,7 @@
   const WSIZE = { light: [28, 20], mid: [38, 26], big: [58, 40], fin: [84, 54], kill: [96, 62], ts: [120, 72], tick: [34, 26], sm: [26, 20], md: [48, 32] };
   const WPRIO = { fin: 3, kill: 3, ts: 3, big: 2 };
   // короткое удержание: звук-картинка вспыхивает и уходит, не закрывая следующий обмен ударами
-  const WHOLD = { light: 0.28, mid: 0.34, big: 0.42, fin: 0.55, kill: 0.7, ts: 1.4, tick: 0.4, sm: 0.4, md: 0.5 };
+  const WHOLD = { light: 0.28, mid: 0.34, big: 0.42, fin: 0.55, kill: 0.7, ts: 1.4, tick: 0.4, sm: 0.25, md: 0.5 };
   // Слово на экране в точке sx, sy
   Fx.wordAt = function (text, sx, sy, sizeKey, color, stroke) {
     if (!root) return null;
@@ -1887,6 +1887,10 @@
   };
 
   // ---------- Главное обновление (реальное время rdt, игровое dt) ----------
+  const anyAct = (a) => {
+    for (let i = 0; i < a.length; i++) if (a[i].act) return true;
+    return false;
+  };
   Fx.update = function (rdt, dt) {
     if (!Fx.ready) return;
     const frozenPart = Fx.tsK > 0.5;
@@ -1935,7 +1939,7 @@
       CF.distT = 1;
     }
     // слой виден только когда что-то есть
-    const busy = GM.vis || LN.vis || FL.vis || LB.on || CARD.t > 0 || J.G.clash || LOW.op > 0.01 || WORDS.some((o) => o.act) || COLS.some((o) => o.act) || BANS.some((o) => o.act) || NUMS.some((o) => o.act) || RINGS.some((o) => o.act);
+    const busy = GM.vis || LN.vis || FL.vis || LB.on || CARD.t > 0 || J.G.clash || LOW.op > 0.01 || anyAct(WORDS) || anyAct(COLS) || anyAct(BANS) || anyAct(NUMS) || anyAct(RINGS);
     if (busy !== Fx._vis) {
       Fx._vis = busy;
       root.style.visibility = busy ? 'visible' : 'hidden';
@@ -1948,6 +1952,7 @@
     Fx.tsK = 0;
     Fx.skipK = 0;
     Fx.skipBy = null;
+    if (J.Cb && J.Cb.resetTokens) J.Cb.resetTokens();
     TS.ph = null;
     R3.uDesat.value = 0;
     if (sphere) sphere.visible = false;

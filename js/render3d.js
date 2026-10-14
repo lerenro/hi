@@ -1340,16 +1340,29 @@
     if (proj.z > 1) return null;
     return { x: (proj.x * 0.5 + 0.5) * R3.W, y: (-proj.y * 0.5 + 0.5) * R3.H };
   };
+  // всплывающий текст из пула DOM-узлов (без создания/удаления узлов в бою)
+  const TPOOL = [];
+  const freeText = (el) => {
+    el.style.display = 'none';
+    if (TPOOL.length < 32) TPOOL.push(el);
+    else el.remove();
+  };
   R3.text = function (x, y, text, cls, life = 0.9, h = 2) {
-    const el = document.createElement('div');
-    el.className = 'ftxt ' + (cls || '');
-    el.textContent = text;
-    R3.labelLayer.appendChild(el);
+    let el = TPOOL.pop();
+    if (!el) {
+      el = document.createElement('div');
+      R3.labelLayer.appendChild(el);
+    }
+    const c = 'ftxt ' + (cls || '');
+    if (el.className !== c) el.className = c;
+    if (el.textContent !== text) el.textContent = text;
+    el.style.opacity = '1';
+    el.style.display = 'none';
     const o = { el, x, y, h: J.G.world.groundY(x, y) + h, life, max: life, dx: (Math.random() - 0.5) * 30 };
     R3.textFx.push(o);
     if (R3.textFx.length > 60) {
       const q = R3.textFx.shift();
-      q.el.remove();
+      freeText(q.el);
     }
     return o;
   };
@@ -1358,7 +1371,7 @@
     for (const f of R3.textFx) {
       f.life -= dt;
       if (f.life <= 0) {
-        f.el.remove();
+        freeText(f.el);
         continue;
       }
       const k = 1 - f.life / f.max;

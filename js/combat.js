@@ -917,7 +917,8 @@
       tg.whiff = 0;
       ai.atk = Math.min(ai.atk, 0);
     }
-    const ready = ai.atk <= 0 && ai.rec <= 0;
+    // очередь нападающих: на игрока одновременно замахиваются не больше двоих, остальные кружат и ждут
+    const ready = ai.atk <= 0 && ai.rec <= 0 && (!tg.isPlayer || e.boss || tokenFree(e));
     if (ready) {
       if (d > reach + 0.1) {
         // сближение
@@ -942,6 +943,26 @@
     }
     return true;
   };
+  const TOK = [];
+  function tokenFree(e) {
+    const t = G().t;
+    let n = 0;
+    for (let i = 0; i < TOK.length; i++) {
+      const o = TOK[i];
+      if (o.until > t && o.e !== e && !o.e.dead) n++;
+    }
+    return n < 2;
+  }
+  function takeToken(e, dur) {
+    const t = G().t;
+    let s = null;
+    for (let i = 0; i < TOK.length && !s; i++) if (TOK[i].e === e) s = TOK[i];
+    for (let i = 0; i < TOK.length && !s; i++) if (TOK[i].until <= t || TOK[i].e.dead) s = TOK[i];
+    if (!s) TOK.push((s = { e, until: 0 }));
+    s.e = e;
+    s.until = t + dur;
+  }
+  Cb.resetTokens = () => (TOK.length = 0);
   function startStrike(e, tg, pr) {
     const ai = e.ai;
     const heavy = !e.model && rnd() < (ai.counter ? 0.15 : 0.22);
@@ -954,6 +975,7 @@
       pr.wind = p0;
     } else Cb.aiStrike(e, tg, heavy);
     ai.atk = e.rate * (0.9 + rnd() * 0.7) * (e.boss ? 0.8 : 1) + (heavy ? 0.4 : 0);
+    if (tg.isPlayer && !e.boss) takeToken(e, (ai.rec || 0.5) + 0.25);
   }
   // Стрелки: держат 5–7 м, обходят, стреляют после прицеливания
   function rangedFight(e, tg, d, ang, dt, pr, spd) {
