@@ -27,6 +27,7 @@ await page.evaluate(() => {
   J.G.time = Math.floor(J.G.time / 1440) * 1440 + 720;
   J.Game.loop = function () {};
   const R3 = J.R3, realRender = R3.render;
+  // _step — шаг симуляции; рисуем только последний кадр (иначе GPU-процесс SwiftShader копит очередь кадров)
   window._step = (sec, dt = 1 / 60) => {
     R3.render = () => {};
     const n = Math.max(1, Math.round(sec / dt));
@@ -34,6 +35,7 @@ await page.evaluate(() => {
     R3.render = realRender;
     J.Game.update(dt);
   };
+  window._tick = () => { R3.render = () => {}; J.Game.update(1 / 60); R3.render = realRender; };
   const w = J.G.world;
   const open = () => {
     for (let k = 0; k < 400; k++) {
@@ -81,7 +83,7 @@ await page.evaluate(() => {
   };
 });
 const ev = (f, a) => page.evaluate(f, a);
-const shot = (n) => page.screenshot({ path: path.join(OUT, n + '.png') });
+const shot = async (n) => { await ev(() => J.R3.render()); await page.screenshot({ path: path.join(OUT, n + '.png') }); };
 const results = [];
 const check = (name, ok, info) => { results.push({ name, ok: !!ok }); console.log((ok ? 'OK   ' : 'FAIL ') + name + (info !== undefined ? '  ' + JSON.stringify(info) : '')); };
 
@@ -145,7 +147,7 @@ const check = (name, ok, info) => { results.push({ name, ok: !!ok }); console.lo
       window._step(0.2);
       const p = J.G.player;
       J.P.heavyStart(p); window._step(1.0); J.P.heavyRelease(p);
-      for (let i = 0; i < 90; i++) { window._step(1 / 60); if (window._f.slammed) break; }
+      for (let i = 0; i < 90; i++) { window._tick(); if (window._f.slammed) break; }
       return { slam: !!window._f.slammed, react: window._f.react && window._f.react.type };
     });
     await ev(() => window._step(0.1));
@@ -189,9 +191,9 @@ const check = (name, ok, info) => { results.push({ name, ok: !!ok }); console.lo
     window._step(0.3);
   });
   const c = await ev(() => !!J.G.clash);
-  for (let i = 0; i < 4; i++) await ev(() => { for (let k = 0; k < 8; k++) { if (k % 2 === 0) J.Cb.mash(J.G.player); window._step(1 / 60); } });
+  for (let i = 0; i < 4; i++) await ev(() => { for (let k = 0; k < 8; k++) { if (k % 2 === 0) J.Cb.mash(J.G.player); window._tick(); } });
   await shot('c05_clash');
-  const w = await ev(() => { for (let k = 0; k < 240 && J.G.clash; k++) { J.Cb.mash(J.G.player); J.Cb.mash(J.G.player); window._step(1 / 60); } window._step(0.15); const f = window._f; return { air: !!f.airborne || (f.react && f.react.type === 'down'), hp: Math.round(f.hp) }; });
+  const w = await ev(() => { for (let k = 0; k < 240 && J.G.clash; k++) { J.Cb.mash(J.G.player); J.Cb.mash(J.G.player); window._tick(); } window._step(0.15); const f = window._f; return { air: !!f.airborne || (f.react && f.react.type === 'down'), hp: Math.round(f.hp) }; });
   await shot('c06_clash_win');
   check('столкновение рашей началось', c);
   check('победитель столкновения отбрасывает проигравшего', w.air, w);
@@ -203,7 +205,7 @@ const check = (name, ok, info) => { results.push({ name, ok: !!ok }); console.lo
     const p = J.G.player, f = window._f = window._foe('thug', 1.7, { hp: 600, lvl: 5 });
     J.Input.keys.KeyZ = true;
     let blocked = 0, dmg = 0, hp0 = p.hp;
-    for (let i = 0; i < 300; i++) { window._step(1 / 60); if (p.react && p.react.type === 'block') blocked++; dmg += Math.max(0, hp0 - p.hp); hp0 = p.hp; }
+    for (let i = 0; i < 300; i++) { window._tick(); if (p.react && p.react.type === 'block') blocked++; dmg += Math.max(0, hp0 - p.hp); hp0 = p.hp; }
     J.Input.keys.KeyZ = false;
     return { blocked, dmg: Math.round(dmg), gm: Math.round(p.gm) };
   });
@@ -226,10 +228,10 @@ const check = (name, ok, info) => { results.push({ name, ok: !!ok }); console.lo
     window._clear();
     const p = J.G.player, f = window._f = window._foe('thug', 1.6, { hp: 600, lvl: 4 });
     for (let i = 0; i < 400; i++) {
-      window._step(1 / 60);
+      window._tick();
       if (f.atk && !f.atk.done && f.atk.at - f.atk.t < 0.1 && f.atk.at - f.atk.t > 0.02 && !p.guard) {
         J.Input.keys.KeyZ = true;
-        for (let k = 0; k < 15; k++) { window._step(1 / 60); if (f.react && f.react.type === 'parried') { J.Input.keys.KeyZ = false; return true; } }
+        for (let k = 0; k < 15; k++) { window._tick(); if (f.react && f.react.type === 'parried') { J.Input.keys.KeyZ = false; return true; } }
         J.Input.keys.KeyZ = false;
         window._step(0.3);
       }
@@ -242,7 +244,7 @@ const check = (name, ok, info) => { results.push({ name, ok: !!ok }); console.lo
     window._clear();
     const p = J.G.player, f = window._f = window._foe('thug', 1.6, { hp: 600, lvl: 4 });
     for (let i = 0; i < 400; i++) {
-      window._step(1 / 60);
+      window._tick();
       if (f.atk && !f.atk.done && f.atk.at - f.atk.t < 0.05) {
         const hp0 = p.hp;
         p.cds.dash = 0; p.stamina = 100;

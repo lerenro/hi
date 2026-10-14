@@ -1071,10 +1071,10 @@
   const TS = (Fx.TS = { ph: null, t: 0, by: null, sx: 0, sy: 0, sh: 0, n: 0, sec: 0, out: 0 });
   Fx.patchWorld = function () {
     // все общие материалы мира получают общий uniform обесцвечивания (до первой отрисовки)
-    for (const k in R3) {
-      const m = R3[k];
-      if (m && m.isMaterial && !m.isPointsMaterial && !m.isShaderMaterial && !m.isRawShaderMaterial) R3.fxPatch(m, R3.uDesat);
-    }
+    const patch = (m) => { if (m && m.isMaterial && !m.isPointsMaterial && !m.isShaderMaterial && !m.isRawShaderMaterial) R3.fxPatch(m, R3.uDesat); };
+    for (const k in R3) patch(R3[k]);
+    // материалы города (асфальт, плитка, разметка, фасады) лежат в R3.cmat
+    if (R3.cmat) for (const k in R3.cmat) patch(R3.cmat[k]);
     Fx.worldPatched = true;
   };
   Fx.timestopIntro = function (u, dur) {
