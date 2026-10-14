@@ -998,7 +998,7 @@
       } else if (!u || u.dead || !u.channel || u.channel.type !== 'rush') {
         b.fin = 0.25;
       } else {
-        const want = Math.min(6, 1 + Math.floor(b.t / 0.12));
+        const want = Math.min(phone() ? 4 : 6, 1 + Math.floor(b.t / 0.12));
         if (want !== b.n) {
           b.n = want;
           let s = '';
@@ -1028,9 +1028,10 @@
       const W = innerWidth;
       const sc = b.fin > 0 ? 1.4 : 1;
       const jx = (Math.floor(T / 33) % 2 ? 2 : -2), jy = (Math.floor(T / 47) % 2 ? 2 : -2);
-      const scroll = b.n >= 6 && b.fin <= 0 ? -((b.t * 160) % 120) : 0;
+      const scroll = b.n >= (phone() ? 4 : 6) && b.fin <= 0 ? -((b.t * 160) % 120) : 0;
       const x = J.clamp(b.x, 120, W - 120);
-      const y = J.clamp(b.y, phone() ? 70 : 150, innerHeight * 0.55);
+      // на телефоне — ниже панели здоровья
+      const y = J.clamp(b.y, phone() ? 165 : 150, innerHeight * 0.55);
       b.el.style.transform = `translate(${(x + jx + scroll).toFixed(0)}px,${(y + jy).toFixed(0)}px) translate(-50%,-50%) skewX(-10deg) scale(${sc})`;
       b.el.style.opacity = b.fin > 0 ? Math.min(1, b.fin / 0.2).toFixed(3) : '1';
     }
@@ -1925,7 +1926,11 @@
     if (J.Sfx) J.Sfx.setSlow(Fx.scale < 0.95 ? 1 - Fx.scale : 0);
     // камера в бою на телефоне — ближе
     const p = J.G.player;
-    if (J.Input && J.Input.touch && p && p.inCombat > 0 && !(Fx.so > 0) && !J.G.clash && CF.distT === 1) R3.cam.distMul += (6.8 / 8.5 - R3.cam.distMul) * Math.min(1, rdt * 2);
+    const touch = J.Input && J.Input.touch;
+    if (touch && p && p.inCombat > 0 && !(Fx.so > 0) && !J.G.clash && CF.distT === 1) R3.cam.distMul += (6.8 / 8.5 - R3.cam.distMul) * Math.min(1, rdt * 2);
+    // на телефоне в бою бойцы смещаются левее — правую часть экрана занимают кнопки
+    const ls = touch && p && p.inCombat > 0 && !J.G.clash ? 1.1 : 0;
+    R3.cam.lookShift += (ls - R3.cam.lookShift) * Math.min(1, rdt * 2.5);
     // раш игрока оборвался без добивания (оглушение, парирование, проигранное столкновение, смерть) — вернуть камеру и колонки
     const pr = Fx._pr;
     if (pr && (pr.dead || !pr.channel || pr.channel.type !== 'rush')) Fx.rushEnd(pr);

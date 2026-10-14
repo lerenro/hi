@@ -17,6 +17,7 @@
     fov: 60,
     // боевые модификаторы от J.Fx: ракурс, наезд, поле зрения, фокус на противнике
     yawOff: 0, distMul: 1, fovAdd: 0, focusW: 0, focusX: 0, focusY: 0, focusZ: 0,
+    lookShift: 0, // сдвиг взгляда вправо (на телефоне бой уходит в свободную полосу между джойстиком и кнопками)
     idle: 9, // секунд без ручного поворота
     follow: false, // авто-разворот за спину пешком
     near: false,
@@ -132,6 +133,10 @@
     R3.camera.position.set(cx, cy, cz);
     // смотрим чуть выше и вперёд цели — персонаж в нижней трети кадра; в бою — чуть к противнику
     let lx = ox - dx * 2, ly = oy + (mode === 'car' ? 0.2 : 0.1) + up * 0.25, lz = oz - dz * 2;
+    if (c.lookShift && mode === 'foot') {
+      lx += rx * c.lookShift;
+      lz += rz * c.lookShift;
+    }
     if (c.focusW > 0.01 && mode === 'foot') {
       const w = 0.35 * c.focusW;
       lx += (c.focusX - lx) * w;
