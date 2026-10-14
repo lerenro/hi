@@ -396,9 +396,10 @@
     b.sign = '#e6c36a';
     p.homeId = b.id;
     if (place) {
-      p.x = b.door.x + 0.5;
-      p.y = b.door.y + 1.6;
-      p.face = Math.PI / 2;
+      const dp = J.doorPt(b);
+      p.x = dp.x;
+      p.y = dp.y;
+      p.face = J.doorAng(b);
       p.lastSafe = { x: p.x, y: p.y };
       J.R3.cam.yaw = -Math.PI / 2;
     }
@@ -442,13 +443,19 @@
     const p = G.player;
     const pd = {};
     PF.forEach((k) => (pd[k] = p[k]));
-    const data = { v: 1, seed: G.seed, time: G.time, weather: G.weather, waypoint: G.waypoint, player: pd, story: J.Story.serialize(), cam: { yaw: J.R3.cam.yaw }, savedAt: Date.now() };
+    const data = { v: 1, genV: J.GEN_V, seed: G.seed, time: G.time, weather: G.weather, waypoint: G.waypoint, player: pd, story: J.Story.serialize(), cam: { yaw: J.R3.cam.yaw }, savedAt: Date.now() };
     const ok = J.store.set(Game.SAVE_KEY, data);
     if (manual) J.UI.toast(ok ? 'Игра сохранена.' : 'Не удалось сохранить: хранилище браузера недоступно.', ok ? 'green' : 'red');
   };
   Game.loadFromStore = function () {
     const data = J.store.get(Game.SAVE_KEY);
     if (!data) return J.UI.toast('Сохранение не найдено.', 'red');
+    // сохранение из старой версии мира (до новых городов): координаты и здания не совпадают — начинаем заново
+    if ((data.genV || 1) !== J.GEN_V) {
+      J.store.del(Game.SAVE_KEY);
+      if (J.UI.showTitle) J.UI.showTitle();
+      return J.UI.toast('Мир обновлён: города перестроены заново, старое сохранение несовместимо. Начни новую игру!', 'gold');
+    }
     J.UI.closePanel();
     Game.setLoading('Загрузка мира…');
     setTimeout(() => {
@@ -550,8 +557,9 @@
     const w = G.world;
     const b = w.buildings.find((x) => x.region === regionId && x.type === 'station');
     if (!b) return;
-    p.x = b.door.x + 0.5;
-    p.y = b.door.y + 1.6;
+    const dp = J.doorPt(b);
+    p.x = dp.x;
+    p.y = dp.y;
     p.lastSafe = { x: p.x, y: p.y };
     p.mount = false;
     for (const e of G.ents) if (e !== p && !e.summon) e.despawn = true;
@@ -609,8 +617,9 @@
     const lost = Math.floor(p.money * 0.15);
     p.money -= lost;
     Game.passTime(240);
-    p.x = b.door.x + 0.5;
-    p.y = b.door.y + 1.6;
+    const dp = J.doorPt(b);
+    p.x = dp.x;
+    p.y = dp.y;
     p.lastSafe = { x: p.x, y: p.y };
     for (const e of G.ents) if (e !== p && e.team === 'enemy') e.despawn = true;
     J.R3.dropView(p);
@@ -624,8 +633,9 @@
     Game.passTime(12 * 60);
     const hs = G.world.buildings.filter((b) => b.type === 'hospital').sort((a, b) => J.dist(a.x, a.y, p.x, p.y) - J.dist(b.x, b.y, p.x, p.y));
     if (hs[0]) {
-      p.x = hs[0].door.x + 0.5;
-      p.y = hs[0].door.y + 1.6;
+      const dp = J.doorPt(hs[0]);
+      p.x = dp.x;
+      p.y = dp.y;
       J.R3.clearAll();
       J.R3.updateChunks(p.x, p.y, true);
     }
@@ -739,7 +749,10 @@
       Game._bT = 20;
       Game.nearB = w.buildings.filter((b) => b.type !== 'house' && J.dist(p.x, p.y, b.door.x, b.door.y) < 18);
     }
-    for (const b of Game.nearB || []) show(b, J.esc(b.name), 'sign', b.door.x + 0.5, b.door.y + 1.1, 3.1);
+    for (const b of Game.nearB || []) {
+      const dp = J.doorPt(b, 1.1);
+      show(b, J.esc(b.name), 'sign', dp.x, dp.y, 3.1);
+    }
     for (const o of act) {
       if (o._lf !== f) {
         if (o.labelEl) o.labelEl.style.display = 'none';

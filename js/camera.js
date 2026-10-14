@@ -40,14 +40,7 @@
   // Высота препятствия в точке (x, z) мира для луча камеры
   function obstacleTop(w, x, z) {
     const b = w.buildingAt(x, z);
-    if (b) {
-      if (b.flat) return b.height + 0.6;
-      // двускатная крыша: выше к коньку
-      const z0 = b.y + 0.06, z1 = b.y + b.h - 0.06, zm = (z0 + z1) / 2;
-      const rh = Math.min(2.2, (z1 - z0) * 0.38);
-      const k = 1 - Math.min(1, Math.abs(z - zm) / ((z1 - z0) / 2 + 0.3));
-      return b.height + rh * k + 0.3;
-    }
+    if (b) return w.buildingTop(b, x, z); // небоскрёбы, уступы и крыши — из данных здания
     const t = w.tile(x, z);
     if (t === T().WALL) return 2.5;
     if (t === T().ROCK || t === T().MESA) return w.tileH(Math.floor(x), Math.floor(z)) + 0.3;

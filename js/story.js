@@ -50,12 +50,12 @@
   const rand = () => J.R;
   const reg = (id) => J.REGION[id];
   const bfind = (type, rid) => W().findBuilding(type, rid);
-  const door = (b) => (b ? { x: b.door.x + 0.5, y: b.door.y + 1.6 } : null);
+  const door = (b) => (b ? J.doorPt(b) : null);
   const randIn = (rid, r, opts) => {
     const R = reg(rid);
     return W().randomWalkable(R.x, R.y, r || 25, J.R, opts) || { x: R.x, y: R.y };
   };
-  const housesOf = (rid) => W().buildings.filter((b) => b.region === rid && b.type === 'house' && b.w >= 3);
+  const housesOf = (rid) => W().buildings.filter((b) => b.region === rid && b.type === 'house' && b.w >= 3 && (!b.arch || b.arch === 'suburban' || b.arch === 'apartment'));
   const isNight = () => G().isNight;
   S.door = door;
 
@@ -245,7 +245,7 @@
         marker: () => door(W().buildings[W().places.dio_mansion]),
         begin(d) {
           const b = W().buildings[W().places.dio_mansion];
-          d.spawns = [{ tag: 'vanilla', spec: { boss: 'vanilla', tag: 'vanilla' }, at: { x: b.door.x + 0.5, y: b.door.y + 3.5 } }];
+          d.spawns = [{ tag: 'vanilla', spec: { boss: 'vanilla', tag: 'vanilla' }, at: J.doorPt(b, 3.5) }];
         },
         done: (d) => S.killed(d, 'vanilla'),
       },
@@ -254,7 +254,7 @@
         marker: () => door(W().buildings[W().places.dio_mansion]),
         begin(d) {
           const b = W().buildings[W().places.dio_mansion];
-          d.spawns = [{ tag: 'dio', spec: { boss: 'dio', tag: 'dio' }, at: { x: b.door.x + 0.5, y: b.door.y + 2 }, nightOnly: true }];
+          d.spawns = [{ tag: 'dio', spec: { boss: 'dio', tag: 'dio' }, at: J.doorPt(b, 2), nightOnly: true }];
         },
         approach: {
           r: 9,
@@ -378,7 +378,7 @@
         marker: () => door(bfind('colosseum', 'rome')),
         begin(d) {
           const b = bfind('colosseum', 'rome');
-          d.spawns = [{ tag: 'diavolo', spec: { boss: 'diavolo', tag: 'diavolo' }, at: { x: b.door.x + 0.5, y: b.door.y + 3 } }];
+          d.spawns = [{ tag: 'diavolo', spec: { boss: 'diavolo', tag: 'diavolo' }, at: J.doorPt(b, 3) }];
         },
         approach: {
           r: 10,
@@ -416,7 +416,7 @@
         marker: () => door(W().buildings[W().places.pillar_ruins]),
         begin(d) {
           const b = W().buildings[W().places.pillar_ruins];
-          d.spawns = [{ tag: 'santana', spec: { boss: 'santana', tag: 'santana' }, at: { x: b.door.x + 0.5, y: b.door.y + 2.5 }, nightOnly: true }];
+          d.spawns = [{ tag: 'santana', spec: { boss: 'santana', tag: 'santana' }, at: J.doorPt(b, 2.5), nightOnly: true }];
           if (!P().hamon) UI().toast('Без хамона Люди из Столпа получают лишь 30% урона. Изучи хамон!', 'gold');
         },
         done: (d) => S.killed(d, 'santana'),
@@ -451,7 +451,7 @@
         marker: () => door(W().buildings[W().places.pillar_ruins]),
         begin(d) {
           const b = W().buildings[W().places.pillar_ruins];
-          d.spawns = [{ tag: 'kars', spec: { boss: 'kars', tag: 'kars' }, at: { x: b.door.x - 2, y: b.door.y + 3 }, nightOnly: true }];
+          d.spawns = [{ tag: 'kars', spec: { boss: 'kars', tag: 'kars' }, at: J.doorPt(b, 3, -2.5), nightOnly: true }];
           UI().bigBanner('КАРС', 'Гений из Людей Столпа. Его клинки сияют как солнце.');
         },
         done: (d) => S.killed(d, 'kars'),
@@ -469,7 +469,7 @@
     intro: 'Флорида. Дочь Джотаро — Джолин Куджо — заперта в тюрьме «Грин Дельфин». Кто-то крадёт стенды и души в виде дисков.',
     setup(d) {
       d.inmates = J.R.shuffle(['stone_free', 'foo_fighters', 'diver_down', 'planet_waves', 'kiss', 'survivor', 'jumpin_jack_flash', 'weather_report']).filter((s) => s !== 'stone_free' && s !== 'weather_report').slice(0, 2);
-      d.bone = randIn('florida', 40, { outside: true });
+      d.bone = W().randOutside(reg('florida'), 40) || randIn('florida', 40);
     },
     stages: [
       {
@@ -485,7 +485,7 @@
         text: 'Победи двух стенд-юзеров во дворе тюрьмы (они роняют диски)',
         begin(d) {
           const b = W().buildings[W().places.green_dolphin];
-          d.spawns = d.inmates.map((sid, i) => ({ tag: 'inmate' + i, spec: { stand: sid, lvl: Math.max(5, P().lvl), name: J.R.pick(['Джонгален', 'Торнадо', 'Миу Миу', 'Ланг Рангler', 'Сандерленд', 'Виви', 'Кенсо']), tag: 'inmate' + i, discDrop: true }, at: { x: b.door.x + 0.5 + (i ? 3 : -3), y: b.door.y + 4 } }));
+          d.spawns = d.inmates.map((sid, i) => ({ tag: 'inmate' + i, spec: { stand: sid, lvl: Math.max(5, P().lvl), name: J.R.pick(['Джонгален', 'Торнадо', 'Миу Миу', 'Ланг Рангler', 'Сандерленд', 'Виви', 'Кенсо']), tag: 'inmate' + i, discDrop: true }, at: J.doorPt(b, 4, i ? 3 : -3) }));
         },
         marker: () => door(W().buildings[W().places.green_dolphin]),
         done: (d) => S.killed(d, 'inmate0') && S.killed(d, 'inmate1'),
@@ -561,7 +561,7 @@
     setup(d) {
       d.parts = J.R.shuffle(J.CORPSE_PARTS.map((c) => c.id)).filter((id) => !P().corpse.includes(id));
       d.find = d.parts.slice(0, Math.min(5, d.parts.length)).map((id) => {
-        const pt = randIn('arizona', 70, { outside: true });
+        const pt = W().randOutside(reg('arizona'), 70) || randIn('arizona', 70);
         return { x: pt.x, y: pt.y, part: id };
       });
     },
@@ -671,12 +671,12 @@
       const n = S.NPCS[k];
       const b = W().findBuilding(n.b[0], n.b[1]);
       if (!b) continue;
-      let x = b.door.x + 0.5 + 1.6, y = b.door.y + 1.7;
-      if (J.blocked(x, y, 0.3, {})) {
-        x = b.door.x + 0.5 - 1.6;
-        if (J.blocked(x, y, 0.3, {})) x = b.door.x + 0.5;
+      let q = J.doorPt(b, 1.7, 1.6);
+      if (J.blocked(q.x, q.y, 0.3, {})) {
+        q = J.doorPt(b, 1.7, -1.6);
+        if (J.blocked(q.x, q.y, 0.3, {})) q = J.doorPt(b, 1.7);
       }
-      pos[k] = { x, y };
+      pos[k] = { x: q.x, y: q.y };
     }
     S.npcPosMap = pos;
   };
@@ -1232,7 +1232,7 @@
         return q;
       }
       case 'bounty': {
-        const pos = W().randomWalkable(here.x, here.y, 70, J.R, { outside: true }) || W().randomWalkable(here.x, here.y, 30);
+        const pos = W().randOutside(here, 60) || W().randomWalkable(here.x, here.y, 30);
         if (!pos) return null;
         const sid = J.pickW(J.R, J.standPool()).s.id;
         const nm = J.R.pick(['Безумный', 'Тихий', 'Кровавый', 'Неуловимый', 'Странный']) + ' ' + J.R.pick(['Джек', 'Карл', 'Лука', 'Ханс', 'Ким', 'Мигель', 'Омар']);
@@ -1255,7 +1255,7 @@
         return q;
       }
       case 'vampnest': {
-        const pos = W().randomWalkable(here.x, here.y, 60, J.R, { outside: true });
+        const pos = W().randOutside(here, 50);
         if (!pos) return null;
         Object.assign(q, { title: S.SIDE.vampnest, desc: 'Ночью здесь собираются вампир и его зомби. Уничтожь гнездо (лучше днём — но они выходят только ночью).', reward: 400 + lvl * 80, expires: exp(96), x: pos.x, y: pos.y });
         q.spawns = [{ tag: id + 'v', spec: { mob: 'vampire', lvl: lvl + 1, tag: id + 'v' }, at: pos, nightOnly: true }].concat([0, 1, 2].map((i) => ({ tag: id + 'z' + i, spec: { mob: 'zombie', lvl, tag: id + 'z' + i }, at: { x: pos.x + i - 1, y: pos.y + 1.5 }, nightOnly: true })));
@@ -1264,7 +1264,7 @@
       case 'treasure': {
         const item = Math.random() < 0.6 ? 'arrow' : 'stone_mask';
         const rr = J.R.pick(J.REGIONS.filter((r) => r.danger >= 2));
-        const pos = W().randomWalkable(rr.x, rr.y, rr.land * 0.8, J.R, { outside: true });
+        const pos = W().randOutside(rr, 50);
         if (!pos) return null;
         Object.assign(q, { title: `${S.SIDE.treasure}: ${J.ITEMS[item].name}`, desc: `Говорят, в районе «${rr.name}» видели ${J.ITEMS[item].name.toLowerCase()}. Её охраняют.`, reward: 0, expires: exp(96), x: pos.x, y: pos.y, item });
         q.items = [{ x: pos.x, y: pos.y, item, tag: id + 'i' }];
@@ -1282,7 +1282,7 @@
         const left = J.CORPSE_PARTS.filter((c) => !P().corpse.includes(c.id));
         if (!left.length) return null;
         const part = J.R.pick(left);
-        const pos = W().randomWalkable(reg('arizona').x, reg('arizona').y, 80, J.R, { outside: true });
+        const pos = W().randOutside(reg('arizona'), 80);
         if (!pos) return null;
         Object.assign(q, { title: `${S.SIDE.corpse}: ${part.name}`, desc: 'В пустыне Аризоны видели свечение. Это может быть часть Святого Трупа.', reward: 0, expires: exp(120), x: pos.x, y: pos.y });
         q.items = [{ x: pos.x, y: pos.y, item: 'corpse_part', meta: { part: part.id }, tag: id + 'p' }];
@@ -1437,14 +1437,10 @@
     for (const q of st.side) {
       let x = q.x, y = q.y;
       if (q.sideType === 'delivery') {
-        const b = W().buildings[q.to];
-        x = b.door.x + 0.5;
-        y = b.door.y + 1.5;
+        ({ x, y } = J.doorPt(W().buildings[q.to], 1.5));
       }
       if (q.sideType === 'cat' && J.P.hasItem(P(), 'cat')) {
-        const b = W().buildings[q.back];
-        x = b.door.x + 0.5;
-        y = b.door.y + 1.5;
+        ({ x, y } = J.doorPt(W().buildings[q.back], 1.5));
       }
       if (x !== undefined) out.push({ x, y, label: q.title, kind: 'side' });
     }
