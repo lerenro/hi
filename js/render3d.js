@@ -10,7 +10,32 @@
   const tmpC = new THREE.Color();
   const UP = new THREE.Vector3(0, 1, 0);
 
+  // ---------- Линейный цвет ----------
+  // Рендер идёт в линейном пространстве с выводом в sRGB и тональной кривой ACES. Все цвета игры заданы
+  // привычными sRGB-строками ('#aabbcc'), поэтому при разборе строки/числа переводим их в линейные.
+  // Явные setRGB(...) — уже линейные множители (тонировка, вспышки).
+  (function () {
+    const CP = THREE.Color.prototype, oHex = CP.setHex, oStyle = CP.setStyle;
+    let depth = 0;
+    CP.setHex = function (h) {
+      oHex.call(this, h);
+      if (!depth) this.convertSRGBToLinear();
+      return this;
+    };
+    CP.setStyle = function (st) {
+      depth++;
+      try {
+        oStyle.call(this, st);
+      } finally {
+        depth--;
+      }
+      if (!depth) this.convertSRGBToLinear();
+      return this;
+    };
+  })();
+
   // ---------- Сборщик геометрии с цветами вершин ----------
+  const GEO_NM = new THREE.Matrix3();
   class GB {
     constructor() {
       this.p = [];
@@ -41,17 +66,22 @@
       this.quad(p101, p100, p110, p111, col);
       this.quad(p000, p001, p011, p010, col);
     }
+    // добавить готовую геометрию с матрицей m (вычисления вручную — это горячий путь сборки персонажей)
     geo(g, m, col) {
       const gg = g.index ? g.toNonIndexed() : g;
-      const P = gg.attributes.position, N = gg.attributes.normal;
-      const nm = new THREE.Matrix3().getNormalMatrix(m);
-      const v = new THREE.Vector3();
-      for (let i = 0; i < P.count; i++) {
-        v.fromBufferAttribute(P, i).applyMatrix4(m);
-        this.p.push(v.x, v.y, v.z);
-        v.fromBufferAttribute(N, i).applyMatrix3(nm).normalize();
-        this.n.push(v.x, v.y, v.z);
-        this.c.push(col.r, col.g, col.b);
+      const P = gg.attributes.position.array, N = gg.attributes.normal.array;
+      const e = m.elements;
+      const nm = GEO_NM.getNormalMatrix(m).elements;
+      const p = this.p, n = this.n, c = this.c, cr = col.r, cg = col.g, cb = col.b;
+      for (let i = 0; i < P.length; i += 3) {
+        const x = P[i], y = P[i + 1], z = P[i + 2];
+        const w = 1 / (e[3] * x + e[7] * y + e[11] * z + e[15]);
+        p.push((e[0] * x + e[4] * y + e[8] * z + e[12]) * w, (e[1] * x + e[5] * y + e[9] * z + e[13]) * w, (e[2] * x + e[6] * y + e[10] * z + e[14]) * w);
+        const a = N[i], b = N[i + 1], d = N[i + 2];
+        let nx = nm[0] * a + nm[3] * b + nm[6] * d, ny = nm[1] * a + nm[4] * b + nm[7] * d, nz = nm[2] * a + nm[5] * b + nm[8] * d;
+        const l = 1 / (Math.sqrt(nx * nx + ny * ny + nz * nz) || 1);
+        n.push(nx * l, ny * l, nz * l);
+        c.push(cr, cg, cb);
       }
     }
     build() {
@@ -178,26 +208,49 @@
     textFx: [],
   });
 
+  // Пресеты качества: 0 — низкое (телефоны, слабые ПК), 1 — среднее, 2 — высокое
+  const PRESET = (R3.PRESETS = [
+    { name: 'Низкое', prCap: 1.0, aa: false, shadows: false, map: 512, soft: false, ext: 20, viewR: 1, fog: 62, charCast: 0, chunkMs: 2, aniso: 1, clouds: false, detail: false, waterN: false, pools: false, texSize: 128 },
+    { name: 'Среднее', prCap: 1.25, aa: 'auto', shadows: true, map: 1024, soft: false, ext: 24, viewR: 2, fog: 92, charCast: 4, chunkMs: 3, aniso: 4, clouds: true, detail: true, waterN: true, pools: true, texSize: 256 },
+    { name: 'Высокое', prCap: 1.75, aa: true, shadows: true, map: 2048, soft: true, ext: 30, viewR: 2, fog: 100, charCast: 12, chunkMs: 3, aniso: 8, clouds: true, detail: true, waterN: true, pools: true, texSize: 256 },
+  ]);
+  R3.preset = PRESET[1];
+  // Автовыбор по устройству: телефон или слабый ПК — низкое, иначе среднее
+  R3.autoQuality = function () {
+    const touch = 'ontouchstart' in window || (window.matchMedia && matchMedia('(pointer: coarse)').matches);
+    const cores = navigator.hardwareConcurrency || 4, mem = navigator.deviceMemory || 8;
+    if (touch || cores <= 2 || mem <= 2) return 0;
+    return 1;
+  };
+
   R3.init = function (canvas) {
-    const r = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    r.setPixelRatio(Math.min(window.devicePixelRatio || 1, R3.quality > 0 ? 1.75 : 1));
+    const P = (R3.preset = PRESET[R3.quality] || PRESET[1]);
+    // сглаживание задаётся только при создании контекста (смена — после перезапуска)
+    const aa = P.aa === true || (P.aa === 'auto' && (window.devicePixelRatio || 1) < 1.5);
+    R3.aa = aa;
+    const r = new THREE.WebGLRenderer({ canvas, antialias: aa, powerPreference: 'high-performance' });
+    r.setPixelRatio(Math.min(window.devicePixelRatio || 1, P.prCap));
+    r.outputEncoding = THREE.sRGBEncoding;
+    r.toneMapping = THREE.ACESFilmicToneMapping;
+    r.toneMappingExposure = 1.0;
     r.shadowMap.enabled = R3.shadows;
-    r.shadowMap.type = THREE.PCFSoftShadowMap;
+    r.shadowMap.type = P.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     R3.renderer = r;
     const scene = (R3.scene = new THREE.Scene());
     scene.background = new THREE.Color('#8fc8ff');
     scene.fog = new THREE.Fog('#8fc8ff', 40, 95);
-    const cam = (R3.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 400));
+    const cam = (R3.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 420));
     cam.position.set(0, 10, 10);
 
     R3.hemi = new THREE.HemisphereLight('#cfe8ff', '#5a6a3a', 0.65);
     scene.add(R3.hemi);
     const sun = (R3.sun = new THREE.DirectionalLight('#fff2d8', 0.9));
     sun.castShadow = R3.shadows;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(P.map, P.map);
     const sc = sun.shadow.camera;
-    sc.left = -30; sc.right = 30; sc.top = 30; sc.bottom = -30; sc.near = 1; sc.far = 140;
-    sun.shadow.bias = -0.0008;
+    sc.left = -P.ext; sc.right = P.ext; sc.top = P.ext; sc.bottom = -P.ext; sc.near = 1; sc.far = 160;
+    sun.shadow.bias = -0.0006;
+    sun.shadow.normalBias = 0.02;
     scene.add(sun);
     scene.add(sun.target);
     R3.lantern = new THREE.PointLight('#ffd9a0', 0, 14, 1.6);
@@ -228,14 +281,16 @@
       sp.push(Math.cos(a) * Math.cos(e) * 300, Math.sin(e) * 300, Math.sin(a) * Math.cos(e) * 300);
     }
     sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
-    R3.starMat = new THREE.PointsMaterial({ color: '#ffffff', size: 1.4, sizeAttenuation: false, fog: false, transparent: true, opacity: 0 });
+    R3.starMat = new THREE.PointsMaterial({ color: '#ffffff', size: 1.4, sizeAttenuation: false, fog: false, transparent: true, opacity: 0, depthWrite: false });
     R3.stars = new THREE.Points(sg, R3.starMat);
+    R3.stars.frustumCulled = false;
+    R3.stars.renderOrder = -9;
     scene.add(R3.stars);
-    // Луна и солнце
-    R3.moon = new THREE.Mesh(new THREE.SphereGeometry(9, 16, 12), new THREE.MeshBasicMaterial({ color: '#f4f0e0', fog: false }));
+    // Луна
+    R3.moon = new THREE.Mesh(new THREE.SphereGeometry(9, 16, 12), new THREE.MeshBasicMaterial({ color: '#f4f0e0', fog: false, toneMapped: false, depthWrite: false }));
+    R3.moon.renderOrder = -8;
     scene.add(R3.moon);
-    R3.sunDisc = new THREE.Mesh(new THREE.SphereGeometry(12, 16, 12), new THREE.MeshBasicMaterial({ color: '#fff6c8', fog: false }));
-    scene.add(R3.sunDisc);
+    R3.lookInit(); // небо, облака, детали земли, вода, свет фонарей (render_sky.js)
 
     R3.initParticles();
     R3.initWeather();
@@ -249,16 +304,54 @@
   R3.setQuality = function (q, shadows) {
     R3.quality = q;
     R3.shadows = shadows;
+    const P = (R3.preset = PRESET[q] || PRESET[1]);
+    R3.viewR = P.viewR;
+    R3.chunkMs = P.chunkMs;
+    R3.charCast = P.charCast;
     if (!R3.renderer) return;
-    R3.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q > 0 ? 1.75 : 1));
-    R3.renderer.shadowMap.enabled = shadows;
-    R3.sun.castShadow = shadows;
+    const r = R3.renderer, sun = R3.sun;
+    const on = shadows && P.shadows;
+    const type = P.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    // смена размера/типа карты теней: старую карту освобождаем, три.js создаст новую
+    if (sun.shadow.mapSize.x !== P.map || r.shadowMap.type !== type) {
+      if (sun.shadow.map) sun.shadow.map.dispose();
+      sun.shadow.map = null;
+      sun.shadow.mapSize.set(P.map, P.map);
+    }
+    r.shadowMap.enabled = on;
+    r.shadowMap.type = type;
+    sun.castShadow = on;
+    const sc = sun.shadow.camera;
+    sc.left = -P.ext; sc.right = P.ext; sc.top = P.ext; sc.bottom = -P.ext;
+    sc.updateProjectionMatrix();
+    R3.lookQuality(P);
     R3.scene.traverse((o) => {
       if (o.material) o.material.needsUpdate = true;
     });
-    R3.viewR = q > 0 ? 2 : 1;
-    R3.scene.fog.far = q > 0 ? 95 : 62;
+    R3.dyn.s = 1;
+    R3.applyPixelRatio();
+    R3.scene.fog.far = P.fog;
+  };
+  R3.applyPixelRatio = function () {
+    R3.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, R3.preset.prCap) * R3.dyn.s);
     R3.resize();
+  };
+  // Динамическое разрешение: если кадр долго держится тяжёлым — снижаем внутреннее разрешение (до 60 %)
+  R3.dyn = { s: 1, ema: 16.7, acc: 0, enabled: true };
+  R3.updateDynRes = function (ms) {
+    const d = R3.dyn;
+    if (!d.enabled || !(ms > 0) || ms > 250) return;
+    d.ema += (ms - d.ema) * 0.05;
+    d.acc += ms;
+    if (d.acc < 1000) return;
+    d.acc = 0;
+    let s = d.s;
+    if (d.ema > 21) s = Math.max(0.6, s - 0.1);
+    else if (d.ema < 14) s = Math.min(1, s + 0.05);
+    if (Math.abs(s - d.s) > 0.001) {
+      d.s = s;
+      R3.applyPixelRatio();
+    }
   };
 
   R3.resize = function () {
@@ -272,6 +365,7 @@
 
   // ---------- Чанки ----------
   R3.viewR = 2;
+  R3.queued = new Set();
   R3.updateChunks = function (px, py, force) {
     const w = J.G.world;
     const ccx = Math.floor(px / CH), ccy = Math.floor(py / CH);
@@ -285,7 +379,10 @@
         if (Math.abs(dx) === VR && Math.abs(dy) === VR && VR > 1) continue;
         const k = cx + ',' + cy;
         need.add(k);
-        if (!R3.chunks.has(k) && !R3.queue.some((q) => q.k === k) && !(R3.pending && R3.pending.k === k)) R3.queue.push({ k, cx, cy });
+        if (!R3.chunks.has(k) && !R3.queued.has(k) && !(R3.pending && R3.pending.k === k)) {
+          R3.queue.push({ k, cx, cy });
+          R3.queued.add(k);
+        }
       }
     for (const [k, c] of R3.chunks) {
       if (!need.has(k)) {
@@ -293,16 +390,26 @@
         if (Math.abs(cx - ccx) > VR + 1 || Math.abs(cy - ccy) > VR + 1) R3.dropChunk(k, c);
       }
     }
-    R3.queue = R3.queue.filter((q) => need.has(q.k));
-    R3.queue.sort((a, b) => Math.hypot(a.cx - ccx, a.cy - ccy) - Math.hypot(b.cx - ccx, b.cy - ccy));
-    if (R3.pending && !need.has(R3.pending.k)) R3.pending = null;
+    if (R3.queue.length) {
+      R3.queue = R3.queue.filter((q) => need.has(q.k) || (R3.queued.delete(q.k), false));
+      // сначала ближние и те, что впереди по взгляду камеры
+      const fx = Math.cos(R3.cam.yaw), fz = Math.sin(R3.cam.yaw); // камера смотрит вдоль (cos yaw, sin yaw)
+      const pri = (q) => {
+        const dx = q.cx + 0.5 - px / CH, dy = q.cy + 0.5 - py / CH, d = Math.hypot(dx, dy) || 1;
+        return d - 0.8 * Math.max(0, (dx * fx + dy * fz) / d);
+      };
+      R3.queue.sort((a, b) => pri(a) - pri(b));
+    }
+    if (R3.pending && !need.has(R3.pending.k)) R3.dropPending();
     // строим по частям в пределах бюджета времени на кадр
-    const budget = force ? 1e9 : R3.quality > 0 ? 5 : 3.5;
+    const budget = force ? 1e9 : R3.chunkMs || 3;
     const t0 = performance.now();
     while (R3.pending || R3.queue.length) {
       if (!R3.pending) {
         const q = R3.queue.shift();
-        R3.pending = { k: q.k, gen: R3.buildChunkGen(q.cx, q.cy) };
+        R3.queued.delete(q.k);
+        const group = new THREE.Group();
+        R3.pending = { k: q.k, group, gen: R3.buildChunkGen(q.cx, q.cy, group) };
       }
       const r = R3.pending.gen.next();
       if (r.done) {
@@ -325,16 +432,29 @@
   R3.clearAll = function () {
     for (const [k, c] of R3.chunks) R3.dropChunk(k, c);
     R3.queue = [];
+    R3.queued.clear();
+    R3.dropPending();
+  };
+  // недостроенный чанк больше не нужен: останавливаем генератор и освобождаем уже созданные геометрии
+  R3.dropPending = function () {
+    const pd = R3.pending;
+    if (!pd) return;
+    pd.gen.return();
+    pd.group.traverse((o) => {
+      if (o.geometry && !o.userData.shared) o.geometry.dispose();
+    });
     R3.pending = null;
   };
 
   const UNDER = { [0]: '#245a80', [1]: '#4f8aa0' };
   // Генератор: строит чанк по частям, отдавая управление между этапами (без фризов)
-  R3.buildChunkGen = function* (cx, cy) {
+  const TCC = {};
+  const tcol = (hex) => TCC[hex] || (TCC[hex] = new THREE.Color(hex)); // разобранные цвета клеток (без разбора строки на каждую клетку)
+  R3.buildChunkGen = function* (cx, cy, group) {
     const w = J.G.world;
     const T = J.T, O = J.O;
     const x0 = cx * CH, y0 = cy * CH;
-    const group = new THREE.Group();
+    group = group || new THREE.Group();
     // высоты вершин
     const hv = new Float32Array((CH + 1) * (CH + 1));
     for (let vy = 0; vy <= CH; vy++) for (let vx = 0; vx <= CH; vx++) hv[vy * (CH + 1) + vx] = w.vertH(x0 + vx, y0 + vy);
@@ -350,19 +470,19 @@
         if (t === T.ROAD && !(w.rid[i] && !(w.rid[i] & 0x8000) && w.net.edges[w.rid[i] - 1].cls === 'hw')) continue;
         if (URB[t] && t !== T.LAWN) continue;
         if (t === T.LAWN) {
-          c.set(J.TCOL[t]).offsetHSL(0, 0, (J.hash2(X, Y, 7) - 0.5) * 0.06);
+          c.copy(tcol(J.TCOL[t])).multiplyScalar(1 + (J.hash2(X, Y, 7) - 0.5) * 0.1);
           gb.tri([X, CB, Y + 1], [X + 1, CB, Y + 1], [X + 1, CB, Y], c);
           gb.tri([X, CB, Y + 1], [X + 1, CB, Y], [X, CB, Y], c);
           continue;
         }
         let hex = UNDER[t] || (t === T.ROAD ? '#77716a' : J.TCOL[t]);
         if (t === T.BRIDGE || t === T.DOCKWOOD) hex = UNDER[1];
-        c.set(hex);
+        c.copy(tcol(hex));
         const v = (J.hash2(X, Y, 7) - 0.5) * 0.1;
         if (t === T.ROCK || t === T.MESA) {
           const k = 0.85 + w.rock[Y * w.W + X] * 0.3 + v;
           c.multiplyScalar(k);
-        } else c.offsetHSL(0, 0, v);
+        } else c.multiplyScalar(1 + v * 1.6);
         const h00 = hv[ty * (CH + 1) + tx], h10 = hv[ty * (CH + 1) + tx + 1];
         const h01 = hv[(ty + 1) * (CH + 1) + tx], h11 = hv[(ty + 1) * (CH + 1) + tx + 1];
         const a = [X, h01, Y + 1], b = [X + 1, h11, Y + 1], cc = [X + 1, h10, Y], d = [X, h00, Y];
@@ -617,52 +737,7 @@
     R3.weatherPts.geometry.attributes.position.needsUpdate = true;
   };
 
-  // ---------- Освещение по времени ----------
-  R3.setTime = function (minutes, cx, cz, regionBiome, weather) {
-    const h = (minutes / 60) % 24;
-    // 0 — ночь, 1 — день
-    let day;
-    if (h >= 6.5 && h <= 18.5) day = 1;
-    else if (h > 18.5 && h < 20.5) day = 1 - (h - 18.5) / 2;
-    else if (h > 4.5 && h < 6.5) day = (h - 4.5) / 2;
-    else day = 0;
-    const dusk = Math.max(0, 1 - Math.abs(h - 19) / 1.5) + Math.max(0, 1 - Math.abs(h - 5.5) / 1.2);
-    const dayC = new THREE.Color(regionBiome === 'desert' || regionBiome === 'mesa' ? '#a8d4ff' : regionBiome === 'moor' ? '#a9b8c8' : '#8fc8ff');
-    const nightC = new THREE.Color('#0a0f26');
-    const duskC = new THREE.Color('#ff9a6a');
-    const sky = nightC.clone().lerp(dayC, day).lerp(duskC, Math.min(0.6, dusk * 0.6));
-    if (weather === 'rain' || weather === 'fog') sky.lerp(new THREE.Color('#7a8090'), 0.5 * day + 0.1);
-    if (weather === 'sand') sky.lerp(new THREE.Color('#d8b070'), 0.6);
-    R3.scene.background = sky;
-    R3.scene.fog.color = sky;
-    const baseFar = R3.quality > 0 ? 95 : 62;
-    R3.scene.fog.far = weather === 'fog' || weather === 'sand' ? baseFar * 0.45 : regionBiome === 'moor' ? baseFar * 0.7 : baseFar;
-    R3.scene.fog.near = R3.scene.fog.far * 0.35;
-    const ang = ((h - 6) / 24) * J.TAU; // 6:00 — восход
-    const sx = Math.cos(ang), sy = Math.sin(ang);
-    R3.sun.position.set(cx + sx * 50, Math.max(8, sy * 60), cz + 20);
-    R3.sun.target.position.set(cx, 0, cz);
-    R3.sun.intensity = 0.15 + 0.8 * day;
-    R3.sun.color.set(day > 0.5 ? '#fff2d8' : '#9fb4ff');
-    if (day < 0.35) R3.sun.position.set(cx - sx * 50, 40, cz - 20);
-    R3.hemi.intensity = 0.28 + 0.42 * day;
-    R3.hemi.color.set(day > 0.5 ? '#cfe8ff' : '#6a7ab8');
-    R3.starMat.opacity = Math.max(0, 1 - day * 2);
-    R3.stars.position.set(cx, 0, cz);
-    R3.moon.position.set(cx - sx * 260, Math.max(-40, -sy * 200 + 30), cz - 120);
-    R3.moon.visible = day < 0.6;
-    R3.sunDisc.position.set(cx + sx * 280, sy * 220, cz + 110);
-    R3.sunDisc.visible = day > 0.05 && sy > -0.05;
-    // окна и фонари ночью
-    const night = 1 - day;
-    R3.lightMat.color.setRGB(0.35 + 0.65 * night, 0.42 + 0.55 * night, 0.55 + 0.25 * night);
-    R3.bulbMat.color.setRGB(0.5 + 0.5 * night, 0.5 + 0.45 * night, 0.45 + 0.25 * night);
-    R3.lantern.intensity = night > 0.5 ? 0.9 * night : 0;
-    R3.water.position.x = Math.round(cx);
-    R3.water.position.z = Math.round(cz);
-    R3.dayLevel = day;
-    return day;
-  };
+  // Освещение по времени суток, небо, туман и вода — R3.setTime в render_sky.js
 
   // ---------- Персонажи ----------
   const matCache = (list, hex, opts) => {
@@ -670,11 +745,17 @@
     list.push(m);
     return m;
   };
+  // Общие (кэшированные) геометрии помечены userData.shared — dropView их не освобождает
+  const shareG = (g) => ((g.userData.shared = true), g);
   const boxG = {};
   const bgeo = (w, h, d) => {
     const k = w + ',' + h + ',' + d;
-    return boxG[k] || (boxG[k] = new THREE.BoxGeometry(w, h, d));
+    return boxG[k] || (boxG[k] = shareG(new THREE.BoxGeometry(w, h, d)));
   };
+  const geoC = {};
+  const cgeo = (k, mk) => geoC[k] || (geoC[k] = shareG(mk()));
+  const coneG = (r, h, s) => cgeo('c' + r + ',' + h + ',' + s, () => new THREE.ConeGeometry(r, h, s));
+  const sphG = (r, a, b) => cgeo('s' + r + ',' + a + ',' + b, () => new THREE.SphereGeometry(r, a, b));
   const mesh = (g, m, x, y, z) => {
     const o = new THREE.Mesh(g, m);
     o.position.set(x, y, z);
@@ -851,8 +932,8 @@
       case 'wolf':
         quad(0.9, 0.32, 0.3, 0.38);
         g.add(mesh(bgeo(0.26, 0.26, 0.34), c, 0, 0.82, 0.55));
-        g.add(mesh(new THREE.ConeGeometry(0.06, 0.15, 4), c, -0.08, 1.0, 0.5));
-        g.add(mesh(new THREE.ConeGeometry(0.06, 0.15, 4), c, 0.08, 1.0, 0.5));
+        g.add(mesh(coneG(0.06, 0.15, 4), c, -0.08, 1.0, 0.5));
+        g.add(mesh(coneG(0.06, 0.15, 4), c, 0.08, 1.0, 0.5));
         g.add(mesh(bgeo(0.06, 0.06, 0.4), c, 0, 0.75, -0.6));
         g.add(mesh(bgeo(0.05, 0.05, 0.02), matCache(mats, '#ffd84a', { emissive: '#ffd84a' }), -0.07, 0.86, 0.73));
         g.add(mesh(bgeo(0.05, 0.05, 0.02), matCache(mats, '#ffd84a', { emissive: '#ffd84a' }), 0.07, 0.86, 0.73));
@@ -864,34 +945,34 @@
       case 'croc':
         g.add(mesh(bgeo(0.5, 0.25, 1.6), c, 0, 0.18, 0));
         g.add(mesh(bgeo(0.36, 0.18, 0.6), c, 0, 0.18, 1.05));
-        g.add(mesh(new THREE.ConeGeometry(0.18, 0.9, 4), c, 0, 0.15, -1.2));
+        g.add(mesh(coneG(0.18, 0.9, 4), c, 0, 0.15, -1.2));
         g.children[g.children.length - 1].rotation.x = -Math.PI / 2;
         break;
       case 'scorpion':
         g.add(mesh(bgeo(0.4, 0.15, 0.55), c, 0, 0.15, 0));
         g.add(mesh(bgeo(0.1, 0.4, 0.1), c, 0, 0.4, -0.3));
-        g.add(mesh(new THREE.ConeGeometry(0.06, 0.15, 4), d, 0, 0.65, -0.2));
+        g.add(mesh(coneG(0.06, 0.15, 4), d, 0, 0.65, -0.2));
         g.add(mesh(bgeo(0.15, 0.08, 0.2), c, -0.25, 0.15, 0.35));
         g.add(mesh(bgeo(0.15, 0.08, 0.2), c, 0.25, 0.15, 0.35));
         break;
       case 'frog':
         g.add(mesh(bgeo(0.36, 0.22, 0.4), c, 0, 0.12, 0));
-        g.add(mesh(new THREE.SphereGeometry(0.07, 6, 4), matCache(mats, '#ffffff'), -0.1, 0.27, 0.12));
-        g.add(mesh(new THREE.SphereGeometry(0.07, 6, 4), matCache(mats, '#ffffff'), 0.1, 0.27, 0.12));
+        g.add(mesh(sphG(0.07, 6, 4), matCache(mats, '#ffffff'), -0.1, 0.27, 0.12));
+        g.add(mesh(sphG(0.07, 6, 4), matCache(mats, '#ffffff'), 0.1, 0.27, 0.12));
         break;
       case 'bug':
-        g.add(mesh(new THREE.SphereGeometry(0.13, 8, 6), c, 0, 0.6, 0));
+        g.add(mesh(sphG(0.13, 8, 6), c, 0, 0.6, 0));
         g.add(mesh(bgeo(0.36, 0.02, 0.12), matCache(mats, '#ffffff', { transparent: true, opacity: 0.6 }), 0, 0.7, 0));
         break;
       case 'sha':
         g.add(mesh(bgeo(0.5, 0.3, 0.6), c, 0, 0.25, 0));
-        g.add(mesh(new THREE.SphereGeometry(0.22, 8, 6), matCache(mats, '#e8e8f0'), 0, 0.5, 0.15));
+        g.add(mesh(sphG(0.22, 8, 6), matCache(mats, '#e8e8f0'), 0, 0.5, 0.15));
         g.add(mesh(bgeo(0.6, 0.12, 0.66), d, 0, 0.08, 0));
         break;
       case 'raptor':
         g.add(mesh(bgeo(0.36, 0.4, 0.9), c, 0, 0.85, 0));
         g.add(mesh(bgeo(0.28, 0.26, 0.5), c, 0, 1.15, 0.6));
-        g.add(mesh(new THREE.ConeGeometry(0.12, 0.8, 4), c, 0, 0.85, -0.75));
+        g.add(mesh(coneG(0.12, 0.8, 4), c, 0, 0.85, -0.75));
         g.children[g.children.length - 1].rotation.x = -Math.PI / 2;
         for (const x of [-0.12, 0.12]) {
           const lg = new THREE.Group();
@@ -908,35 +989,46 @@
         g.add(mesh(bgeo(0.22, 0.25, 0.5), c, 0, 1.85, 0.95));
         break;
       default:
-        g.add(mesh(new THREE.SphereGeometry(0.3, 8, 6), c, 0, 0.4, 0));
+        g.add(mesh(sphG(0.3, 8, 6), c, 0, 0.4, 0));
     }
     return { group: g, mats, kind: 'creature', legs, baseColors: mats.map((m) => m.color.clone()) };
   };
 
+  // тень от персонажа включается/выключается по рейтингу близости (см. Game.update → R3.rankCasters)
+  const setCast = (v, on) => {
+    v.cast = on;
+    v.group.traverse((o) => {
+      if (o.isMesh) o.castShadow = on;
+    });
+  };
   R3.makeView = function (e) {
     let v;
     if (e.look) v = R3.buildHuman(e.look, e.scale || 1);
     else v = R3.buildCreature(e.model, e.color);
-    v.group.traverse((o) => {
-      if (o.isMesh) o.castShadow = true;
-    });
+    setCast(v, !!(e.isPlayer || e._cast));
     R3.scene.add(v.group);
     v.phase = Math.random() * 6;
     v.face = e.face || 0;
     if (!v.baseColors) v.baseColors = v.mats.map((m) => m.color.clone());
     if (e.mount) {
       v.horse = R3.buildCreature('horse', '#7a4a2a');
+      setCast(v.horse, true);
       R3.scene.add(v.horse.group);
     }
     return v;
   };
 
+  // убрать вид из сцены и освободить его собственные геометрии и материалы (общие кэшированные — не трогаем)
+  const disposeView = (R3.disposeView = (v) => {
+    if (!v) return;
+    R3.scene.remove(v.group);
+    v.group.traverse((o) => {
+      if (o.isMesh && o.geometry && !o.geometry.userData.shared) o.geometry.dispose();
+    });
+    v.mats.forEach((m) => m.dispose());
+  });
   R3.dropView = function (e) {
-    const rm = (v) => {
-      if (!v) return;
-      R3.scene.remove(v.group);
-      v.mats.forEach((m) => m.dispose());
-    };
+    const rm = disposeView;
     if (e.view) {
       rm(e.view);
       if (e.view.horse) rm(e.view.horse);
@@ -950,15 +1042,51 @@
     }
   };
 
+  // Рейтинг теней: тень отбрасывают игрок и N ближайших персонажей (N из пресета), не дальше 18 м
+  const castList = [];
+  R3.rankCasters = function (ents, px, py) {
+    castList.length = 0;
+    for (const e of ents) {
+      e._cast = false;
+      if (e.isPlayer) continue;
+      const dx = e.x - px, dy = e.y - py;
+      e._d2 = dx * dx + dy * dy;
+      if (e._d2 < 324) castList.push(e);
+    }
+    const n = R3.shadows && R3.preset.shadows ? R3.charCast : 0;
+    if (!n || !castList.length) return;
+    castList.sort((a, b) => a._d2 - b._d2);
+    for (let i = 0; i < castList.length && i < n; i++) castList[i]._cast = true;
+  };
+
   // Обновление вида сущности
+  R3.viewBudget = 99;
   R3.updateView = function (e, dt, t, playerHasStand) {
     const w = J.G.world;
+    // дальше тумана — не рисуем и не анимируем
+    const cdx = e.x - R3.cam.tx, cdy = e.y - R3.cam.tz, d2 = cdx * cdx + cdy * cdy;
+    const far = R3.scene.fog.far + 5;
+    const important = e.isPlayer || e.storyTag || e.boss;
+    if (!important && d2 > far * far) {
+      if (e.view) e.view.group.visible = false;
+      if (e.view && e.view.horse) e.view.horse.group.visible = false;
+      if (e.standView) e.standView.group.visible = false;
+      return;
+    }
     if (!e.view || e.view.forHorse !== !!e.mount) {
+      // не больше одного нового второстепенного персонажа за кадр — без рывков при появлении толпы
+      if (!e.view && !important) {
+        if (R3.viewBudget <= 0) return;
+        R3.viewBudget--;
+      }
       if (e.view) R3.dropView(e);
       e.view = R3.makeView(e);
       e.view.forHorse = !!e.mount;
     }
     const v = e.view;
+    const wantCast = !!(e.isPlayer || e._cast);
+    if (v.cast !== wantCast) setCast(v, wantCast);
+    if (v.horse) v.horse.group.visible = true;
     const gy = e.onWater ? -0.1 : w.groundY(e.x, e.y);
     const ride = e.mount ? 0.95 : 0;
     v.group.position.set(e.x, gy + (e.z || 0) + ride, e.y);
@@ -968,7 +1096,7 @@
     const spd = Math.hypot(e.vx || 0, e.vy || 0);
     if (spd > 0.2) v.phase += dt * (4 + spd * 1.6);
     const sw = spd > 0.2 ? Math.sin(v.phase) : 0;
-    if (v.legL) R3.animateRig(v, e, sw, spd, t, dt);
+    if (v.legL && (d2 < 2025 || important)) R3.animateRig(v, e, sw, spd, t, dt);
     if (v.legs) v.legs.forEach((l, i) => (l.rotation.x = (i % 2 ? sw : -sw) * 0.6));
     if (v.kind === 'creature' && e.model === 'bug') v.group.position.y += 0.3 + Math.sin(t * 8 + v.phase) * 0.1;
     // смерть
@@ -1008,10 +1136,7 @@
     if (showStand) {
       const sd = J.STANDS[e.stand.id];
       if (!e.standView || e.standView.id !== sd.id) {
-        if (e.standView) {
-          R3.scene.remove(e.standView.group);
-          e.standView.mats.forEach((m) => m.dispose());
-        }
+        if (e.standView) disposeView(e.standView);
         e.standView = R3.buildStand(sd);
         e.standView.id = sd.id;
         e.standView.pos = new THREE.Vector3(e.x, gy + 0.3, e.y);
@@ -1063,8 +1188,7 @@
     } else if (e.standView) {
       e.standView.group.visible = false;
       if (!e.standOut || e.dead) {
-        R3.scene.remove(e.standView.group);
-        e.standView.mats.forEach((m) => m.dispose());
+        disposeView(e.standView);
         e.standView = null;
       }
     }
@@ -1361,6 +1485,7 @@
   };
 
   R3.render = function () {
+    if (R3.sky) R3.sky.position.copy(R3.camera.position);
     R3.renderer.render(R3.scene, R3.camera);
   };
 })();

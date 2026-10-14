@@ -5,16 +5,15 @@
   const R3 = J.R3;
   const GB = J.GB;
   const col = (h) => new THREE.Color(h);
-  const M4 = (x, y, z, sx = 1, sy = 1, sz = 1, rx = 0, ry = 0, rz = 0) => {
-    const m = new THREE.Matrix4();
-    m.compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(sx, sy, sz));
-    return m;
-  };
+  // матрица детали (общие временные объекты: GB.geo сразу копирует вершины)
+  const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _e = new THREE.Euler();
+  const M4 = (x, y, z, sx = 1, sy = 1, sz = 1, rx = 0, ry = 0, rz = 0) => _m.compose(_p.set(x, y, z), _q.setFromEuler(_e.set(rx, ry, rz)), _s.set(sx, sy, sz));
   // Общие примитивы (без индексов — для быстрого копирования)
   const NI = (g) => (g.index ? g.toNonIndexed() : g);
   const PR = {
     sph: NI(new THREE.SphereGeometry(1, 12, 8)),
-    sphLo: NI(new THREE.SphereGeometry(1, 8, 5)),
+    sphMid: NI(new THREE.SphereGeometry(1, 8, 6)),
+    sphLo: NI(new THREE.SphereGeometry(1, 6, 4)),
     cap: NI(new THREE.SphereGeometry(1, 14, 7, 0, Math.PI * 2, 0, Math.PI * 0.56)),
     box: NI(new THREE.BoxGeometry(1, 1, 1)),
     cone: NI(new THREE.ConeGeometry(1, 1, 8)),
@@ -25,10 +24,14 @@
   const tcache = {};
   const taper = (rt, rb) => {
     const k = rt.toFixed(3) + '/' + rb.toFixed(3);
-    return tcache[k] || (tcache[k] = NI(new THREE.CylinderGeometry(rt, rb, 1, 10, 1)));
+    return tcache[k] || (tcache[k] = NI(new THREE.CylinderGeometry(rt, rb, 1, 8, 1)));
   };
   // эллипсоид
-  const ell = (gb, c, x, y, z, rx, ry, rz, ax = 0, ay = 0, az = 0, lo) => gb.geo(lo ? PR.sphLo : PR.sph, M4(x, y, z, rx, ry, rz, ax, ay, az), c);
+  // мелкие детали — грубее (меньше треугольников и быстрее сборка), крупные — гладкие
+  const ell = (gb, c, x, y, z, rx, ry, rz, ax = 0, ay = 0, az = 0, lo) => {
+    const r = Math.max(rx, ry, rz);
+    gb.geo(lo || r < 0.03 ? PR.sphLo : r < 0.08 ? PR.sphMid : PR.sph, M4(x, y, z, rx, ry, rz, ax, ay, az), c);
+  };
   // сужающийся цилиндр от y0 вниз на длину len
   const tube = (gb, c, x, y0, z, rt, rb, len, sz = 1, ax = 0, az = 0) => gb.geo(taper(rt, rb), M4(x, y0 - len / 2, z, 1, len, sz, ax, 0, az), c);
   const box = (gb, c, x, y, z, sx, sy, sz, ax = 0, ay = 0, az = 0) => gb.geo(PR.box, M4(x, y, z, sx, sy, sz, ax, ay, az), c);
@@ -54,10 +57,13 @@
       b.arm *= 0.84;
       b.leg *= 0.95;
     }
+    // геометрии каркаса общие для всех персонажей этой формы — помечаем, чтобы их никогда не освобождали
     const one = (fn) => {
       const gb = new GB();
       fn(gb);
-      return gb.build();
+      const g = gb.build();
+      g.userData.shared = !!spec.cacheKey;
+      return g;
     };
     const G = {
       b,
@@ -74,7 +80,10 @@
     if (spec.extra) {
       const gb = new GB();
       spec.extra(gb);
-      if (!gb.empty) G.extra = gb.build();
+      if (!gb.empty) {
+        G.extra = gb.build();
+        G.extra.userData.shared = !!spec.cacheKey;
+      }
     }
     if (spec.cacheKey) geoCache.set(spec.cacheKey, G);
     return G;

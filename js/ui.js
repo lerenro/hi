@@ -715,7 +715,8 @@
         <p class="muted small">Игра сохраняется в этом браузере, а также автоматически при сне. Сохраняться можно где угодно.</p>
       </div><div>
         <h3>Настройки</h3>
-        <label class="opt"><span>Графика</span><select id="o-q"><option value="1">Высокая</option><option value="0">Низкая (быстрее)</option></select></label>
+        <label class="opt"><span>Качество графики</span><select id="o-q"><option value="2">Высокое</option><option value="1">Среднее</option><option value="0">Низкое (быстрее)</option></select></label>
+        <p class="muted small" id="o-qnote">${J.R3.preset.name} качество. Сглаживание меняется после перезапуска игры; при тяжёлых кадрах разрешение понижается само.</p>
         <label class="opt"><span>Тени</span><input type="checkbox" id="o-sh"></label>
         <label class="opt"><span>Чувствительность мыши</span><input type="range" id="o-sens" min="0.3" max="2.5" step="0.1"></label>
         <label class="opt"><span>Звук</span><input type="checkbox" id="o-snd"></label>
@@ -1431,12 +1432,14 @@
     if (!UI.pv) {
       const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true });
       r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+      r.outputEncoding = THREE.sRGBEncoding; // цвета линейные, как в основном рендере
+      r.toneMapping = THREE.ACESFilmicToneMapping;
       const sc = new THREE.Scene();
       const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
       cam.position.set(0, 1.35, 6);
       cam.lookAt(0, 1.12, 0);
-      sc.add(new THREE.HemisphereLight('#ffffff', '#6a4a8a', 0.9));
-      const dl = new THREE.DirectionalLight('#fff2d8', 0.8);
+      sc.add(new THREE.HemisphereLight('#ffffff', '#6a4a8a', 1.1));
+      const dl = new THREE.DirectionalLight('#fff2d8', 1.6);
       dl.position.set(2, 4, 3);
       sc.add(dl);
       const base = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1, 0.12, 32), new THREE.MeshLambertMaterial({ color: '#2a1f3a' }));

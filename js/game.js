@@ -215,6 +215,7 @@
 
   // ---------- Настройки ----------
   Game.settings = Object.assign({ quality: 1, shadows: true, sens: 1, sound: true, invert: false, lock: true, follow: false }, J.store.get(SET_KEY) || {});
+  if (!J.store.get(SET_KEY)) Game.settings.quality = J.R3.autoQuality(); // первый запуск: качество по устройству
   Game.applySettings = function () {
     J.store.set(SET_KEY, Game.settings);
     J.R3.setQuality(Game.settings.quality, Game.settings.shadows);
@@ -224,11 +225,6 @@
 
   // ---------- Запуск ----------
   Game.init = function () {
-    const touch = 'ontouchstart' in window;
-    if (touch && !J.store.get(SET_KEY)) {
-      Game.settings.quality = 0;
-      Game.settings.shadows = false;
-    }
     J.R3.quality = Game.settings.quality;
     J.R3.shadows = Game.settings.shadows;
     J.R3.init(document.getElementById('game'));
@@ -712,6 +708,7 @@
     requestAnimationFrame(Game.loop);
     let dt = (now - Game.last) / 1000;
     Game.last = now;
+    if (Game.state === 'play') J.R3.updateDynRes(dt * 1000); // динамическое разрешение по настоящей длине кадра
     if (!(dt > 0)) dt = 0.016;
     dt = Math.min(dt, 0.05);
     try {
@@ -822,6 +819,8 @@
     const rg = G.world.regionAt(p.x, p.y);
     R3.updateChunks(p.x, p.y);
     const hasStand = !!p.stand;
+    R3.viewBudget = 1;
+    R3.rankCasters(G.ents, p.x, p.y);
     for (const e of G.ents) R3.updateView(e, blocking ? 0 : dt, G.t, hasStand);
     if (!blocking) {
       R3.updateParticles(dt);

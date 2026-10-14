@@ -377,8 +377,10 @@
     const gl2 = R3.renderer.capabilities.isWebGL2;
     tex.minFilter = gl2 ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
     tex.generateMipmaps = gl2;
-    tex.anisotropy = 4;
+    tex.anisotropy = Math.min(R3.preset.aniso, R3.renderer.capabilities.getMaxAnisotropy());
+    tex.encoding = THREE.sRGBEncoding;
     const etex = new THREE.CanvasTexture(ec);
+    etex.encoding = THREE.sRGBEncoding;
     etex.minFilter = gl2 ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
     etex.generateMipmaps = gl2;
     return { tex, etex, gl2 };
@@ -392,7 +394,8 @@
     draw(c.getContext('2d'), w, h);
     const t = new THREE.CanvasTexture(c);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = 4;
+    t.anisotropy = Math.min(R3.preset.aniso, R3.renderer.capabilities.getMaxAnisotropy());
+    t.encoding = THREE.sRGBEncoding;
     return t;
   };
   const noiseFill = (g, w, h, base, amp, seed) => {
@@ -461,8 +464,12 @@
           '#include <emissivemap_fragment>',
           `vec4 emissiveColor = ${samp('emissiveMap')};
           emissiveColor.rgb = emissiveMapTexelToLinear(emissiveColor).rgb;
-          float litW = step(0.38, fract(sin(dot(floor(vUv) + vCell * 61.0, vec2(12.9898, 78.233))) * 43758.5453));
-          totalEmissiveRadiance *= emissiveColor.rgb * litW;`
+          vec2 wId = floor(vUv) + floor(vCell * 8.0 + 0.5) * 61.0; // целые числа: интерполяция varying не даёт шума
+          float litW = step(0.52, fract(sin(dot(wId, vec2(12.9898, 78.233))) * 43758.5453));
+          // у каждого окна своя яркость и оттенок (тёплые лампы, холодный свет экранов), сверху светлее
+          float wr = fract(sin(dot(wId, vec2(39.3468, 11.135))) * 24634.6345);
+          vec3 wt = mix(vec3(1.0, 0.86, 0.66), vec3(0.78, 0.88, 1.0), step(0.72, wr));
+          totalEmissiveRadiance *= emissiveColor.rgb * litW * (0.3 + 0.7 * wr) * wt * (0.7 + 0.3 * fract(vUv.y));`
         );
     };
     if (!atlas.gl2) facade.extensions = { derivatives: true };
@@ -630,6 +637,7 @@
     asphalt: col('#45464c'), parking: col('#55565c'), sidewalk: col('#c4c0b6'), pave: col('#b8b3a8'), plaza: col('#e0d4bc'), building: col('#a8a49a'),
     curb: col('#d2cfc6'), curbTop: col('#e0ddd4'), white: col('#f2f2ee'), yellow: col('#f2c230'), seawall: col('#9a968e'),
   };
+  const WHITE1 = { r: 1, g: 1, b: 1 };
   const USA_LINES = { newyork: 1, florida: 1, sandiego: 1, arizona: 1, mexico: 1 };
 
   // ---------- Чанк города: земля, бордюры, разметка, шоссе, мебель, здания ----------
@@ -637,7 +645,7 @@
     const x0 = cx * CH, y0 = cy * CH, X1 = x0 + CH, Y1 = y0 + CH;
     const W = w.W, edges = w.net.edges;
     const asph = new GBU(false), pav = new GBU(false);
-    const S = new J.GB(), Lt = new J.GB(), MK = new J.GB();
+    const S = new J.GB(), Lt = new J.GB(), MK = new J.GB(), PL = new GBU(false);
     const c = new THREE.Color();
     // 1) асфальт, плитка, бордюры
     for (let ty = 0; ty < CH; ty++) {
@@ -725,7 +733,13 @@
         const od = w.od[i];
         const gy = o === O.FOUNTAIN ? CB : w.groundY(X + 0.5, Y + 0.5);
         const tint = o === O.STREETTREE || o === O.HEDGE ? 0.85 + J.hash2(X, Y, 55) * 0.3 : 1;
-        addProp(S, Lt, pr, X + 0.5 + DX[od] * pr.edge, gy, Y + 0.5 + DY[od] * pr.edge, od, tint);
+        const px = X + 0.5 + DX[od] * pr.edge, pz = Y + 0.5 + DY[od] * pr.edge;
+        addProp(S, Lt, pr, px, gy, pz, od, tint);
+        // пятно света под фонарём (видно только ночью)
+        if (o === O.LAMP) {
+          const hx = px + 1.7 * RS[od], hz = pz + 1.7 * RC[od], r = 4.6, yy = Math.max(RH, CB) + 0.03;
+          PL.quad([hx - r, yy, hz + r], [hx + r, yy, hz + r], [hx + r, yy, hz - r], [hx - r, yy, hz - r], WHITE1, [0, 1], [1, 1], [1, 0], [0, 0]);
+        }
       }
       if ((ty & 7) === 7) yield;
     }
@@ -776,6 +790,7 @@
     yield;
     add(B, R3.cmat.facade, true, true);
     add(Lt, R3.lightMat, false, false);
+    if (R3.poolMat) add(PL, R3.poolMat, false, false);
   };
 
   // ---------- Разметка городской улицы (оси выровнены по клеткам) ----------
