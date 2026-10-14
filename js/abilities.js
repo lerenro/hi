@@ -28,25 +28,40 @@
     const anim = (type, t) => (u.anim = { type, t, max: t, stand: !extra || !extra.noStand });
     switch (ab.kind) {
       case 'rush': {
-        u.channel = { type: 'rush', t: ab.dur, tick: 0, dmg: ab.dmg * pw, range: ab.range || 1.6, ang, cry: (extra && extra.cry) || cryOf(u), cryT: 0, kind };
+        // раш: удержание клавиши продлевает, в конце — добивающий удар
+        u.channel = { type: 'rush', t: ab.dur, max: ab.dur, tick: 0, dmg: ab.dmg * pw, range: ab.range || 1.6, ang, cry: (extra && extra.cry) || cryOf(u), kind, key: (extra && extra.key) || null, ext: 0, maxExt: ab.dur * 0.9, mag: 0.25, fin: 0, n: 0 };
         anim('rush', ab.dur);
+        u.guard = false;
+        u.chg = null;
+        if (J.Fx) J.Fx.rushStart(u, u.channel.cry);
+        if (J.Cb) J.Cb.threat(u, 0.15, 'rush');
         return true;
       }
       case 'strike': {
-        anim('heavy', 0.35);
         const hits = ab.hits || 1;
-        let n = 0;
-        for (let i = 0; i < hits; i++) n += J.hitArc(u, ang, ab.range || 1.8, ab.arc || 1.4, ab.dmg * pw, { knock: ab.knock || 3, stun: ab.stun, fx: ab.fx, pierceDef: ab.pierceDef, kind });
-        const fx = u.x + Math.cos(ang) * 1.2, fy = u.y + Math.sin(ang) * 1.2;
-        J.R3.flash(fx, fy, 0.9, ab.color || standColor(u), 0.2);
-        if (n) {
-          J.R3.cam.shake = u.isPlayer ? 0.12 : 0;
-          J.R3.text(fx, fy, J.R.pick(['ДОГОН!', 'БАМ!', 'ГОН!', 'ДОКО!']), 'tsfx', 0.6, 1.6);
+        const strong = (ab.knock || 3) >= 6;
+        const go = () => {
+          const tg = aim.target && !aim.target.dead ? aim.target : null;
+          const a = u.isPlayer ? J.P.aim(u, ab.range || 1.8).ang : tg ? Math.atan2(tg.y - u.y, tg.x - u.x) : ang;
+          u.face = a;
+          let n = 0;
+          for (let i = 0; i < hits; i++) n += J.hitArc(u, a, ab.range || 1.8, ab.arc || 1.4, ab.dmg * pw, { knock: ab.knock || 3, stun: ab.stun, fx: ab.fx, pierceDef: ab.pierceDef, kind, melee: true, finisher: strong, gdmg: strong ? 70 : 45 });
+          const fx = u.x + Math.cos(a) * 1.2, fy = u.y + Math.sin(a) * 1.2;
+          J.R3.flash(fx, fy, 0.9, ab.color || standColor(u), 0.2);
+          if (u.isPlayer && !n) u.whiff = g.t;
+        };
+        // игрок: замах и удар в момент касания; ИИ уже показал замах (Cb.aiCastTele)
+        if (u.isPlayer && J.Cb) J.Cb.attack(u, { clip: 'heavy', type: 'heavy', dur: 0.5, at: 0.22, fn: go, stand: !extra || !extra.noStand, tg: aim.target, kind: 'heavy', step: 0.3 });
+        else {
+          anim('heavy', 0.35);
+          go();
         }
         return true;
       }
       case 'shoot': {
         anim('cast', 0.3);
+        if (J.Cb) J.Cb.threat(u, 0.12, 'shot');
+        if (J.Fx && J.Fx.ready && u.isPlayer) J.Fx.star(u.x + Math.cos(ang) * 0.9, g.world.groundY(u.x, u.y) + 1.25, u.y + Math.sin(ang) * 0.9, 0.5, ab.color || '#ffffff');
         const n = ab.n || 1;
         const spread = deg(ab.spread || 0);
         for (let i = 0; i < n; i++) {
@@ -73,6 +88,10 @@
         }
         const x1 = u.x + Math.cos(ang) * L, y1 = u.y + Math.sin(ang) * L;
         J.R3.beam(u.x, u.y, x1, y1, ab.width || 0.35, ab.color || standColor(u), 0.35);
+        if (J.Fx && J.Fx.ready && J.Fx.nearPlayer(u, null, 25)) {
+          J.Fx.sparks(x1, g.world.groundY(x1, y1) + 1.1, y1, 14, ang + Math.PI, ab.color || standColor(u), 6);
+          if (u.isPlayer) J.Fx.word('ビシュウウ', u.x + Math.cos(ang) * 2, u.y + Math.sin(ang) * 2, g.world.groundY(u.x, u.y) + 1.6, 'mid', ab.color || '#ffffff');
+        }
         for (const o of g.ents) {
           if (o.dead || !J.hostile(u, o)) continue;
           const dx = o.x - u.x, dy = o.y - u.y;
@@ -101,8 +120,9 @@
           J.R3.ring(cx, cy, ab.radius * 1.1, ab.color || standColor(u), 0.5);
           J.R3.flash(cx, cy, ab.radius * 0.8, ab.color || standColor(u), 0.35, 0.6);
           J.R3.burst(cx, cy, 0.6, ab.color || standColor(u), 24, ab.radius * 1.5, 0.6);
-          J.hitCircle(u, cx, cy, ab.radius, ab.dmg * pw, { fx: ab.fx, kind, knock: ab.knock || 3 });
+          J.hitCircle(u, cx, cy, ab.radius, ab.dmg * pw, { fx: ab.fx, kind, knock: ab.knock || 3, gdmg: 40 });
           if (ab.radius > 3) J.R3.cam.shake = 0.2;
+          if (J.Fx && J.Fx.ready) J.Fx.shock(cx, cy, Math.min(1.5, ab.radius / 3));
         };
         if (ab.delay) {
           J.R3.ring(cx, cy, ab.radius, '#ffffff', ab.delay);
@@ -117,6 +137,7 @@
         if (ab.invuln) u.st.invuln = Math.max(u.st.invuln || 0, dist / sp + 0.05);
         if (ab.ghost) u.st.ghost = dist / sp + 0.05;
         anim('heavy', dist / sp);
+        if (J.Fx && J.Fx.ready) J.Fx.dodge(u, ang);
         return true;
       }
       case 'blink': {
@@ -145,9 +166,15 @@
         }
         if (!ok) return false;
         J.R3.burst(u.x, u.y, 1, standColor(u), 16, 3, 0.5);
+        if (J.Fx && J.Fx.ready) J.Fx.star(u.x, g.world.groundY(u.x, u.y) + 1.1, u.y, 1.2, standColor(u));
         u.x = tx;
         u.y = ty;
         J.R3.burst(u.x, u.y, 1, standColor(u), 16, 3, 0.5);
+        if (J.Fx && J.Fx.ready && J.Fx.nearPlayer(u, null, 20)) {
+          J.Fx.star(u.x, g.world.groundY(u.x, u.y) + 1.1, u.y, 1.2, standColor(u));
+          J.Fx.word('シュン', u.x, u.y, g.world.groundY(u.x, u.y) + 2, 'mid', '#ffffff');
+          J.Sfx && J.Sfx.whoosh(0.15, false, 0.1);
+        }
         if (aim.target) u.face = Math.atan2(aim.target.y - u.y, aim.target.x - u.x);
         return true;
       }
@@ -171,11 +198,17 @@
       case 'timestop': {
         let dur = ab.dur;
         if (u.isPlayer && u.stand) dur += Math.max(0, u.stand.lvl - 6) * 0.3;
-        g.timestop = { by: u, t: dur, max: dur };
+        // вступление (сфера инверсии) не съедает время остановки
+        g.timestop = { by: u, t: dur, max: dur, intro: 0.95 };
         const isWorld = u.stand && (u.stand.id === 'the_world');
         J.R3.text(u.x, u.y, isWorld ? 'ZA WARUDO!' : 'ВРЕМЯ, ОСТАНОВИСЬ!', 'tbig', 1.6, 2.6);
-        J.R3.ring(u.x, u.y, 18, '#ffffff', 0.8);
-        J.UI.timestopFx(true);
+        u.anim = { type: 'pose', t: 0.9, max: 0.9 };
+        u.channel = null;
+        if (J.Fx && J.Fx.ready) J.Fx.timestopIntro(u, dur);
+        else {
+          J.R3.ring(u.x, u.y, 18, '#ffffff', 0.8);
+          J.UI.timestopFx(true);
+        }
         // игрок со стендом, умеющим останавливать время, может двигаться
         const pl = g.player;
         if (u !== pl && pl.stand) {
@@ -196,6 +229,7 @@
         u.sv.haste = 0.6;
         g.timeskip = { by: u, t: ab.dur, max: ab.dur };
         J.R3.text(u.x, u.y, 'КИНГ КРИМСОН!', 'tbig', 1.4, 2.6);
+        if (J.Fx && J.Fx.ready) J.Fx.timeskip(u, true);
         for (const o of g.ents) if (o.ai && J.hostile(u, o)) o.ai.blind = ab.dur;
         if (u.isPlayer) J.UI.timeskipFx(true);
         else {
@@ -215,6 +249,7 @@
           fn: () => {
             g.timeskip = null;
             J.UI.timeskipFx(false);
+            if (J.Fx && J.Fx.ready) J.Fx.timeskip(u, false);
             u.st.power = 2.5;
             u.sv.power = 0.6;
           },
@@ -233,6 +268,11 @@
         u.hp = Math.max(u.hp, snap.hp);
         for (const k of ['stun', 'freeze', 'poison', 'burn', 'bleed', 'age', 'heavy', 'slow', 'sleep', 'book', 'root']) u.st[k] = 0;
         J.R3.text(u.x, u.y, ab.dmg ? 'BITES THE DUST' : 'ПЕРЕМОТКА', 'tbig', 1.4, 2.4);
+        if (J.Fx && J.Fx.ready && J.Fx.nearPlayer(u, null, 25)) {
+          J.Fx.word('カチッ', u.x, u.y, g.world.groundY(u.x, u.y) + 2, 'big', '#ff9ad8');
+          J.Sfx && J.Sfx.click();
+          J.Sfx && J.Sfx.whoosh(0.4, false, 0.12);
+        }
         if (ab.dmg) {
           J.R3.flash(ox, oy, ab.radius, '#ff5fa2', 0.5);
           J.hitCircle(u, ox, oy, ab.radius, ab.dmg * pw, { knock: 5, kind: 'fire' });
@@ -286,6 +326,7 @@
         if (b === 'fly') u.z = 0;
         J.R3.burst(u.x, u.y, 1, ab.color || standColor(u), 24, 2.5, 0.7, 3);
         J.R3.ring(u.x, u.y, 2, ab.color || standColor(u), 0.5);
+        if (J.Fx && J.Fx.ready && u.isPlayer) J.Fx.column(0, 'ドドドド', ab.color || standColor(u), 1.2);
         return true;
       }
       case 'hex': {
@@ -341,13 +382,25 @@
       case 'bomb': {
         const marked = G().ents.find((o) => !o.dead && o.st.mark > 0 && o.sv.markBy === u);
         if (marked) {
+          // ИИ сначала щёлкает детонатором — у цели есть миг, чтобы увернуться
+          if (!u.isPlayer && !(extra && extra.det) && J.Cb) {
+            J.Cb.bombTele(u, marked, ab);
+            return true;
+          }
           J.R3.text(u.x, u.y, 'КЛИК!', 'tcry', 0.8);
           J.R3.flash(marked.x, marked.y, ab.radius, '#ff9ad8', 0.45);
           J.R3.ring(marked.x, marked.y, ab.radius * 1.2, '#ff5fa2', 0.5);
           J.R3.burst(marked.x, marked.y, 1, '#ffb03a', 30, 5, 0.6);
-          J.hitCircle(u, marked.x, marked.y, ab.radius, ab.dmg * pw, { knock: 6, kind: 'fire', fx: { burn: 3 } });
+          J.hitCircle(u, marked.x, marked.y, ab.radius, ab.dmg * pw, { knock: 6, kind: 'fire', fx: { burn: 3 }, gdmg: 60 });
           marked.st.mark = 0;
           J.R3.cam.shake = 0.3;
+          if (J.Fx && J.Fx.ready && J.Fx.nearPlayer(u, marked, 30)) {
+            J.Fx.word(J.Fx.pick('boom'), marked.x, marked.y, g.world.groundY(marked.x, marked.y) + 1.6, 'fin', '#ffffff', '#b3122e');
+            J.Fx.shock(marked.x, marked.y, 1.2);
+            J.Fx.sparks(marked.x, g.world.groundY(marked.x, marked.y) + 1, marked.y, 30, null, '#ffb03a', 9);
+            J.Fx.debris(marked.x, g.world.groundY(marked.x, marked.y) + 0.6, marked.y, 0, 0, 20, '#8a7a6a');
+            J.Sfx && J.Sfx.boom(1);
+          }
           return true;
         }
         const tg = aim.target && J.dist(u.x, u.y, aim.target.x, aim.target.y) < (ab.range || 2) + 0.8 ? aim.target : J.nearestHostile(u, ab.range || 2, 0.9, ang);
@@ -355,8 +408,9 @@
         if (!tg) return false;
         tg.st.mark = 15;
         tg.sv.markBy = u;
-        J.hurt(tg, 8 * pw, u, {});
+        J.hurt(tg, 8 * pw, u, { melee: true });
         J.R3.text(tg.x, tg.y, 'Первая бомба!', 'tpink', 1);
+        if (J.Fx && J.Fx.ready && J.Fx.nearPlayer(u, tg, 20)) J.Fx.word('カチッ', tg.x, tg.y, g.world.groundY(tg.x, tg.y) + 2, 'mid', '#ff9ad8');
         return 'short';
       }
       case 'disc': {
@@ -446,29 +500,78 @@
     const c = e.channel;
     if (!e.canAct()) {
       e.channel = null;
+      if (e.anim && e.anim.type === 'rush') e.anim.t = 0;
+      return;
+    }
+    // во время столкновения рашей всем управляет combat.js
+    if (J.Cb && J.Cb.inClash(e)) return;
+    const sf = J.Cb && J.Cb.standOn(e) ? 0.95 : 0.3;
+    if (c.fin > 0) {
+      c.fin -= dt;
+      e.face = c.ang;
+      if (e.anim) e.anim.t = Math.max(e.anim.t, 0.1);
+      if (c.fin <= 0) rushFinisher(e, c, sf);
       return;
     }
     c.t -= dt;
     c.tick -= dt;
-    c.cryT -= dt;
     if (e.isPlayer) c.ang = J.P.aim(e, 3).ang;
     e.face = c.ang;
+    // удержание клавиши продлевает раш (тратит энергию стенда)
+    if (e.isPlayer && c.key) {
+      const held = J.Input.held(c.key);
+      if (held && c.t < 0.1 && c.ext < c.maxExt && (!e.stand || e.se > 2)) {
+        c.t += dt;
+        c.ext += dt;
+        if (e.stand) e.se -= 9 * dt;
+      } else if (!held && c.ext > 0) c.t = Math.min(c.t, 0);
+    }
+    // притяжение к цели: в начале раша — рывком, дальше — шагом за отлетающей жертвой
+    {
+      const mag = c.mag > 0;
+      if (mag) c.mag -= dt;
+      const tg = J.nearestHostile(e, c.range + sf + 1.2, 0.8, c.ang);
+      c.tg = tg; // для шквала кулаков: бьют до тела, а не насквозь
+      if (tg) {
+        const d = J.dist(e.x, e.y, tg.x, tg.y) - tg.r;
+        if (d > sf + 0.55) {
+          const a = Math.atan2(tg.y - e.y, tg.x - e.x);
+          const sp = mag ? 3.2 : 1.8;
+          J.moveEnt(e, Math.cos(a) * sp * dt, Math.sin(a) * sp * dt);
+        }
+      }
+    }
     if (c.tick <= 0) {
       c.tick = 1 / 11;
-      J.hitArc(e, c.ang, c.range, 1.4, c.dmg, { stun: 0.25, knock: 0.3, kind: c.kind, silent: false });
+      c.n++;
+      J.hitArc(e, c.ang, c.range + sf, 1.4, c.dmg, { stun: 0.25, knock: 0.18, kind: c.kind, rushTick: true, melee: true, gdmg: 7 });
+      if (J.Sfx && J.Fx && J.Fx.nearPlayer(e, null, 20)) {
+        J.Sfx.rushTick(c.n % 2 ? 0.25 : -0.25);
+        if (c.n % 3 === 0) J.Sfx.rushTick(c.n % 2 ? -0.2 : 0.2);
+      }
     }
-    if (c.cryT <= 0) {
-      c.cryT = 0.2;
-      const near = J.dist(e.x, e.y, G().player.x, G().player.y) < 25;
-      if (near) J.R3.text(e.x + Math.cos(c.ang) * 0.8, e.y + Math.sin(c.ang) * 0.8, c.cry + '!', 'tcry', 0.7, 2.2);
-    }
+    if (e.anim && e.anim.type === 'rush') e.anim.t = Math.max(e.anim.t, 0.2);
     if (c.t <= 0) {
-      J.hitArc(e, c.ang, c.range + 0.3, 1.5, c.dmg * 3.5, { knock: 8, stun: 0.5, kind: c.kind });
-      J.R3.flash(e.x + Math.cos(c.ang) * 1.3, e.y + Math.sin(c.ang) * 1.3, 1.1, e.stand ? J.STANDS[e.stand.id].c2 : '#ffd84a', 0.25);
-      if (e.isPlayer) J.R3.cam.shake = 0.25;
-      e.channel = null;
+      // короткий замах перед добиванием
+      c.fin = 0.12;
+      if (J.Fx) J.Fx.rushEnd(e);
     }
   };
+  function rushFinisher(e, c, sf) {
+    const n = J.hitArc(e, c.ang, c.range + sf + 0.3, 1.5, c.dmg * 3.5, { knock: 8, stun: 0.5, kind: c.kind, finisher: true, melee: true, gdmg: 60 });
+    J.R3.flash(e.x + Math.cos(c.ang) * 1.3, e.y + Math.sin(c.ang) * 1.3, 1.1, e.stand ? J.STANDS[e.stand.id].c2 : '#ffd84a', 0.25);
+    e.channel = null;
+    const so = J.Cb && J.Cb.standOn(e);
+    e.anim = { type: 'heavy', clip: 'heavy', t: 0.26, max: 0.5, stand: so };
+    // поза ДжоДжо после добивания
+    if (e.isPlayer || e.boss)
+      G().timers.push({
+        t: 0.32,
+        fn: () => {
+          if (!e.dead && !e.channel && !(e.atk && !e.atk.done) && !e.guard && (n || c.won)) e.anim = { type: 'pose', t: 0.7, max: 0.7 };
+        },
+      });
+  }
   A.updateDash = function (e, dt) {
     const d = e.dash;
     d.t -= dt;
@@ -481,7 +584,7 @@
         if (o.dead || d.hit.has(o.id) || !J.hostile(e, o)) continue;
         if (J.dist(e.x, e.y, o.x, o.y) < 1.1 + o.r) {
           d.hit.add(o.id);
-          J.hurt(o, d.dmg, e, { knock: 4, stun: 0.3, kind: d.kind });
+          J.hurt(o, d.dmg, e, { knock: 4, stun: 0.3, kind: d.kind, melee: true });
         }
       }
     if (d.t <= 0) e.dash = null;
@@ -528,13 +631,12 @@
     if (!ok.length) return false;
     // предпочитаем сильные способности
     const ab = ok[Math.floor(Math.random() * ok.length)];
-    const r = A.use(e, ab, A.aimAt(e, tg));
-    if (r) {
-      e.cds[ab.name] = (ab.cd || 5) * (e.boss ? 1.1 : 1.4);
-      e.standOut = !!e.stand;
-      return true;
-    }
-    return false;
+    e.cds[ab.name] = (ab.cd || 5) * (e.boss ? 1.1 : 1.4);
+    e.standOut = !!e.stand;
+    // замах-телеграф перед ударными и дальними приёмами
+    const r = J.Cb ? J.Cb.aiCastTele(e, ab, tg) : A.use(e, ab, A.aimAt(e, tg));
+    if (!r) e.cds[ab.name] = 0;
+    return !!r;
   };
 
   // ---------- Стили игрока ----------
@@ -604,7 +706,7 @@
       else if (slot === 1) {
         if (J.P.hasItem(p, 'clackers')) ok = A.use(p, { kind: 'shoot', n: 2, spread: 20, dmg: (14 + p.hamon.lvl * 5) * red, speed: 12, range: 8, proj: 'orb', color: '#ffd84a', size: 0.24, homing: 4, pierce: 1 }, aim, { pw: 1, kind: 'hamon', noStand: true });
         else ok = A.use(p, { kind: 'shoot', n: 3, spread: 12, dmg: (12 + p.hamon.lvl * 4) * red, speed: 14, range: 9, proj: 'hamon', color: '#ffe46a', size: 0.16 }, aim, { pw: 1, kind: 'hamon', noStand: true });
-      } else ok = A.use(p, { kind: 'rush', dmg: (5 + p.hamon.lvl) * red, dur: 1.3, range: 1.6 }, aim, { pw: 1, kind: 'hamon', noStand: true, cry: 'ХАМОН' });
+      } else ok = A.use(p, { kind: 'rush', dmg: (5 + p.hamon.lvl) * red, dur: 1.3, range: 1.6 }, aim, { pw: 1, kind: 'hamon', noStand: true, cry: 'ХАМОН', key: { kb: 'Digit3', tc: '3' } });
       if (ok) {
         p.breath -= sl.cost;
         J.P.styleXp(p, 'hamon', 4);
@@ -639,7 +741,7 @@
     }
     if (ok) {
       p.cds[key] = sl.cd;
-      p.anim = { type: 'heavy', t: 0.3, max: 0.3 };
+      if (!p.channel && !(p.atk && !p.atk.done)) p.anim = { type: 'heavy', t: 0.3, max: 0.3 };
     }
     return ok;
   };

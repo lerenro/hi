@@ -17,7 +17,12 @@
     sprint: false, breathe: false,
     touchHold: {},
     runToggle: false,
+    guardM: false, // блок правой кнопкой при захваченной мыши
   });
+  // зажата ли клавиша способности (клавиатура или сенсорная кнопка)
+  Input.held = (k) => !!(k && (Input.keys[k.kb] || Input.touchHold[k.tc]));
+  // в столкновении рашей любое нажатие — «жми!»
+  const mashing = () => G.player && J.Cb && J.Cb.inClash(G.player);
   Input.releasePointer = function () {
     if (document.pointerLockElement) {
       try {
@@ -52,10 +57,13 @@
     });
     window.addEventListener('keyup', (e) => {
       Input.keys[e.code] = false;
+      Game.onKeyUp(e.code);
     });
     window.addEventListener('blur', () => {
       Input.keys = {};
       Input.mouse.l = Input.mouse.r = false;
+      Input.guardM = false;
+      if (G.player) G.player.chg = null;
     });
     cv.addEventListener('mousedown', (e) => {
       if (Game.state !== 'play' || J.UI.blocking()) return;
@@ -66,19 +74,29 @@
           return;
         }
         Input.mouse.l = true;
+        if (mashing()) J.Cb.mash(G.player);
+        else if (G.player) G.player.buf = G.t;
       }
       if (e.button === 2) {
         Input.mouse.r = true;
-        // с захваченной мышью тяжёлый удар — сразу по нажатию; без захвата ПКМ ещё и вращает камеру
-        if (Input.locked) J.P.heavyAttack(G.player);
-        else Input.rDrag = { x: e.clientX, y: e.clientY, moved: 0 };
+        // с захватом мыши ПКМ — блок; без захвата — заряд тяжёлого удара (или поворот камеры перетаскиванием)
+        if (Input.locked) Input.guardM = true;
+        else {
+          Input.rDrag = { x: e.clientX, y: e.clientY, moved: 0 };
+          if (G.player && !mashing()) J.P.heavyStart(G.player);
+        }
       }
     });
     window.addEventListener('mouseup', (e) => {
       if (e.button === 0) Input.mouse.l = false;
       if (e.button === 2) {
         Input.mouse.r = false;
-        if (Input.rDrag && Input.rDrag.moved < 6 && Game.state === 'play' && !J.UI.blocking()) J.P.heavyAttack(G.player);
+        Input.guardM = false;
+        const p = G.player;
+        if (Input.rDrag && p) {
+          if (Input.rDrag.moved < 6 && Game.state === 'play' && !J.UI.blocking()) J.P.heavyRelease(p);
+          else p.chg = null;
+        }
         Input.rDrag = null;
       }
     });
@@ -91,6 +109,8 @@
         Input.rDrag.moved += Math.abs(dx) + Math.abs(dy);
         dx *= 1.4;
         dy *= 1.4;
+        // это поворот камеры, а не заряд удара
+        if (Input.rDrag.moved >= 6 && G.player) G.player.chg = null;
       }
       // копим и применяем раз за кадр: камера двигается ровно, без лишних пересчётов
       Input.mdx += dx;
@@ -120,12 +140,27 @@
       return;
     }
     Input.touchHold[k] = down;
-    if (!down) return;
+    if (!down) {
+      if (k === 'heavy') J.P.heavyRelease(p);
+      return;
+    }
     // за рулём: только выход, меню и карта (газ/руль — джойстиком, ручник и сигнал — удержанием)
     if (p.inCar && !['f', 'menu', 'map'].includes(k)) return;
+    if (mashing() && ['atk', 'heavy', 'dash', 'q', 'e', 'r', 'rush', '3'].includes(k)) {
+      J.Cb.mash(p);
+      return;
+    }
     switch (k) {
-      case 'heavy': J.P.heavyAttack(p); break;
+      case 'heavy': J.P.heavyStart(p); break;
       case 'dash': J.P.dash(p, p.vx, p.vy); break;
+      case 'atk': p.buf = G.t; break;
+      case 'rush': {
+        const sd = p.stand ? J.STANDS[p.stand.id] : null;
+        const i = sd ? sd.abil.findIndex((a) => a.kind === 'rush') : -1;
+        if (i >= 0) J.P.standAbility(p, i, 'rush');
+        else if (p.style === 'hamon') J.Abil.useStyle(p, 2);
+        break;
+      }
       case 'q': J.P.standAbility(p, 0); break;
       case 'e': J.P.standAbility(p, 1); break;
       case 'r': J.P.standAbility(p, 2); break;
@@ -188,6 +223,11 @@
       else if (code === 'F1') UI.showHelp();
       return;
     }
+    // столкновение рашей: жми!
+    if (mashing() && ['KeyQ', 'KeyE', 'KeyR', 'Space', 'KeyX', 'KeyF', 'Digit3', 'Enter'].includes(code)) {
+      J.Cb.mash(p);
+      return;
+    }
     switch (code) {
       case 'Enter': Game.interact(); break;
       case 'Escape': UI.openPanel('menu'); break;
@@ -202,7 +242,7 @@
       case 'Digit3': J.Abil.useStyle(p, 2); break;
       case 'KeyT': J.P.cycleStyle(p); break;
       case 'KeyH': J.P.toggleMount(p); break;
-      case 'KeyX': J.P.heavyAttack(p); break;
+      case 'KeyX': J.P.heavyStart(p); break;
       case 'Space': {
         const m = Game.moveInput();
         const yaw = J.R3.cam.yaw;
@@ -211,6 +251,10 @@
         break;
       }
     }
+  };
+  Game.onKeyUp = function (code) {
+    if (Game.state !== 'play' || !G.player) return;
+    if (code === 'KeyX' && !J.UI.blocking()) J.P.heavyRelease(G.player);
   };
   Game.moveInput = function () {
     const k = Input.keys;
@@ -224,13 +268,16 @@
   };
 
   // ---------- Настройки ----------
-  Game.settings = Object.assign({ quality: 1, shadows: true, sens: 1, sound: true, invert: false, lock: true, follow: false }, J.store.get(SET_KEY) || {});
+  // щадящий режим по умолчанию, если система просит меньше движения
+  const reduceMotion = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  Game.settings = Object.assign({ quality: 1, shadows: true, sens: 1, sound: true, invert: false, lock: true, follow: false, fx_shake: 1, fx_flash: !reduceMotion, fx_slowmo: true, fx_rm: reduceMotion }, J.store.get(SET_KEY) || {});
   if (!J.store.get(SET_KEY)) Game.settings.quality = J.R3.autoQuality(); // первый запуск: качество по устройству
   Game.applySettings = function () {
     J.store.set(SET_KEY, Game.settings);
     J.R3.setQuality(Game.settings.quality, Game.settings.shadows);
     J.UI.sound = Game.settings.sound;
     Input.applyFollow();
+    if (J.Fx) J.Fx.applySettings(Game.settings);
   };
 
   // ---------- Запуск ----------
@@ -239,10 +286,14 @@
     J.R3.shadows = Game.settings.shadows;
     J.R3.init(document.getElementById('game'));
     J.R3.initCars();
+    // обесцвечивание мира для остановки времени — патч материалов до первой компиляции
+    if (J.Fx) J.Fx.patchWorld();
     J.R3.setQuality(Game.settings.quality, Game.settings.shadows);
     J.R3.warmup();
     J.UI.build();
     J.UI.sound = Game.settings.sound;
+    if (J.Fx) J.Fx.init();
+    if (J.Sfx) J.Sfx.init();
     Input.init();
     Input.applyFollow();
     if (Input.touch) J.UI.initTouch();
@@ -341,6 +392,10 @@
     G.reveal = 0;
     G.weather = null;
     G.waypoint = null;
+    G.clash = null;
+    if (G.roller && G.roller.m) J.R3.removeMesh(G.roller.m);
+    G.roller = null;
+    if (J.Fx) J.Fx.reset();
     if (keepWorld && G.world && G.world.seed === seed) return;
     G.seed = seed;
     G.world = new J.World(seed);
@@ -553,13 +608,26 @@
     p.wanted = 0;
     p.standOut = false;
     p.channel = null;
+    p.guard = false;
+    p.chg = null;
     G.timestop = null;
     G.timeskip = null;
     G.timeAccel = 0;
+    G.clash = null;
     J.UI.timestopFx(false);
     J.UI.timeskipFx(false);
-    J.UI.closeBuilding();
-    J.UI.showDeath('Ты пал в бою… Но история продолжается.', () => Game.respawn('Ты очнулся в больнице. Врачи спасли тебе жизнь, но лечение стоило денег.'));
+    let shown = false;
+    const show = () => {
+      if (shown || !p.dead) return;
+      shown = true;
+      J.UI.closeBuilding();
+      J.UI.showDeath('Ты пал в бою… Но история продолжается.', () => Game.respawn('Ты очнулся в больнице. Врачи спасли тебе жизнь, но лечение стоило денег.'));
+    };
+    // замедление и отлёт тела перед «TO BE CONTINUED»
+    if (J.Fx && J.Fx.ready && !J.UI.blocking()) {
+      J.Fx.playerDeath(show);
+      setTimeout(show, 2600);
+    } else show();
   };
   Game.respawn = function (msg) {
     const p = G.player;
@@ -573,6 +641,11 @@
     p.st = {};
     p.cds = {};
     p.dash = null;
+    p.react = null;
+    p.airborne = false;
+    p.z = 0;
+    p.kx = p.ky = 0;
+    p.atk = null;
     const lost = Math.floor(p.money * 0.15);
     p.money -= lost;
     J.Veh.clear();
@@ -762,21 +835,25 @@
     G.titleCam.y += Math.sin(G.t * 0.04) * dt * 1.5;
     J.R3.updateChunks(G.titleCam.x, G.titleCam.y);
     J.R3.setTime(1140 + Math.sin(G.t * 0.02) * 60, G.titleCam.x, G.titleCam.y, 'temperate', null);
+    if (J.Fx && J.Fx.SEE) J.Fx.SEE.on.value = 0;
     J.R3.updateCamera(G.titleCam.x, G.titleCam.y, 0, dt, { mode: 'title' });
     J.R3.render();
   };
 
-  Game.update = function (dt) {
+  Game.update = function (rdt) {
     const p = G.player;
     const UI = J.UI;
     const R3 = J.R3;
+    const Fx = J.Fx;
     const blocking = UI.blocking();
     // мышь: все движения за кадр — одним поворотом
     if (Input.mdx || Input.mdy) {
       if (!blocking) Input.rotateCam(Input.mdx, Input.mdy);
       Input.mdx = Input.mdy = 0;
     }
-    if (!blocking) {
+    // rdt — реальное время кадра; dt — игровое (0 в стоп-кадре, меньше в замедлении)
+    const dt = blocking ? 0 : Fx ? Fx.tick(rdt) : rdt;
+    if (!blocking && dt > 1e-4) {
       G.t += dt;
       // время
       const rate = G.timeAccel > 0 ? 45 : 2;
@@ -791,9 +868,10 @@
         }
       }
       Game.updateClock();
-      // остановка времени
+      // остановка времени (вступление со сферой не считается)
       if (G.timestop) {
-        G.timestop.t -= dt;
+        if (G.timestop.intro > 0) G.timestop.intro -= dt;
+        else G.timestop.t -= dt;
         if (G.timestop.t <= 0 || G.timestop.by.dead) {
           G.timestop = null;
           UI.timestopFx(false);
@@ -805,7 +883,7 @@
       if (G._invisT > 0) G._invisT -= dt;
       // ввод игрока
       const m = Game.moveInput();
-      const inp = { mx: m.mx, my: m.my, sprint: Input.keys.ShiftLeft || Input.keys.ShiftRight || Input.runToggle, breathe: Input.keys.KeyV || Input.touchHold.v };
+      const inp = { mx: m.mx, my: m.my, sprint: Input.keys.ShiftLeft || Input.keys.ShiftRight || Input.runToggle, breathe: Input.keys.KeyV || Input.touchHold.v, guard: !!(Input.keys.KeyZ || Input.guardM || Input.touchHold.guard) };
       const tsFrozen = G.timestop && G.timestop.by !== p && !(p.tsMove > 0);
       if (p.inCar) {
         // за рулём: потребности и реген идут как обычно, движение — у машины
@@ -814,12 +892,13 @@
         J.P.update(p, dt, inp);
       } else if (!tsFrozen) {
         J.P.update(p, dt, inp);
-        if ((Input.mouse.l || Input.touchHold.atk) && !p.dead) J.P.basicAttack(p);
+        if ((Input.mouse.l || Input.touchHold.atk || p.buf) && !p.dead && !(J.Cb && J.Cb.inClash(p))) J.P.basicAttack(p);
       } else {
         p.vx = p.vy = 0;
       }
       J.Veh.update(dt, J.Veh.input());
       J.updateEnts(dt);
+      if (J.Cb) J.Cb.update(dt);
       J.updateProjs(dt);
       J.updateFields(dt);
       J.updateTraps(dt);
@@ -850,6 +929,7 @@
           UI.toast('Дьявольская ладонь усиливает твой стенд!', 'gold');
         }
       }
+      if (Fx) Fx.flush();
     }
     // рендер
     const rg = G.world.regionAt(p.x, p.y);
@@ -857,36 +937,43 @@
     const hasStand = !!p.stand;
     R3.viewBudget = 1;
     R3.rankCasters(G.ents, p.x, p.y);
-    for (const e of G.ents) R3.updateView(e, blocking ? 0 : dt, G.t, hasStand);
+    for (const e of G.ents) R3.updateView(e, dt, G.t, hasStand);
     R3.updateCars(G.vehs, G.t, p.inCar);
     R3.updateSignals(G.world, G.t);
     if (!blocking) {
-      R3.updateParticles(dt);
+      // в остановленном времени частицы замирают
+      R3.updateParticles(Fx && Fx.tsK > 0.5 ? 0 : dt);
       R3.updateFx(dt);
     }
-    R3.updateText(blocking ? 0 : dt);
+    if (Fx) Fx.update(blocking ? 0 : rdt, dt);
+    R3.updateText(blocking ? 0 : rdt);
     let wth = G.weather;
     if (!wth && rg.biome === 'tundra') wth = 'snow';
     R3.setTime(G.time, R3.cam.tx, R3.cam.tz, rg.biome, wth);
-    R3.updateWeather(dt, wth === 'fog' ? null : wth, R3.cam.tx, R3.cam.tz);
+    if (Fx && (Fx.tsK > 0 || Fx.skipK > 0)) Fx.desatSky(Fx.tsK);
+    R3.updateWeather(Fx && Fx.tsK > 0.5 ? 0 : rdt, wth === 'fog' ? null : wth, R3.cam.tx, R3.cam.tz);
     // стрелки вращают камеру
     if (!blocking) {
       const k = Input.keys;
       const ax = (k.ArrowRight ? 1 : 0) - (k.ArrowLeft ? 1 : 0), ay = (k.ArrowDown ? 1 : 0) - (k.ArrowUp ? 1 : 0);
-      if (ax || ay) R3.rotateCam(ax * 2.4 * dt * Game.settings.sens, ay * 1.4 * dt * Game.settings.sens);
+      if (ax || ay) R3.rotateCam(ax * 2.4 * rdt * Game.settings.sens, ay * 1.4 * rdt * Game.settings.sens);
     }
     const car = p.inCar;
     if (car) {
       // в машине: камера дальше и выше для больших машин, сама заходит за спину
       const vt = car.vt;
-      R3.updateCamera(car.x, car.y, car.gy + Math.max(0, vt.H - 1.45) * 0.8, dt, { mode: 'car', heading: car.ang, speed: Math.abs(car.vf), scale: Math.max(1, vt.L / 4.6) * 0.85 + 0.15 });
+      R3.updateCamera(car.x, car.y, car.gy + Math.max(0, vt.H - 1.45) * 0.8, rdt, { mode: 'car', heading: car.ang, speed: Math.abs(car.vf), scale: Math.max(1, vt.L / 4.6) * 0.85 + 0.15 });
     } else {
       const moving = !blocking && Math.hypot(p.vx, p.vy) > 0.5 && !Input.touchHold.atk && !Input.mouse.l;
-      R3.updateCamera(p.x, p.y, G.world.groundY(p.x, p.y) + (p.z || 0), dt, { mode: 'foot', heading: p.face, moving });
+      R3.updateCamera(p.x, p.y, G.world.groundY(p.x, p.y) + (p.z || 0), rdt, { mode: 'foot', heading: p.face, moving });
     }
-    R3.render();
+    if (Fx) {
+      Fx.applyCamera(R3.camera, rdt);
+      Fx.updateSee();
+    }
+    if (!Fx || !Fx.renderOverride()) R3.render();
     Game.updateLabels();
-    UI.update(dt);
+    UI.update(rdt);
     J.Veh.hud(p);
   };
 

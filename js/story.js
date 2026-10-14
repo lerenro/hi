@@ -840,6 +840,7 @@
           }
           J.R3.text(e.x, e.y, ph.text, 'tbig', 2);
           UI().toast(e.name + ': «' + ph.text + '»', 'red');
+          if (J.Fx && J.Fx.ready) J.Fx.bossPhase(e, ph.text);
         }
       }
     }
@@ -966,7 +967,9 @@
     }
   };
   S.bossAggro = function (e) {
-    UI().menacing(e);
+    // противостояние: леттербокс, имя, ゴゴゴ, наезд камеры (J.Fx); без него — старый ゴゴゴ
+    if (J.Fx && J.Fx.ready && J.dist(e.x, e.y, P().x, P().y) < 30) J.Fx.standoff(e);
+    else UI().menacing(e);
   };
 
   // Здания: сюжетные хуки. Возвращает true, если событие обработано

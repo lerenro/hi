@@ -14,8 +14,11 @@
     carDist: 8.5, // желаемая длина штанги (в машине)
     arm: 5.6, // текущая длина после столкновений
     tx: 0, ty: undefined, tz: 0,
-    shake: 0,
+    shake: 0, // устаревшее: прибавляется к «травме» камеры (J.Fx)
     fov: 60,
+    // боевые модификаторы от J.Fx: ракурс, наезд, поле зрения, фокус на противнике
+    yawOff: 0, distMul: 1, fovAdd: 0, focusW: 0, focusX: 0, focusY: 0, focusZ: 0,
+    lookShift: 0, // сдвиг взгляда вправо (на телефоне бой уходит в свободную полосу между джойстиком и кнопками)
     idle: 9, // секунд без ручного поворота
     follow: false, // авто-разворот за спину пешком
     near: false,
@@ -115,13 +118,14 @@
     c.tz = py;
     const ty = pz + headH;
     c.ty = c.ty === undefined || jump || mode === 'title' || Math.abs(ty - c.ty) > 4 ? ty : c.ty + (ty - c.ty) * hl(0.05, dt);
-    // направление штанги
+    // направление штанги (с боевым смещением ракурса)
+    const yaw = c.yaw + (mode === 'foot' ? c.yawOff : 0);
     const cp = Math.cos(c.pitch), sp = Math.sin(c.pitch);
-    const dx = -Math.cos(c.yaw) * cp, dz = -Math.sin(c.yaw) * cp, dy = sp;
-    const want = mode === 'car' ? c.carDist * (opts.scale || 1) + Math.min(4, Math.abs(opts.speed || 0) * 0.12) : mode === 'title' ? 26 : c.dist;
+    const dx = -Math.cos(yaw) * cp, dz = -Math.sin(yaw) * cp, dy = sp;
+    const want = mode === 'car' ? c.carDist * (opts.scale || 1) + Math.min(4, Math.abs(opts.speed || 0) * 0.12) : mode === 'title' ? 26 : c.dist * (mode === 'foot' ? c.distMul : 1);
     // смещение за правое плечо (уменьшается при близкой камере); само плечо тоже не должно входить в стену
     let sh = mode === 'foot' ? 0.42 * J.clamp(c.arm / 4, 0.3, 1) : 0;
-    const rx = -Math.sin(c.yaw), rz = Math.cos(c.yaw);
+    const rx = -Math.sin(yaw), rz = Math.cos(yaw);
     const oy = c.ty + c.lift;
     if (sh > 0 && !opts.noCollide) sh *= R3.segTrace(c.tx, oy, c.tz, c.tx + rx * (sh + 0.25), oy, c.tz + rz * (sh + 0.25));
     const ox = c.tx + rx * sh, oz = c.tz + rz * sh;
@@ -140,23 +144,40 @@
     let cx = ox + dx * c.arm, cy = oy + dy * c.arm, cz = oz + dz * c.arm;
     const gmin = J.G.world.groundY(cx, cz) + 0.3;
     if (cy < gmin) cy = gmin;
-    // тряска — плавная (синусы), а не случайный шум каждый кадр
+    // тряска: старое поле shake прибавляется к «травме» (J.Fx); без J.Fx — плавная (синусы)
     let lx = ox - dx * 2, ly = oy + (mode === 'car' ? 0.2 : 0.1) - up * 0.75, lz = oz - dz * 2;
     if (c.shake > 0) {
-      c.shake = Math.max(0, c.shake - dt);
-      const s = Math.min(0.6, c.shake) * 0.32, t = J.G.t * 1.0;
-      cx += Math.sin(t * 41.3) * s;
-      cy += Math.sin(t * 37.9 + 1.7) * s;
-      cz += Math.sin(t * 29.1 + 0.6) * s;
+      if (J.Fx && J.Fx.ready) {
+        J.Fx.trauma(c.shake * 1.6);
+        c.shake = 0;
+      } else {
+        c.shake = Math.max(0, c.shake - dt);
+        const s = Math.min(0.6, c.shake) * 0.32, t = J.G.t * 1.0;
+        cx += Math.sin(t * 41.3) * s;
+        cy += Math.sin(t * 37.9 + 1.7) * s;
+        cz += Math.sin(t * 29.1 + 0.6) * s;
+      }
     }
     // поле зрения: шире на скорости
     const fov = mode === 'car' ? 62 + Math.min(18, Math.abs(opts.speed || 0) * 0.55) : mode === 'title' ? 55 : 60;
     c.fov += (fov - c.fov) * hl(0.25, dt);
-    if (Math.abs(R3.camera.fov - c.fov) > 0.05) {
-      R3.camera.fov = c.fov;
+    const fv = c.fov + (mode === 'foot' ? c.fovAdd : 0);
+    if (Math.abs(R3.camera.fov - fv) > 0.05) {
+      R3.camera.fov = fv;
       R3.camera.updateProjectionMatrix();
     }
     R3.camera.position.set(cx, cy, cz);
+    // в бою взгляд чуть уходит к противнику
+    if (c.lookShift && mode === 'foot') {
+      lx += rx * c.lookShift;
+      lz += rz * c.lookShift;
+    }
+    if (c.focusW > 0.01 && mode === 'foot') {
+      const w = 0.35 * c.focusW;
+      lx += (c.focusX - lx) * w;
+      ly += (c.focusY - ly) * w;
+      lz += (c.focusZ - lz) * w;
+    }
     // смотрим чуть выше и вперёд цели — персонаж в нижней трети кадра
     R3.camera.lookAt(lx, ly, lz);
     if (R3.lantern) R3.lantern.position.set(px, pz + 2.5, py);
