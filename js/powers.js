@@ -4183,14 +4183,19 @@
         shout(u, 'ヘビー・ウェザー', '#e8f2ff', '#1a2a4a');
         snd(u, 'life');
         if (u.isPlayer && fxOn()) J.Fx.flash('#e8f2ff', 0.06, 0.4);
+        // радуга стоит за дальним из двоих (от камеры) и поперёк взгляда — видна целиком, а не столбами у лица
+        const cp = R3.camera.position;
+        const du = (u.x - cp.x) ** 2 + (u.y - cp.z) ** 2, dt0 = (tg.x - cp.x) ** 2 + (tg.y - cp.z) ** 2;
+        const far = du > dt0 ? u : tg;
+        const va = Math.atan2(far.y - cp.z, far.x - cp.x);
         Pw.add({
-          u, x: tg.x, y: tg.y, a: Math.atan2(tg.y - u.y, tg.x - u.x) + Math.PI / 2, vs, dur: Math.min(8, ab.dur || 8),
+          u, x: far.x + Math.cos(va) * 7, y: far.y + Math.sin(va) * 7, a: va + Math.PI / 2, vs, dur: Math.min(8, ab.dur || 8),
           update() {
             return this.t < this.dur;
           },
           draw(dt) {
             const f = Math.min(1, this.t / 0.6) * Math.min(1, (this.dur - this.t) / 1);
-            const R = 7, ca = Math.cos(this.a), sa = Math.sin(this.a), h0 = gy(this.x, this.y) - 0.5;
+            const R = 10, ca = Math.cos(this.a), sa = Math.sin(this.a), h0 = gy(this.x, this.y) - 1;
             const RC = ['#ff3a3a', '#ff9a2a', '#ffe14a', '#5adf6a', '#3aa8ff', '#5a5aff', '#b05aff'];
             for (let j = 0; j < 7; j++) {
               const rr = R - j * 0.32;
