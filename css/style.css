@@ -466,6 +466,7 @@ body.driving #hotwrap { display: none; }
 .hbrow { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .item .iico { float: left; width: 30px; height: 30px; margin: 2px 10px 0 0; }
 .item[draggable="true"] { cursor: grab; }
+.item .ibtns { display: flex; gap: 6px; flex: none; }
 @media (max-width: 760px) {
   .hs { width: 40px; height: 40px; }
   #hotwrap { bottom: calc(84px + var(--sab)); }

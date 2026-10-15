@@ -2430,7 +2430,7 @@
       const dx = has ? H.def(x) : null;
       el.querySelector('.hn').textContent = !has ? '' : dx.cls === 'gun' ? H.magOf(p, x) + '/' + dx.mag : cnt(p, x) > 1 ? '×' + cnt(p, x) : '';
       const bar = el.querySelector('.hd');
-      const showDur = has && dx.dur < 999;
+      const showDur = has && dx.dur < 999 && dx.dur > 1;
       bar.style.display = showDur ? '' : 'none';
       if (showDur) {
         const k = J.clamp(H.durOf(p, x) / dx.dur, 0, 1);
@@ -2444,7 +2444,8 @@
       const it = J.ITEMS[id];
       nm = `<b>${J.esc(it.name)}</b>`;
       if (d.cls === 'gun') nm += ` <span>${p.reloadT > 0 ? 'перезарядка…' : `${H.magOf(p, id)}/${d.mag}`} · патронов: ${cnt(p, d.ammo)}</span>`;
-      else if (d.dur < 999) nm += ` <span>прочность ${Math.ceil((H.durOf(p, id) / d.dur) * 100)}%</span>`;
+      else if (d.dur < 999 && d.dur > 1) nm += ` <span>прочность ${Math.ceil((H.durOf(p, id) / d.dur) * 100)}%</span>`;
+      else if (d.dur <= 1) nm += ' <span>хрупкая</span>';
       if (d.w >= 2) nm += ' <span class="w">тяжёлое</span>';
     }
     BAR.name.innerHTML = nm;
@@ -2530,13 +2531,17 @@
           H.autoAssign(p, id);
           J.UI.renderPanel();
         };
-        b.parentNode.insertBefore(add, b);
+        const bw = document.createElement('span');
+        bw.className = 'ibtns';
+        b.parentNode.insertBefore(bw, b);
+        bw.appendChild(add);
+        bw.appendChild(b);
       }
       const d = H.def(id);
       if (d.dur < 999 || d.cls === 'gun') {
         const s = document.createElement('div');
         s.className = 'muted small';
-        s.textContent = d.cls === 'gun' ? `Барабан ${H.magOf(p, id)}/${d.mag} · урон ${d.dmg}` : `Прочность ${Math.ceil(H.durOf(p, id))}/${d.dur} · урон ${d.dmg} · вес ${d.w} кг`;
+        s.textContent = d.cls === 'gun' ? `Барабан ${H.magOf(p, id)}/${d.mag} · урон ${d.dmg}` : `${d.dur > 1 ? `Прочность ${Math.ceil(H.durOf(p, id))}/${d.dur}` : 'Хрупкая'} · урон ${d.dmg} · вес ${d.w} кг`;
         if (info && info !== b) info.appendChild(s);
       }
     });

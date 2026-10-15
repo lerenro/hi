@@ -379,9 +379,11 @@ check('панель быстрого доступа в HUD', await ev(() => docu
     window._f.x += Math.cos(J.R3.cam.yaw) * 5; window._f.y += Math.sin(J.R3.cam.yaw) * 5;
     const hp0 = window._f.hp;
     window._step(0.1);
+    for (const g of J.Hand.GROUND.slice()) if (g.loot) g.life = 0;
+    window._sim(0.02);
     J.Hand.throwFrom(p, 1);
     window._sim(1.5);
-    return { left: p.inv.bottle || 0, ground: J.Hand.GROUND.filter((g) => g.item === 'bottle').length, fly: J.Hand.FLY.length, hit: window._f.hp < hp0 };
+    return { left: p.inv.bottle || 0, ground: J.Hand.GROUND.filter((g) => g.item === 'bottle' && !g.loot).length, fly: J.Hand.FLY.length, hit: window._f.hp < hp0 };
   });
   check('брошенная бутылка разбивается вдребезги', r2.left === 0 && r2.ground === 0 && r2.fly === 0, r2);
 }
