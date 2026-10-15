@@ -432,6 +432,8 @@
   };
   J.hitCircle = function (e, x, y, radius, dmg, opt) {
     let n = 0;
+    // огонь и сильные удары по площади задевают и машины
+    if (opt && (opt.kind === 'fire' || (opt.knock || 0) >= 5) && J.Pw && J.Pw.ready) J.Pw.hitVehs(e, x, y, radius, dmg, opt.kind === 'fire' || !!(opt.fx && opt.fx.burn), opt.knock || 0);
     for (const o of G().ents) {
       if (o.dead || !J.hostile(e, o)) continue;
       const d = J.dist(x, y, o.x, o.y);
@@ -824,6 +826,18 @@
       }
       p.x += p.vx * dt;
       p.y += p.vy * dt;
+      // снаряд силы бьёт в машину: огонь поджигает, взрывчатка рвёт, пули дырявят кузов
+      if (!p.ghost && J.Pw && J.Pw.ready && g.vehs && g.vehs.length) {
+        const v = J.Pw.vehAt(p.x, p.y, p.size, p.owner && p.owner.inCar);
+        if (v) {
+          const th = p.theme || J.Pw.shapeTheme(p.shape);
+          J.Pw.hitVeh(v, p.dmg * (p.explode ? 2 : 1.2), p.owner, th === 'fire' || (p.fx && p.fx.burn > 0), p.explode ? 5 : 1, Math.atan2(p.vy, p.vx));
+          if (p.explode) explodeProj(p);
+          else J.Pw.impact(p, null, true);
+          J.R3.dropProj(p);
+          continue;
+        }
+      }
       if (!p.ghost && w.solid(p.x, p.y, { water: true })) {
         if (p.kick > 0 && J.Pw && J.Pw.kick(p)) {
           out.push(p);

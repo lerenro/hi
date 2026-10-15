@@ -1615,6 +1615,17 @@
     const g = G();
     const live = pdt > 0;
     const cx = R3.cam.tx, cz = R3.cam.tz;
+    // горящие машины: пламя из-под капота и свет на асфальте
+    if (g.vehs && live)
+      for (const v of g.vehs) {
+        if (!v.fire || v.hp <= 0) continue;
+        const dx = v.x - cx, dz = v.y - cz;
+        if (dx * dx + dz * dz > 1600) continue;
+        const f = v.vt.L / 2 - 0.7, x = v.x + Math.cos(v.ang) * f, z = v.y + Math.sin(v.ang) * f, h = v.gy + v.vt.H * 0.7;
+        Pw.fire(x, h, z, 2, 0.45, 1.8, 0.55);
+        if (rnd() < 0.4) Pw.fire(v.x, h, v.y, 1, 0.6, 1.4, 0.45);
+        Pw.light(x, h + 0.6, z, '#ff7a20', 2.2, 8, 0.08);
+      }
     // стёртое время: враги бродят вслепую, за ними тянутся багровые послеобразы
     // ускорение времени: за владельцем Сделано на Небесах — шлейф силуэтов
     Pw._ghT = (Pw._ghT || 0) - pdt;
@@ -4088,7 +4099,9 @@
         snd(u, 'whoosh', 0.14, false, 0.12);
         if (ts && tg && !tg.dead) {
           // «Ты окружён»: ножи со всех сторон, остриём к цели
-          const N = (ab.n || 5) + 5;
+          // у врага ножей меньше и они слабее — от кольца можно уйти рывком, когда время пойдёт
+          const N = u.isPlayer ? (ab.n || 5) + 5 : ab.n || 5;
+          const dk = u.isPlayer ? 1 : 0.7;
           const w = g.world;
           let k = 0;
           for (let i = 0; i < N; i++) {
@@ -4096,7 +4109,7 @@
             const R = 2.2 + (i % 2) * 0.5;
             const x = tg.x + Math.cos(b) * R, y = tg.y + Math.sin(b) * R;
             if (w.solid(x, y)) continue;
-            const p = J.spawnProj(u, { ang: b + Math.PI, speed: ab.speed || 13, dmg: ab.dmg * c.pw, range: R + 2.5, shape: 'knife', color: ab.color, size: (ab.size || 0.22) * 1.5, kind: c.kind, stand: true, x, y });
+            const p = J.spawnProj(u, { ang: b + Math.PI, speed: ab.speed || 13, dmg: ab.dmg * c.pw * dk, range: R + 2.5, shape: 'knife', color: ab.color, size: (ab.size || 0.22) * 1.5, kind: c.kind, stand: true, x, y });
             p.tsAge = 1;
             p.held = true;
             p.h = 0.7 + (i % 3) * 0.35;
@@ -4249,5 +4262,64 @@
         fan(u, ab, a, c, { shape: 'bullet' });
       });
     },
+  };
+
+  // ---------- 35. Силы и машины: огонь поджигает, взрывы и удары мнут и отбрасывают ----------
+  // машина, которую задевает круг (x, y, r); null — ни одной
+  const vehAt = (x, y, r, skip) => {
+    const vs = G().vehs;
+    if (!vs) return null;
+    for (const v of vs) {
+      if (v.hp <= 0 || v === skip) continue;
+      const dx = x - v.x, dy = y - v.y, L = v.vt.L / 2, W = v.vt.W / 2;
+      if (dx * dx + dy * dy > (r + L) * (r + L)) continue;
+      const ca = Math.cos(v.ang), sa = Math.sin(v.ang);
+      const lx = dx * ca + dy * sa, ly = -dx * sa + dy * ca;
+      const ex = Math.max(0, Math.abs(lx) - L), ey = Math.max(0, Math.abs(ly) - W);
+      if (ex * ex + ey * ey <= r * r) return v;
+    }
+    return null;
+  };
+  Pw.vehAt = vehAt;
+  // урон машине от силы: огонь поджигает (машина горит и через несколько секунд взрывается), толчок сдвигает
+  Pw.hitVeh = function (v, dmg, src, fire, push, ang) {
+    if (!J.Veh || !v || v.hp <= 0) return;
+    const so = src ? J.ownerOf(src) : null;
+    J.Veh.damage(v, dmg, so);
+    if (v.hp <= 0) return;
+    if (fire && dmg >= 10 && !v.fire) {
+      v.fire = true;
+      v.burnT = 0;
+      v.hp = Math.min(v.hp, v.maxHp * 0.12);
+      if (so && so.isPlayer && !Pw._carFireTip) {
+        Pw._carFireTip = 1;
+        J.UI.toast('Огонь перекинулся на машину — сейчас рванёт!', 'red');
+      }
+    }
+    if (push > 0 && ang !== undefined && v.mode !== 'player') {
+      if (v.mode !== 'free' && J.Veh.toFree) J.Veh.toFree(v);
+      const k = Math.min(9, push * 0.9);
+      v.vx = (v.vx || 0) + Math.cos(ang) * k;
+      v.vy = (v.vy || 0) + Math.sin(ang) * k;
+      v.yawRate = (v.yawRate || 0) + (rnd() - 0.5) * k * 0.5;
+    }
+    Pw.shards(v.x, v.gy + v.vt.H * 0.6, v.y, 6, '#cfd6dc', 3, 0.05, 0, ang);
+  };
+  // все машины в круге (взрывы, огненные волны, тяжёлые удары по площади)
+  Pw.hitVehs = function (src, x, y, r, dmg, fire, push) {
+    const vs = G().vehs;
+    if (!vs || !vs.length || !J.Veh) return;
+    const so = src ? J.ownerOf(src) : null;
+    const mine = so && so.inCar;
+    for (const v of vs) {
+      if (v.hp <= 0 || v === mine) continue;
+      const dx = v.x - x, dy = v.y - y;
+      if (dx * dx + dy * dy > (r + v.vt.L / 2) * (r + v.vt.L / 2)) continue;
+      const ca = Math.cos(v.ang), sa = Math.sin(v.ang);
+      const lx = -dx * ca - dy * sa, ly = dx * sa - dy * ca;
+      const ex = Math.max(0, Math.abs(lx) - v.vt.L / 2), ey = Math.max(0, Math.abs(ly) - v.vt.W / 2);
+      if (ex * ex + ey * ey > r * r) continue;
+      Pw.hitVeh(v, dmg, src, fire, push, Math.atan2(dy, dx));
+    }
   };
 })();
