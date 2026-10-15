@@ -265,6 +265,20 @@
         renderWheel();
       }
     }, { passive: false });
+    // без захвата мыши: раздел — по наведению, щелчок — взять (window → Gn.lmb)
+    el.addEventListener('mousemove', (ev) => {
+      if (Input.locked || Input.touch) return;
+      const rc = el.getBoundingClientRect();
+      const dx = ev.clientX - (rc.left + rc.width / 2), dy = ev.clientY - (rc.top + rc.height / 2);
+      if (Math.hypot(dx, dy) < rc.width * 0.17) return;
+      const a = (Math.atan2(dy, dx) * 180) / Math.PI + 90 + 22.5;
+      const s = Math.floor((((a % 360) + 360) % 360) / 45);
+      WS.moved = true;
+      if (s !== WS.sec) {
+        WS.sec = s;
+        renderWheel();
+      }
+    });
     el.addEventListener('wheel', (ev) => {
       ev.preventDefault();
       cycleCat(ev.deltaY > 0 ? 1 : -1);
@@ -413,13 +427,40 @@
     const dps = (d.dmg * (d.pellets || 1)) / Math.max(0.06, d.rate);
     return `<div class="gs-st"><span>Урон</span>${bar(d.dmg * (d.pellets || 1), 120)}<span>Скорострельность</span>${bar(1 / d.rate, 14)}<span>Точность</span>${bar(0.12 - d.spread, 0.11)}<span>Дальность</span>${bar(d.range, 180)}</div><div class="muted small">Магазин ${d.mag} · ${J.ITEMS[d.ammo].name} · ${Math.round(dps)} ур/с · вес ${d.w} кг</div>`;
   }
+  // сколько патронов докупить: по каждому калибру — до четырёх магазинов самого ёмкого ствола
+  function refillNeed(p) {
+    const want = {};
+    let any = false;
+    for (const id in p.inv || {}) {
+      const d = cnt(p, id) > 0 && H.def(id);
+      if (!d || d.cls !== 'gun') continue;
+      any = true;
+      want[d.ammo] = Math.max(want[d.ammo] || 0, d.mag * 4);
+    }
+    const need = {};
+    let cost = 0;
+    for (const k in want) {
+      const n = want[k] - cnt(p, k);
+      if (n <= 0) continue;
+      need[k] = n;
+      cost += n * J.ITEMS[k].price;
+    }
+    return { need, cost, any };
+  }
+  Gn.refillNeed = refillNeed;
   Gn.renderShop = function (b) {
     const UI = J.UI;
     const p = G().player;
     const box = document.getElementById('bbody');
     const rg = J.REGION[b.region];
     const mul = UI.discount(p);
-    let h = `<h2>${esc(b.name)}</h2><p class="muted">${esc(rg.name)} · ${J.fmtClock(G().time)} · ${J.fmtMoney(p.money)}</p><p>Лицензия не нужна. Стрелять в городе — дело твоё, но полиция услышит.</p><div class="gs-tabs">`;
+    let h = `<h2>${esc(b.name)}</h2><p class="muted">${esc(rg.name)} · ${J.fmtClock(G().time)} · ${J.fmtMoney(p.money)}</p><p>Лицензия не нужна. Стрелять в городе — дело твоё, но полиция услышит.</p>`;
+    // услуги: пополнить патроны ко всем стволам (до четырёх магазинов запаса), тир
+    const fill = refillNeed(p);
+    const fillPr = Math.ceil(fill.cost * mul);
+    const rangePr = Math.ceil(25 * mul);
+    h += `<div class="opts"><button class="opt-b" data-gs="refill" ${!fill.cost || p.money < fillPr ? 'disabled' : ''}><span>Пополнить патроны ко всем стволам</span><em>${fill.cost ? J.fmtMoney(fillPr) : fill.any ? 'запас полон' : 'нет оружия'}</em></button>`;
+    h += `<button class="opt-b" data-gs="range" ${p.money < rangePr || p.energy < 10 ? 'disabled' : ''}><span>Тир: час стрельбы по мишеням</span><em>${J.fmtMoney(rangePr)} · ловкость · -10 бодрости</em></button></div><div class="gs-tabs">`;
     const tab = Gn._shopTab || 0;
     J.GUNSHOP.forEach(([n], i) => (h += `<button class="gs-tab ${i === tab ? 'on' : ''}" data-tab="${i}">${esc(n)}</button>`));
     h += '</div><div class="gs-list">';
@@ -438,6 +479,26 @@
     h += '</div>';
     box.innerHTML = h;
     box.querySelectorAll('[data-tab]').forEach((bt) => (bt.onclick = () => { Gn._shopTab = +bt.dataset.tab; Gn.renderShop(b); }));
+    box.querySelectorAll('[data-gs]').forEach((bt) => (bt.onclick = () => {
+      if (bt.dataset.gs === 'refill') {
+        const f = refillNeed(p);
+        const pr = Math.ceil(f.cost * mul);
+        if (!f.cost || p.money < pr) return;
+        J.P.addMoney(p, -pr);
+        for (const k in f.need) J.P.addItem(p, k, f.need[k], null, true);
+        UI.toast('Патроны пополнены.', 'green');
+      } else {
+        const pr = Math.ceil(25 * mul);
+        if (p.money < pr || p.energy < 10) return UI.toast('Не хватает денег или сил.', 'red');
+        J.P.addMoney(p, -pr);
+        p.energy -= 10;
+        J.Game.passTime(60);
+        J.P.trainStat(p, 'agi', 12);
+        UI.toast('Час в тире: рука твёрже, глаз точнее.', 'green');
+      }
+      if (J.Sfx && J.Sfx.click) J.Sfx.click();
+      Gn.renderShop(b);
+    }));
     box.querySelectorAll('[data-buy]').forEach((bt) => (bt.onclick = () => {
       const id = bt.dataset.buy;
       const it = J.ITEMS[id];

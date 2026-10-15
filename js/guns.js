@@ -633,7 +633,7 @@
     V.set(x + nx * 0.012, h + ny * 0.012, z + nz * 0.012);
     V2.set(nx, ny, nz);
     Q.setFromUnitVectors(ZAX, V2);
-    Q.multiply(new THREE.Quaternion().setFromAxisAngle(ZAX, o.rot));
+    Q.multiply(QR.setFromAxisAngle(ZAX, o.rot));
     S.set(o.s, o.s, 1);
     MX.compose(V, Q, S);
     P0.ho.setMatrixAt(o.i, MX);
@@ -1362,7 +1362,7 @@
       t: L / 120,
       fn: () => {
         if (best.dead) return;
-        J.hurt(best, dmg * 1.2, u, { ang: Math.atan2(ez, ex), knock: d.knock || 1.4, stun: d.stun || 0.2, kind: 'phys', unblockable: !(best.stand && best.standOut), bullet: true });
+        J.hurt(best, dmg * (d.mista ? 1.45 : 1.2), u, { ang: Math.atan2(ez, ex), knock: d.knock || 1.4, stun: d.stun || 0.2, kind: 'phys', unblockable: !(best.stand && best.standOut), bullet: true });
         if (pwOk()) J.Pw.blood(best.x, th, best.y, 8, Math.atan2(ez, ex), 3);
         if (u.isPlayer) Gn.hitMark(false, best.dead);
       },
@@ -1489,6 +1489,19 @@
         u.trigUp = false;
       }
       return false;
+    }
+    // револьвер Мисты: четвёртый патрон — к беде (иногда осечка)
+    if (d.mista && u.isPlayer && d.mag - mag === 3) {
+      if (near(u.x, u.y, 30)) J.R3.text(u.x, u.y, J.R.pick(['Четвёртый… не к добру!', 'Только не четыре!']), 'tsay', 1.2);
+      if (rnd() < 0.35) {
+        H.setMag(u, id, mag - 1);
+        gsnd('dry', u.x, u.y, { k: 1.5 });
+        u.cds.item = 0.55;
+        u.trigUp = false;
+        u.anim = { type: 'item', iclip: 'shootP', t: 0.2, max: 0.2 };
+        H.dirty = true;
+        return false;
+      }
     }
     H.setMag(u, id, mag - 1);
     u.cds.item = d.rate + J.clamp(u.cds.item || 0, -d.rate * 0.5, 0);
