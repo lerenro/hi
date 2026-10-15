@@ -1478,7 +1478,23 @@
     }
     if (s.disc > 0) Pw.seg(x, g0 + 1.75 * sc, z, x + 0.02, g0 + 1.77 * sc, z, 0.11, '#e9e6ef');
     if (s.slow > 0 && k && rnd() < 0.08) Pw.hoop(x, g0 + 0.1, z, 0.5, 0.015, '#a6ff7e', true, 12);
-    if (s.dino > 0 && k && rnd() < 0.2) Pw.puff(x, g0 + 1, z, 0, 0.5, 0, 0.4, 0.12, 0.05, '#6aa84f', null, 0, 0.8);
+    if (s.dino > 0) {
+      // Страшные Монстры: хвост, гребень и морда ящера поверх тела
+      const f = e.face || 0, ca = Math.cos(f), sa = Math.sin(f);
+      const sw = Math.sin(t * 4) * 0.25;
+      let px = x - ca * 0.15, ph = g0 + 0.95 * sc, pz = z - sa * 0.15;
+      for (let i = 1; i <= 4; i++) {
+        const b = f + Math.PI + sw * i * 0.4, L = 0.3;
+        const nx = px + Math.cos(b) * L, nh = ph - 0.12, nz = pz + Math.sin(b) * L;
+        Pw.seg(px, ph, pz, nx, nh, nz, 0.11 - i * 0.022, '#4f8a3a');
+        px = nx;
+        ph = nh;
+        pz = nz;
+      }
+      for (let i = 0; i < 4; i++) Pw.spike(x - ca * (0.12 + i * 0.02), g0 + (1.55 - i * 0.18) * sc, z - sa * (0.12 + i * 0.02), -ca * 0.5, 1, -sa * 0.5, 0.14, 0.04, '#e3d27a');
+      Pw.box(x + ca * 0.2, g0 + 1.62 * sc, z + sa * 0.2, 0.16, 0.12, 0.26, '#5a9a45', 0, Math.PI / 2 - f, 0);
+      if (k && rnd() < 0.2) Pw.puff(x, g0 + 1, z, 0, 0.5, 0, 0.4, 0.12, 0.05, '#6aa84f', null, 0, 0.8);
+    }
     if (s.invis > 0 && e.team === 'player' && k && rnd() < 0.2) Pw.glow(x + (rnd() - 0.5) * 0.5, g0 + rnd() * 1.6, z + (rnd() - 0.5) * 0.5, 1, '#d6e8ff', 0.2, 0.06, 0.5, 0);
   }
 
@@ -3360,7 +3376,17 @@
       if (ghost) R3.ring(e.x, e.y, 1, '#8a6a3a', 0.35);
     } else if (id === 'cream') {
       Pw.smoke(e.x, h + 0.6, e.y, 2, '#120820', 0.6, 0.6, 0.2, 0.3, 0.85);
-      if (ghost) Pw.decal('void', e.x, e.y, 1.4, 5);
+      if (ghost) Pw.decal('void', e.x, e.y, 1.6, 8);
+      // пустота глотает всё на пути: вражеские снаряды исчезают без следа
+      for (const p of G().projs) {
+        if (p.team === e.team || p.life <= 0) continue;
+        const dx = p.x - e.x, dy = p.y - e.y;
+        if (dx * dx + dy * dy > 1.8) continue;
+        p.life = 0;
+        p.explode = 0;
+        p.kick = 0;
+        Pw.smoke(p.x, h + (p.h || 1), p.y, 2, '#120820', 0.3, 0.4, 0.1, 0.1, 0.8);
+      }
     } else if (id === 'anubis') {
       if (ghost) Pw.glow(e.x, h + 1, e.y, 3, '#e8eefc', 1, 0.07, 0.2);
     } else if (ghost && e.view) Pw.ghost(e.view, c1Of(e), 0.28);
@@ -3608,26 +3634,62 @@
     snd(u, 'life');
   };
   // Безумный Бриллиант: «исправить» — враг вплавлен в камень, свои вылечены, машины починены
+  const STONE = ['#4a4744', '#5a5652', '#67625c', '#3e3b39'];
   Pw.fxRestore = function (u, ab, foes, friends) {
     if (!Pw.ready) return;
     R3.ring(u.x, u.y, ab.radius, '#ff9be6', 0.6);
     say(u, null, 'ドララァ!', 'big', '#ff9be6', '#2a0a3a');
     snd(u, 'glass');
+    const w = G().world;
     for (const o of foes) {
-      const dur = o.boss ? 1 : ab.stun || 2.5;
+      // стена рядом — враг «исправлен» прямо в неё: тянется к стене и врастает в камень надолго
+      let wx = 0, wy = 0, wall = false;
+      for (let r = 0.7; r <= 3.6 && !wall; r += 0.45)
+        for (let i = 0; i < 12; i++) {
+          const b = (i / 12) * TAU;
+          const x = o.x + Math.cos(b) * r, y = o.y + Math.sin(b) * r;
+          if (w.solid(x, y)) {
+            wx = x;
+            wy = y;
+            wall = true;
+            break;
+          }
+        }
+      if (wall && !o.boss) o.st.root = Math.max(o.st.root || 0, (ab.stun || 2.5) * 1.8);
+      o._bindC = '#6a645e';
+      const dur = o.boss ? 1 : (ab.stun || 2.5) * (wall ? 1.8 : 1);
+      if (wall && u.isPlayer && !Pw._cdWallTip) {
+        Pw._cdWallTip = 1;
+        J.UI.toast('Безумный Бриллиант вплавил врага в стену.', 'gold');
+      }
       Pw.add({
-        u, o, dur,
-        update() {
+        u, o, dur, wall, wx, wy,
+        update(dt) {
+          // подтянуть к стене (не сквозь неё)
+          if (this.wall && this.t < 0.3 && !this.o.boss) {
+            const o = this.o, dx = this.wx - o.x, dy = this.wy - o.y, d = Math.hypot(dx, dy);
+            if (d > 0.55) J.moveEnt(o, (dx / d) * Math.min(d - 0.5, dt * 9), (dy / d) * Math.min(d - 0.5, dt * 9));
+          }
           return this.t < this.dur && !this.o.dead;
         },
         draw() {
           const o = this.o;
           const h = gy(o.x, o.y);
           const k = Math.min(1, this.t / 0.15);
+          if (this.wall) {
+            // каменные наплывы от стены к телу
+            const dx = this.wx - o.x, dy = this.wy - o.y, d = Math.hypot(dx, dy) || 1;
+            const a = Math.atan2(dy, dx);
+            for (let i = 0; i < 4; i++) {
+              const f = (i + 0.5) / 4;
+              Pw.box(o.x + dx * f * k, h + 0.3 + (i % 2) * 0.6, o.y + dy * f * k, d * 0.3 + 0.2, 0.36, 0.4, STONE[(i + 1) % 4], 0.3 * i, -a, 0.2 + 0.3 * i);
+            }
+          }
           // каменная глыба вокруг тела (собралась из обломков)
-          for (let i = 0; i < 6; i++) {
-            const a = i * 1.05 + o.id;
-            Pw.box(o.x + Math.cos(a) * 0.28 * k, h + 0.3 + (i % 3) * 0.45, o.y + Math.sin(a) * 0.28 * k, 0.4, 0.5, 0.35, i % 2 ? '#8a8078' : '#a09488', 0.2 * i, a, 0.1 * i);
+          // неровные сколы разного размера и оттенка, гуще у ног — тело будто вросло в скалу
+          for (let i = 0; i < 10; i++) {
+            const a = i * 2.4 + o.id, r = (0.22 + (i % 3) * 0.07) * k, sz = 0.2 + ((i * 7) % 5) * 0.06;
+            Pw.box(o.x + Math.cos(a) * r, h + 0.15 + (i % 5) * 0.3, o.y + Math.sin(a) * r, sz * 1.2, sz * 1.4, sz, STONE[i % 4], 0.5 + i * 0.7, a, 0.3 + i * 0.4);
           }
         },
         end() {
