@@ -471,3 +471,62 @@ body.driving #hotwrap { display: none; }
   .hs { width: 40px; height: 40px; }
   #hotwrap { bottom: calc(84px + var(--sab)); }
 }
+
+/* ---------- Арсенал: перекрестие, оптика, патроны, колесо оружия, «Калибр» ---------- */
+#xhair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; z-index: 3; }
+#xhair i { position: absolute; display: block; background: rgba(255,255,255,0.92); box-shadow: 0 0 0 1px rgba(0,0,0,0.55); }
+#xhair .xd { width: 3px; height: 3px; left: -1.5px; top: -1.5px; border-radius: 50%; }
+#xhair .xt.t, #xhair .xt.b { width: 2px; height: 9px; left: 0; top: 0; }
+#xhair .xt.l, #xhair .xt.r { width: 9px; height: 2px; left: 0; top: 0; }
+#xhair.foe i { background: #ff4a5a; }
+#xhair:not(.ads) .xt { opacity: 0.55; }
+#xhair .xm { position: absolute; left: 0; top: 0; opacity: 0; }
+#xhair .xm.on { opacity: 1; }
+#xhair .xm i { width: 10px; height: 2px; background: #fff; box-shadow: 0 0 2px #000; }
+#xhair .xm i:nth-child(1) { transform: translate(4px, 4px) rotate(45deg); }
+#xhair .xm i:nth-child(2) { transform: translate(-14px, 4px) rotate(-45deg); }
+#xhair .xm i:nth-child(3) { transform: translate(4px, -6px) rotate(-45deg); }
+#xhair .xm i:nth-child(4) { transform: translate(-14px, -6px) rotate(45deg); }
+#xhair .xm.head i { background: #ffd84a; }
+#xhair .xm.kill i { background: #ff3a4a; }
+#scope { position: absolute; inset: 0; pointer-events: none; z-index: 3; background: radial-gradient(circle at 50% 50%, transparent 0 min(38vh, 38vw), rgba(0,0,0,0.97) calc(min(38vh, 38vw) + 2px)); }
+#scope .sc-ring { position: absolute; left: 50%; top: 50%; width: min(76vh, 76vw); height: min(76vh, 76vw); transform: translate(-50%, -50%); border-radius: 50%; box-shadow: inset 0 0 40px 10px rgba(0,0,0,0.75); }
+#scope .sc-h { position: absolute; left: calc(50% - min(38vh, 38vw)); width: min(76vh, 76vw); top: 50%; height: 1px; background: rgba(0,0,0,0.9); }
+#scope .sc-v { position: absolute; top: calc(50% - min(38vh, 38vw)); height: min(76vh, 76vw); left: 50%; width: 1px; background: rgba(0,0,0,0.9); }
+#scope .sc-d { position: absolute; left: calc(50% - 2px); top: calc(50% - 2px); width: 4px; height: 4px; border-radius: 50%; background: #e8203a; }
+#ammohud { position: absolute; right: calc(18px + var(--sar)); bottom: calc(150px + var(--sab)); font: 700 26px/1 system-ui, sans-serif; color: #fff; text-shadow: 0 2px 3px #000, 0 0 1px #000; pointer-events: none; text-align: right; }
+#ammohud span { font-size: 16px; color: #d8d0e8; margin-left: 4px; }
+#ammohud em { display: block; font: 600 12px/1.4 system-ui, sans-serif; color: #f2c230; font-style: normal; }
+body.is-touch #ammohud { bottom: auto; top: calc(72px + var(--sat)); font-size: 20px; }
+#blindfx { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 6; }
+#wwheel { position: absolute; left: 50%; top: 50%; width: min(86vmin, 520px); height: min(86vmin, 520px); transform: translate(-50%, -50%); z-index: 7; pointer-events: auto; user-select: none; }
+#wwheel .ww-ring { position: absolute; inset: 0; width: 100%; height: 100%; }
+#wwheel path { fill: rgba(14,12,20,0.72); stroke: rgba(255,255,255,0.22); stroke-width: 1.5; transition: fill 0.08s; }
+#wwheel path.empty { fill: rgba(14,12,20,0.45); }
+#wwheel path.on { fill: rgba(242,194,48,0.32); stroke: #f2c230; stroke-width: 2.5; }
+#wwheel .ww-c { fill: rgba(10,8,16,0.82); stroke: rgba(255,255,255,0.25); }
+#wwheel .ww-it { position: absolute; transform: translate(-50%, -50%); width: 25%; text-align: center; color: #fff; text-shadow: 0 1px 2px #000; pointer-events: auto; }
+#wwheel .ww-it.empty { opacity: 0.35; }
+#wwheel .ww-ic svg { width: 64px; height: 64px; filter: drop-shadow(0 2px 2px #000); }
+#wwheel .ww-it b { display: block; font-size: 13px; min-height: 16px; }
+#wwheel .ww-it em { display: block; font-style: normal; font-size: 10px; color: #cfc6dc; text-transform: uppercase; letter-spacing: 0.04em; }
+#wwheel .ww-it.on em { color: #f2c230; }
+#wwheel .ww-mid { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 30%; text-align: center; color: #fff; pointer-events: auto; }
+#wwheel .ww-mid b { display: block; font-size: 14px; line-height: 1.2; }
+#wwheel .ww-mid span { display: block; font-size: 11px; color: #d8d0e8; margin-top: 3px; }
+#wwheel .ww-mid em { display: block; font-size: 10px; color: #f2c230; font-style: normal; margin-top: 2px; }
+#wwheel .ww-hint { position: absolute; left: 50%; bottom: -26px; transform: translateX(-50%); white-space: nowrap; font-size: 12px; color: #cfc6dc; text-shadow: 0 1px 2px #000; }
+body.is-touch #wwheel .ww-hint { display: none; }
+.gs-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+.gs-tab { background: var(--panel2); border: 1px solid var(--line); color: var(--muted); padding: 5px 9px; font-size: 12px; }
+.gs-tab.on { color: #fff; border-color: #e0483a; background: #3a1d24; }
+.gs-list { display: flex; flex-direction: column; gap: 6px; max-height: 58vh; overflow-y: auto; }
+.gs-item { display: grid; grid-template-columns: 56px 1fr auto; gap: 10px; align-items: center; background: var(--panel2); border-left: 3px solid #e0483a; padding: 8px 10px; }
+.gs-item.own { border-left-color: var(--green); }
+.gs-ic svg { width: 56px; height: 56px; }
+.gs-info b { display: block; color: #fff; margin-bottom: 3px; }
+.gs-info .small { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.gs-st { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; font-size: 11px; color: var(--muted); align-items: center; }
+.gs-bar { display: block; height: 5px; background: rgba(255,255,255,0.1); }
+.gs-bar s { display: block; height: 100%; background: linear-gradient(90deg, #e0483a, #f2c230); text-decoration: none; }
+@media (max-width: 560px) { .gs-item { grid-template-columns: 40px 1fr; } .gs-item .btn { grid-column: 1 / -1; } .gs-ic svg { width: 40px; height: 40px; } }

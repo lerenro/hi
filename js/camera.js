@@ -124,7 +124,7 @@
     const dx = -Math.cos(yaw) * cp, dz = -Math.sin(yaw) * cp, dy = sp;
     const want = mode === 'car' ? c.carDist * (opts.scale || 1) + Math.min(4, Math.abs(opts.speed || 0) * 0.12) : mode === 'title' ? 26 : c.dist * (mode === 'foot' ? c.distMul : 1);
     // смещение за правое плечо (уменьшается при близкой камере); само плечо тоже не должно входить в стену
-    let sh = mode === 'foot' ? 0.42 * J.clamp(c.arm / 4, 0.3, 1) : 0;
+    let sh = mode === 'foot' ? 0.42 * J.clamp(c.arm / 4, 0.3, 1) * (c.shoulder || 1) : 0; // в прицеле (guns_ui.js) — дальше за плечо
     const rx = -Math.sin(yaw), rz = Math.cos(yaw);
     const oy = c.ty + c.lift;
     if (sh > 0 && !opts.noCollide) sh *= R3.segTrace(c.tx, oy, c.tz, c.tx + rx * (sh + 0.25), oy, c.tz + rz * (sh + 0.25));

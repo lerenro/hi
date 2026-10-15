@@ -1013,7 +1013,7 @@
       case 'kame_yu': return { cell: FC.office, bay: 3, g: shopG };
       case 'passione': return { cell: FC.shutter, bay: 3, g: null };
       case 'cape': return { cell: FC.blank, bay: 3, g: null };
-      case 'shop': case 'restaurant': case 'bar': case 'black_market': case 'gym': return { cell: aptCell, bay: 3, g: shopG };
+      case 'shop': case 'restaurant': case 'bar': case 'black_market': case 'gym': case 'gunshop': return { cell: aptCell, bay: 3, g: shopG };
     }
     return { cell: aptCell, bay: 3, g: null };
   }

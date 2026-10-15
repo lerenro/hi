@@ -39,12 +39,13 @@
     }
     return null;
   };
-  const WEAPON = { blade: 1, blunt: 1, throw: 1, gun: 1 };
+  const WEAPON = { blade: 1, blunt: 1, throw: 1, gun: 1, nade: 1 };
   H.isWeapon = (id) => !!(H.def(id) && WEAPON[H.def(id).cls]);
   H.handable = (id) => !!H.def(id) && H.def(id).cls !== 'ammo';
   // хват: как держит предмет
   const gripOf = (d) => {
     if (!d) return null;
+    if (d.grip) return d.grip;
     if (d.cls === 'gun') return 'gun';
     if (d.cls === 'food') return 'food';
     if (d.model === 'sign') return 'sign';
@@ -426,7 +427,9 @@
       rod(gb, C('#c87a2a'), 0.026, 0.031, 0.056, 0.056);
     },
   };
-  const GLASS = { bottle: 1, bbottle: 1 };
+  H.MODELS = MODELS;
+  H.MB = { rod, box, blade, M4, C, TGB, TAPER, CYL, CYL8, CYL16, PRISM3, BOX, SPH, OCT, TOR, CONE, HALF, STEEL };
+  const GLASS = { bottle: 1, bbottle: 1, molotov: 1 };
   const GEO = {};
   H.geo = function (model) {
     if (GEO[model]) return GEO[model];
@@ -526,6 +529,13 @@
   };
   H.CLIPS = CLIPS;
   H.IDLE = IDLE;
+  H.pose = pose;
+  H.built = built;
+  H.sampleClip = sampleClip;
+  H.CH = CHN;
+  // поза прицеливания по хвату (огнестрел); guns.js добавляет свои
+  H.AIMP = { gun: pose(AIM, IDLE.gun) };
+  const AIMG = { gun: 1, pistol: 1, rifle: 1 };
   H.rebuildClips = () => { for (const k in BUILT) delete BUILT[k]; };
 
   // Поза поверх обычной анимации (вызывается после J.Anim.rig)
@@ -535,6 +545,8 @@
     if (!mesh) return;
     const d = H.def(v.heldId);
     const grip = gripOf(d);
+    // кастет: поза кулака — обычная, предмет просто на пальцах
+    if (!IDLE[grip]) return;
     const an = e.anim && e.anim.t > 0 ? e.anim : null;
     const mine = an && an.type === 'item';
     let want = 1;
@@ -542,13 +554,15 @@
     else if (an && !mine && an.type !== 'punch' && !an.stand) want = 0;
     v.hw = approach(v.hw || 0, want, dt / 0.12);
     const w = v.hw;
-    let left = false, spine = 0;
+    let left = false, spine = 0, pitch = 0;
     const ch = e.chg && !(e.standOut && e.stand && !mine);
+    const aimG = AIMG[grip];
     if (mine && CLIPS[an.iclip]) {
       const cl = built(grip, an.iclip);
       sampleClip(cl, J.clamp(1 - an.t / an.max, 0, 1), OUTP);
       left = cl.left;
       spine = 1;
+      if (aimG && cl.aim) pitch = e.aimPitch || 0;
     } else if (e.thrAim || (ch && d.cls === 'throw')) {
       // замах для броска: рука отведена назад
       const k = e.thrAim ? J.clamp(e.thrAim.t / 0.25, 0, 1) : J.clamp(e.chg.t / 0.25, 0, 1);
@@ -561,15 +575,21 @@
       sampleClip(cl, cl.hit * 0.75 * J.clamp(e.chg.t / 0.25, 0, 1), OUTP);
       left = cl.left;
       spine = 1;
-    } else if (grip === 'gun' && (e.aimT > 0 || (e.ai && e.ai.target && !e.ai.civ))) {
-      OUTP.set(pose(AIM, IDLE.gun));
+    } else if (aimG && (e.aimT > 0 || e.ads || (e.ai && e.ai.target && !e.ai.civ && !(e.ai.hideT > 0)))) {
+      OUTP.set(H.AIMP[grip] || H.AIMP.gun);
       left = true;
       spine = 0.6;
+      pitch = e.aimPitch || 0;
     } else {
       OUTP.set(IDLE[grip]);
       // ходьба: предмет покачивается в такт шагу
-      if (spd > 0.3) OUTP[AR] += Math.sin(v.phase || 0) * 0.12 * (grip === 'two' || grip === 'sign' ? 0.3 : 1);
-      left = d.two && grip !== 'two' && grip !== 'sign';
+      if (spd > 0.3) OUTP[AR] += Math.sin(v.phase || 0) * 0.12 * (grip === 'two' || grip === 'sign' || grip === 'rifle' ? 0.3 : 1);
+      left = (d.two && grip !== 'two' && grip !== 'sign') || grip === 'rifle';
+    }
+    // ствол вверх-вниз за прицелом
+    if (pitch) {
+      OUTP[AR] -= pitch;
+      if (left) OUTP[AL] -= pitch;
     }
     if (w <= 0) {
       mesh.rotation.x = OUTP[WR];
@@ -655,6 +675,7 @@
     // как лежит: плашмя на боку; воткнутый — под углом
     if (gi.pitch === undefined) gi.pitch = 0;
     if (gi.roll === undefined) gi.roll = d && (d.cls === 'blade' || d.model === 'tknife' || d.model === 'sign') ? HALF : d && d.cls === 'gun' ? HALF : 0;
+    if (d && d.cls === 'nade' && o.pitch === undefined) gi.pitch = HALF;
     gi.mesh = H.mesh(d ? d.model : 'rock', false);
     R3.fxGroup.add(gi.mesh);
     placeGround(gi);
@@ -670,7 +691,7 @@
   function placeGround(gi) {
     const m = gi.mesh;
     const d = H.def(gi.item);
-    const lift = gi.stuck ? 0 : LIFT[d && d.model] || 0.012;
+    const lift = gi.stuck ? 0 : (d && d.lift) || LIFT[d && d.model] || 0.012;
     m.position.set(gi.x, gi.h + lift, gi.y);
     m.rotation.set(gi.pitch, gi.yaw, gi.roll);
   }
@@ -896,7 +917,7 @@
     let d = H.def(id);
     if (!d || d.cls === 'ammo') return false;
     // револьвер в ближнем бою — удар рукоятью, а не выстрел в упор
-    if (d.cls === 'gun') d = GUN_BUTT[id] || (GUN_BUTT[id] = Object.assign({}, d, { dmg: 9, reach: 1.0, arc: 1.1, stun: 0.4, knock: 1.4, bleed: 0 }));
+    if (d.cls === 'gun') d = GUN_BUTT[id] || (GUN_BUTT[id] = Object.assign({}, d, d.grip === 'rifle' ? { dmg: 14, reach: 1.25, arc: 1.2, stun: 0.6, knock: 2.6, bleed: 0, w: Math.min(d.w, 3) } : { dmg: 9, reach: 1.0, arc: 1.1, stun: 0.4, knock: 1.4, bleed: 0, w: Math.min(d.w, 1.5) }));
     const heavy = k !== undefined;
     if (!heavy && u.cds.item > 0) {
       if (u.isPlayer) u.buf = g.t;
@@ -928,7 +949,10 @@
     u.icombo = ci + 1;
     u.lastItemT = g.t;
     let clip;
-    if (grip === 'knife') clip = heavy ? 'stab' : ci % 2 ? 'slash' : 'stab';
+    if (grip === 'knife' && d.chop) clip = heavy ? 'overhead' : ci % 2 ? 'slashB' : 'slash';
+    else if (grip === 'knife') clip = heavy ? 'stab' : ci % 2 ? 'slash' : 'stab';
+    else if (grip === 'rifle') clip = 'butt';
+    else if (grip === 'nade') clip = 'overhead';
     else if (grip === 'two') clip = heavy ? 'smash' : ci % 2 ? 'swingB' : 'swing';
     else if (grip === 'sign') clip = heavy ? 'smash' : 'swing';
     else clip = 'overhead';
@@ -1003,10 +1027,15 @@
       if (J.Sfx && J.Sfx.click) J.Sfx.click();
       return false;
     }
-    u.reloadT = d.reload;
-    u.anim = { type: 'item', iclip: 'reload', t: d.reload, max: d.reload };
-    if (u.isPlayer || nearP(u.x, u.y, 20)) snd('reload');
-    if (u.isPlayer) J.R3.text(u.x, u.y, 'Перезарядка…', 'tmiss', d.reload, 2.4);
+    const T = d.shell || d.reload;
+    u.reloadT = T;
+    const rc = d.shell ? 'shell' : d.rclip || (gripOf(d) === 'rifle' ? 'reloadR' : gripOf(d) === 'pistol' ? 'reloadP' : 'reload');
+    u.anim = { type: 'item', iclip: CLIPS[rc] ? rc : 'reload', t: T, max: T };
+    if (u.isPlayer || nearP(u.x, u.y, 20)) {
+      if (J.Guns && J.Guns.reloadSnd) J.Guns.reloadSnd(u, d, d.shell ? 'shell' : 'start');
+      else snd('reload');
+    }
+    if (u.isPlayer && !d.shell) J.R3.text(u.x, u.y, 'Перезарядка…', 'tmiss', d.reload, 2.4);
     return true;
   };
   function finishReload(u) {
@@ -1014,13 +1043,34 @@
     const d = H.def(id);
     if (!d || d.cls !== 'gun') return;
     const mag = H.magOf(u, id);
+    if (d.shell) {
+      // ружьё: по одному патрону, пока не полно (выстрел прерывает)
+      const can = u.isPlayer ? Math.min(1, cnt(u, d.ammo)) : 1;
+      if (can > 0 && mag < d.mag) {
+        if (u.isPlayer) J.P.removeItem(u, d.ammo, 1);
+        setMag(u, id, mag + 1);
+      }
+      if (mag + can < d.mag && (!u.isPlayer || cnt(u, d.ammo) > 0)) {
+        u.reloadT = d.shell;
+        u.anim = { type: 'item', iclip: 'shell', t: d.shell, max: d.shell };
+        if (J.Guns && J.Guns.reloadSnd && (u.isPlayer || nearP(u.x, u.y, 20))) J.Guns.reloadSnd(u, d, 'shell');
+      } else if (J.Guns && J.Guns.reloadDone) J.Guns.reloadDone(u, d);
+      H.dirty = true;
+      return;
+    }
     if (u.isPlayer) {
       const n = Math.min(d.mag - mag, cnt(u, d.ammo));
       if (n > 0) J.P.removeItem(u, d.ammo, n);
       setMag(u, id, mag + n);
     } else setMag(u, id, d.mag);
+    if (J.Guns && J.Guns.reloadDone) J.Guns.reloadDone(u, d);
     H.dirty = true;
   }
+  H.finishReload = finishReload;
+  H.setMag = setMag;
+  H.say = say;
+  H.cnt = cnt;
+  H.GUN_FX = (u, x, h, z, a) => GUN_FX(u, x, h, z, a);
   // линия выстрела: первая стена, машина или человек
   function hitscan(u, ang, maxD) {
     const g = G();
@@ -1190,6 +1240,7 @@
     if (!d) return false;
     if (d.cls === 'gun') return H.fire(p);
     if (d.cls === 'food') return H.consume(p);
+    if (d.cls === 'nade') return false; // ЛКМ с гранатой — прицел и бросок (guns_ui.js)
     return H.melee(p);
   };
 
@@ -1252,7 +1303,7 @@
       stun: thr.stun || (d && d.stun) || 0.2, w: d ? d.w : 0.5, blade: d && (d.cls === 'blade' || d.model === 'tknife'),
       v0: Math.hypot(o.vx, o.vy, o.vh), dur: o.dur, mag: o.mag, t: 0, tsAge: 0, held: false, thaw: 0,
       freezeNear: o.freezeNear || 0, tg: o.tg || null, stand: !!o.stand, hits: new Set(), mesh: H.mesh(d ? d.model : 'rock', false),
-      trail: o.trail || 0, spinBall: !!o.spinBall,
+      trail: o.trail || 0, spinBall: !!o.spinBall, nade: (d && d.nade) || null, fuse: d && d.fuse !== undefined ? d.fuse : undefined,
     };
     R3.fxGroup.add(obj.mesh);
     FLY.push(obj);
@@ -1343,6 +1394,8 @@
     const g = G();
     const w = g.world;
     o.t += dt;
+    // граната легла и лежит до взрыва
+    if (o.rest) return true;
     o.vh -= GRAV * o.gf * dt;
     if (o.ret && o.t > 0.25 && (o.returning || o.t > 1.1)) {
       // шар возвращается в руку
@@ -1412,7 +1465,10 @@
         return hitGround(o);
       }
     }
-    if (o.t > 8) return toGround(o), false;
+    if (o.t > 8) {
+      if (o.nade) return J.Guns.detonate(o), false;
+      return toGround(o), false;
+    }
     return true;
   }
   // эффекты попадания летящего
@@ -1433,7 +1489,10 @@
       if (e.ai) e.ai.fear = 7;
       J.R3.text(e.x, e.y, J.R.pick(['Ай!', 'Ты что творишь?!']), 'tsay', 0.9);
       if (o.owner && o.owner.isPlayer && J.Veh && J.Veh.crime) J.Veh.crime(0.5, e.x, e.y);
-      if (o.shatter) return shatterFx(o), true;
+      if (o.shatter) {
+        if (o.nade) J.Guns.detonate(o);
+        return shatterFx(o), true;
+      }
       bounceOff(o, e);
       return false;
     }
@@ -1457,7 +1516,8 @@
     if (o.spinBall && pwOk()) J.Pw.glow(o.x, o.h, o.y, 12, '#ffd84a', 3, 0.08, 0.5, 0, 0.2);
     if (o.shatter) {
       shatterFx(o);
-      if (o.owner && o.owner.isPlayer) J.R3.text(e.x, e.y, 'ДЗЫНЬ!', 'tcry', 0.7);
+      if (o.nade) J.Guns.detonate(o);
+      else if (o.owner && o.owner.isPlayer) J.R3.text(e.x, e.y, 'ДЗЫНЬ!', 'tcry', 0.7);
       return true;
     }
     if (o.dur !== undefined) {
@@ -1496,10 +1556,21 @@
     const near = nearP(o.x, o.y, 35);
     if (o.shatter) {
       shatterFx(o);
+      if (o.nade) J.Guns.detonate(o);
       return false;
     }
     const sp = Math.hypot(o.vx, o.vy);
     const ang = Math.atan2(o.vy, o.vx);
+    if (o.nade) {
+      // граната отскакивает от стены и катится дальше
+      if (near) J.Guns.clink(o, sp);
+      o.vx *= -0.4;
+      o.vy *= -0.4;
+      o.vh *= 0.5;
+      o.spin *= -0.6;
+      o.hits.clear();
+      return true;
+    }
     if (o.ret) {
       o.returning = true;
       return true;
@@ -1530,7 +1601,24 @@
     const near = nearP(o.x, o.y, 35);
     if (o.shatter) {
       shatterFx(o);
+      if (o.nade) J.Guns.detonate(o);
       return false;
+    }
+    if (o.nade) {
+      // отскок и перекат; медленная — ложится
+      if (near && Math.abs(o.vh) > 1.5) J.Guns.clink(o, sp);
+      if (sp > 2.2) {
+        o.vh = Math.abs(o.vh) * 0.32;
+        o.vx *= 0.62;
+        o.vy *= 0.62;
+        o.spin *= 0.6;
+        return true;
+      }
+      o.rest = true;
+      o.vx = o.vy = o.vh = 0;
+      o.h = gy(o.x, o.y) + 0.04;
+      o.spin = 0;
+      return true;
     }
     if (o.ret) {
       o.returning = true;
@@ -1649,6 +1737,16 @@
         orientFly(o);
         o.mesh.position.x += (rnd() - 0.5) * 0.04;
         continue;
+      }
+      // запал гранаты
+      if (o.fuse !== undefined) {
+        o.fuse -= dt;
+        if (o.fuse <= 0) {
+          J.Guns.detonate(o);
+          removeFly(o);
+          FLY.splice(i, 1);
+          continue;
+        }
       }
       const alive = flyStep(o, dt);
       if (!alive) {
@@ -1905,7 +2003,7 @@
     else if (e.gun) e.hand = 'revolver';
     else if (e.mobType === 'bandit' && rnd() < 0.3) e.hand = 'revolver';
   };
-  const OTHROW = { bottle: 1, brick: 1, rock: 1, broken_bottle: 0 };
+  const OTHROW = { bottle: 1, brick: 1, rock: 1, broken_bottle: 0, molotov: 1, grenade: 1 };
   function npcTick(e, dt) {
     if (e.aimT > 0) e.aimT -= dt;
     if (e.reloadT > 0) {
@@ -2073,7 +2171,7 @@
   // игрок: ЛКМ с предметом — действие предмета
   const basic0 = J.P.basicAttack;
   J.P.basicAttack = function (p) {
-    if (!p.inCar && H.heldId(p)) {
+    if (!p.inCar && H.heldId(p) && !H.held(p).fist) {
       if (H.use(p)) {
         p.buf = 0;
         if (J.Fx && J.Fx.cancelStandoff) J.Fx.cancelStandoff();
@@ -2086,8 +2184,8 @@
   const heavy0 = J.Cb.heavy;
   J.Cb.heavy = function (u, k) {
     const d = H.held(u);
-    if (d && !(J.Cb.standOn(u) && !u.isPlayer)) {
-      if (d.cls === 'throw') return !!H.throwFrom(u, 0.3 + 0.7 * (k || 0));
+    if (d && !d.fist && !(J.Cb.standOn(u) && !u.isPlayer)) {
+      if (d.cls === 'throw' || d.cls === 'nade') return !!H.throwFrom(u, 0.3 + 0.7 * (k || 0));
       if (d.cls === 'food' || d.cls === 'ammo') return false;
       return H.melee(u, k || 0);
     }
@@ -2097,7 +2195,7 @@
   const aiStrike0 = J.Cb.aiStrike;
   J.Cb.aiStrike = function (e, tg, heavy) {
     const d = H.held(e);
-    if (d && (d.cls === 'blade' || d.cls === 'blunt' || (d.cls === 'throw' && e.hand !== 'throw_knife')) && !J.Cb.standOn(e)) {
+    if (d && !d.fist && (d.cls === 'blade' || d.cls === 'blunt' || (d.cls === 'throw' && e.hand !== 'throw_knife')) && !J.Cb.standOn(e)) {
       const pr = J.Cb.prof(e);
       e.ai.target = tg;
       const ok = H.melee(e, heavy ? 0.6 : undefined);
@@ -2148,7 +2246,7 @@
       const d = H.def(t.hand);
       if (d && t.hand !== 'throw_knife') {
         H.spawnGround(t.x + (rnd() - 0.5) * 0.6, t.y + (rnd() - 0.5) * 0.6, t.hand, 1, { dur: t.hdur, mag: d.cls === 'gun' ? Math.max(0, t.mag || 0) : undefined });
-        if (d.cls === 'gun' && rnd() < 0.7) H.spawnGround(t.x + (rnd() - 0.5) * 0.8, t.y + (rnd() - 0.5) * 0.8, 'bullets', 2 + Math.floor(rnd() * 5));
+        if (d.cls === 'gun' && rnd() < 0.7) H.spawnGround(t.x + (rnd() - 0.5) * 0.8, t.y + (rnd() - 0.5) * 0.8, d.ammo, Math.max(2, Math.round(d.mag * (0.3 + rnd() * 0.5))));
       }
       t.hand = null;
     }
@@ -2359,6 +2457,7 @@
     gum: '<rect x="6" y="11" width="20" height="10" rx="1" fill="#f2f2ee"/><rect x="13" y="11" width="6" height="10" fill="#6a3a1a"/>',
     bowl: '<path d="M4 14 H28 Q27 27 16 27 Q5 27 4 14 Z" fill="#f4f2ec"/><ellipse cx="16" cy="14" rx="12" ry="3" fill="#c87a2a"/>',
   };
+  H.ICONS = ICONS;
   H.icon = (id) => {
     const d = H.def(id);
     const m = d ? (d.model === 'tknife' ? 'tknife' : d.model) : null;
