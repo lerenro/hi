@@ -1248,7 +1248,7 @@
         return;
       }
       // стенд цели против пули
-      const ss = standStop(o, u, d, r.x, r.h, r.z, dx, dh, dz);
+      const ss = Gn.standStop(o, u, d, r.x, r.h, r.z, dx, dh, dz);
       if (ss) {
         r.x = ss.x;
         r.h = ss.h;
@@ -1438,7 +1438,7 @@
   // разброс игрока сейчас
   Gn.spread = function (p, d) {
     const mv = Math.hypot(p.vx || 0, p.vy || 0);
-    let s = (p.ads ? d.ads : d.spread) + (p.bloom || 0) + mv * (p.ads ? 0.006 : 0.012);
+    let s = (p.ads ? d.ads : d.spread) + (p.bloom || 0) * (p.ads ? 0.55 : 1) + mv * (p.ads ? 0.006 : 0.012);
     if (p.airborne || p.dash) s += 0.08;
     if (p.st && p.st.stun > 0) s += 0.1;
     if (p.ads && d.scope && mv > 0.5) s += 0.02;
@@ -1477,7 +1477,8 @@
         u.anim = null;
       } else return false;
     }
-    if (u.cds.item > 0) return false;
+    // кулдаун с остатком: темп стрельбы не зависит от частоты кадров
+    if (u.cds.item > 0.001) return false;
     // полуавтомат — по отдельному нажатию
     if (u.isPlayer && !d.auto && !u.trigUp) return false;
     const mag = H.magOf(u, id);
@@ -1490,7 +1491,7 @@
       return false;
     }
     H.setMag(u, id, mag - 1);
-    u.cds.item = d.rate;
+    u.cds.item = d.rate + J.clamp(u.cds.item || 0, -d.rate * 0.5, 0);
     u.trigUp = false;
     u.aimT = 1.6;
     u.lastShotT = g.t;
@@ -1574,7 +1575,7 @@
       });
     }
     // отдача и раскрытие разброса
-    u.bloom = Math.min(0.12, (u.bloom || 0) + (d.bloom || 0));
+    u.bloom = Math.min(d.auto ? 0.075 : 0.1, (u.bloom || 0) + (d.bloom || 0));
     if (pl) {
       const k = (d.kick || 0.03) * (u.ads ? 0.65 : 1) * (0.8 + rnd() * 0.4);
       Gn.recoil(u, k, d);
@@ -1620,7 +1621,8 @@
     updFrozen(dt);
     // разброс сходится, отдача возвращается
     for (const e of g.ents) {
-      if (e.bloom > 0) e.bloom = Math.max(0, e.bloom - dt * (0.18 + e.bloom * 3));
+      // разброс копится в очереди и сходится после паузы
+      if (e.bloom > 0 && g.t - (e.lastShotT || 0) > 0.14) e.bloom = Math.max(0, e.bloom - dt * (0.1 + e.bloom * 2.5));
       if (e.cds && e.cds._bst > 0) e.cds._bst -= dt;
     }
     if (p.recoilBack > 0) {

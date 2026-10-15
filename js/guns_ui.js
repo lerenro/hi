@@ -173,6 +173,11 @@
     const scope = show && d.scope && Gn.adsK > 0.85;
     XH.el.style.display = show && !scope ? '' : 'none';
     XH.sc.style.display = scope ? '' : 'none';
+    // в оптике — только перекрестие: панель, способности, подсказки и надписи прячутся
+    if (XH.scoped !== !!scope) {
+      XH.scoped = !!scope;
+      document.body.classList.toggle('scoped', XH.scoped);
+    }
     // патроны: магазин / запас
     const am = show ? `<b>${H.magOf(p, H.heldId(p))}</b><span>/ ${cnt(p, d.ammo)}</span>${p.reloadT > 0 ? '<em>перезарядка</em>' : ''}` : '';
     if (am !== XH.lastAm) {

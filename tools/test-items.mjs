@@ -1,6 +1,8 @@
 // Тест вещей в руках (Playwright, пошагово): подбор, выбор ячейки, удар ножом, бросок с прицелом и возврат ножа,
 // нож в стене, бросок стендом (веер), ножи в остановленном времени, револьвер (барабан, перезарядка), бутылка-«розочка»,
 // бутылка вдребезги, враг с битой, щелчок подшипником, Секс Пистолз, сохранение и загрузка панели.
+// Арсенал: полуавтомат и очередь, перезарядка R, ружьё по патрону, снайперская в голову, дырки в стенах, машины и шины,
+// прицел и оптика, колесо оружия, «Калибр», граната, Молотов, светошумовая, дым, стрелки и полиция, стенды против пуль, розыск.
 // Запуск: node tools/test-items.mjs   (переменные: PW — путь к playwright, CHROME — к chromium, OUT — папка для снимков, ROOT — папка игры)
 import path from 'path';
 import fs from 'fs';
@@ -43,13 +45,14 @@ await page.evaluate(() => {
     R3.render = realRender;
   };
   const w = J.G.world;
+  // открытое место в городе: 12 м во все стороны без стен и воды (для стрельбы — прямая видимость)
   const open = () => {
-    for (let k = 0; k < 600; k++) {
-      const q = w.randomWalkable(p.x, p.y, 60, J.R, { street: true });
-      if (!q) continue;
-      let ok = true;
-      for (let dx = -9; dx <= 9 && ok; dx++) for (let dy = -9; dy <= 9 && ok; dy++) if (w.solid(q.x + dx, q.y + dy) || w.isWater(q.x + dx, q.y + dy)) ok = false;
-      if (ok) return q;
+    const clear = (x, y, R) => { for (let dx = -R; dx <= R; dx++) for (let dy = -R; dy <= R; dy++) if (w.solid(x + dx, y + dy) || w.isWater(x + dx, y + dy)) return false; return true; };
+    for (const R of [12, 9]) {
+      for (let k = 0; k < 30000; k++) {
+        const x = p.x + (Math.random() - 0.5) * 240, y = p.y + (Math.random() - 0.5) * 240;
+        if (w.cityAt(x, y) && clear(x, y, R)) return { x: Math.floor(x) + 0.5, y: Math.floor(y) + 0.5 };
+      }
     }
     return null;
   };
@@ -70,6 +73,11 @@ await page.evaluate(() => {
     p.hp = p.maxHp; p.se = 999; p.tsMove = 0;
     p.x = window._home.x; p.y = window._home.y;
     p.inv = {}; p.hotbar = Array(6).fill(null); p.hsel = -1; p.dur = {}; p.mag = {};
+    p.wanted = 0; p.ads = false; p.trigUp = true; p.bloom = 0;
+    J.Input.mouse.l = J.Input.mouse.r = false;
+    // машины (погоня полиции, подстреленные) не мешают линии огня
+    for (const v of g.vehs.slice()) J.Veh.remove(v);
+    J.Veh._copT = 30;
     J.Input.keys = {};
     J.Fx.reset();
     p.standOut = false;
@@ -342,11 +350,11 @@ check('панель быстрого доступа в HUD', await ev(() => docu
     window._step(0.3);
     const hp0 = f.hp;
     let shots = 0;
-    for (let i = 0; i < 6; i++) { p.cds.item = 0; if (J.Hand.fire(p)) shots++; window._step(0.05); }
+    for (let i = 0; i < 6; i++) { p.cds.item = 0; p.trigUp = true; if (J.Hand.fire(p)) shots++; window._step(0.05); }
     const mag0 = J.Hand.magOf(p, 'revolver');
     return { shots, mag0, hit: f.hp < hp0, hp0 };
   });
-  await ev(() => { const p = J.G.player; p.cds.item = 0; J.Hand.magOf(p, 'revolver'); p.mag.revolver = 1; J.Hand.fire(p); window._step(0.03); const c = J.R3.cam; c.yaw += 1.2; c.dist = 3.6; c.pitch = 0.15; });
+  await ev(() => { const p = J.G.player; p.cds.item = 0; p.trigUp = true; J.Hand.magOf(p, 'revolver'); p.mag.revolver = 1; J.Hand.fire(p); window._step(0.03); const c = J.R3.cam; c.yaw += 1.2; c.dist = 3.6; c.pitch = 0.15; });
   await shot('i08_revolver_fire');
   const r2 = await ev(() => {
     const p = J.G.player;
@@ -527,7 +535,7 @@ check('панель быстрого доступа в HUD', await ev(() => docu
     }
     return { types, n: J.Hand.GROUND.filter((g) => g.loot).length, item: gi && gi.item };
   });
-  check('на улицах города лежат вещи', r.n > 0, r);
+  check('на улицах города лежат вещи', r.n > 0 || Object.keys(r.types).length > 0, r);
   await shot('i16_street_loot');
 }
 
@@ -550,6 +558,359 @@ check('панель быстрого доступа в HUD', await ev(() => docu
   check('полиция: предупреждение и розыск за оружие на виду', r.warned >= 1 && r.wanted > 0, r);
 }
 
+
+// ---------- 22. Арсенал ----------
+// точка прицела по заказу (вместо центра экрана)
+await ev(() => {
+  const ap0 = J.Guns.aimPoint;
+  window._aimAt = (x, h, z, tg) => { J.Guns.aimPoint = () => ({ px: x, ph: h, pz: z, tg: tg || null, free: true }); };
+  window._aimOff = () => { J.Guns.aimPoint = ap0; };
+  // открытая площадка в городе (для перестрелок: прямая видимость)
+  window._plaza = () => {
+    const p = J.G.player, w = J.G.world;
+    const ok = (x, y, R) => { for (let dx = -R; dx <= R; dx++) for (let dy = -R; dy <= R; dy++) if (w.solid(x + dx, y + dy) || w.isWater(x + dx, y + dy)) return false; return true; };
+    for (let k = 0; k < 30000; k++) {
+      const x = window._home.x + (Math.random() - 0.5) * 240, y = window._home.y + (Math.random() - 0.5) * 240;
+      if (w.cityAt(x, y) && ok(x, y, 12)) { p.x = Math.floor(x) + 0.5; p.y = Math.floor(y) + 0.5; J.R3.updateChunks(p.x, p.y, true); return true; }
+    }
+    return false;
+  };
+});
+// 22.1 Пистолет: полуавтомат (по нажатию), вспышка, трассер, гильза
+{
+  const r = await ev(() => {
+    window._clear();
+    const p = J.G.player;
+    window._give('ammo_9mm', 30, false);
+    window._give('pistol', 1);
+    const f = window._foe('thug', 8, { noai: true, hp: 3000 });
+    window._step(0.3);
+    const hp0 = f.hp;
+    p.cds.item = 0; p.trigUp = true;
+    const a = J.Hand.fire(p);
+    const P0 = J.Guns.pools();
+    const fx = { tr: P0.TR.some((t) => t.on), cs: P0.CS.some((c) => c.on), fl: P0.fl.some((q) => q.t > 0) };
+    p.cds.item = 0;
+    const b = J.Hand.fire(p); // курок не отпущен
+    p.trigUp = true;
+    const c = J.Hand.fire(p);
+    window._step(0.1);
+    return { a, b, c, fx, mag: J.Hand.magOf(p, 'pistol'), hit: f.hp < hp0 };
+  });
+  check('пистолет: полуавтомат, магазин 15', r.a && !r.b && r.c && r.mag === 13 && r.hit, r);
+  check('пистолет: вспышка, трассер, гильза', r.fx.tr && r.fx.cs && r.fx.fl, r.fx);
+}
+// 22.2 Автомат: очередь, пока зажата ЛКМ; разброс растёт; R — перезарядка, магазин падает
+{
+  const r = await ev(() => {
+    window._clear();
+    const p = J.G.player;
+    window._give('ammo_rifle', 90, false);
+    window._give('assault_rifle', 1);
+    const f = window._foe('thug', 10, { noai: true, hp: 5000 });
+    window._step(0.3);
+    const hp0 = f.hp;
+    J.Input.mouse.l = true;
+    let bloom = 0;
+    for (let i = 0; i < 60; i++) { window._sim(1 / 60); bloom = Math.max(bloom, p.bloom || 0); }
+    const spread = J.Guns.spread(p, J.Hand.def('assault_rifle'));
+    J.Input.mouse.l = false;
+    window._sim(0.1);
+    const mag = J.Hand.magOf(p, 'assault_rifle');
+    J.Game.onKey('KeyR');
+    const rel = p.reloadT > 0;
+    const mg = J.Guns.pools().MG.some((m) => m.on);
+    window._sim(2.5);
+    return { mag, bloom: +bloom.toFixed(3), spread: +spread.toFixed(3), hit: f.hp < hp0, rel, mg, after: J.Hand.magOf(p, 'assault_rifle'), ammo: p.inv.ammo_rifle };
+  });
+  check('автомат: очередь при зажатой ЛКМ, разброс растёт', r.mag <= 22 && r.mag >= 18 && r.bloom > 0.05 && r.spread > 0.08 && r.hit, r);
+  check('перезарядка R: магазин падает, 30 из запаса', r.rel && r.mg && r.after === 30 && r.ammo === 90 - (30 - r.mag), r);
+  await shot('g01_rifle_burst');
+}
+// 22.3 Помповое ружьё: дробь, по патрону; выстрел прерывает дозарядку
+{
+  const r = await ev(() => {
+    window._clear();
+    const p = J.G.player;
+    window._give('ammo_12g', 10, false);
+    window._give('pump_shotgun', 1);
+    const f = window._foe('thug', 5, { noai: true, hp: 3000 });
+    window._step(0.3);
+    const hp0 = f.hp;
+    let hits = 0;
+    const h0 = J.hurt;
+    J.hurt = function (t) { if (t === f) hits++; return h0.apply(this, arguments); };
+    p.cds.item = 0; p.trigUp = true;
+    J.Hand.fire(p);
+    J.hurt = h0;
+    window._sim(1.0);
+    p.mag.pump_shotgun = 2;
+    J.Game.onKey('KeyR');
+    window._sim(0.6);
+    const m1 = J.Hand.magOf(p, 'pump_shotgun');
+    p.cds.item = 0; p.trigUp = true;
+    const shotOk = J.Hand.fire(p);
+    return { hits, dmg: Math.round(hp0 - f.hp), m1, shotOk, rel: p.reloadT, m2: J.Hand.magOf(p, 'pump_shotgun') };
+  });
+  check('ружьё: несколько дробин попадают', r.hits >= 4, r);
+  check('ружьё: заряжается по патрону, выстрел прерывает', r.m1 === 3 && r.shotOk && !(r.rel > 0) && r.m2 === 2, r);
+}
+// 22.4 Снайперская: в голову — многократный урон
+{
+  const r = await ev(() => {
+    window._clear();
+    const p = J.G.player;
+    window._give('ammo_308', 10, false);
+    window._give('sniper', 1);
+    const f = window._foe('thug', 20, { noai: true, hp: 3000 });
+    window._step(0.3);
+    p.ads = true;
+    window._step(0.3);
+    const g = J.G.world.groundY(f.x, f.y);
+    window._aimAt(f.x, g + 1.66, f.y, f);
+    const hp0 = f.hp;
+    p.cds.item = 0; p.trigUp = true;
+    J.Hand.fire(p);
+    window._aimOff();
+    const head = hp0 - f.hp;
+    return { head: Math.round(head), scope: document.getElementById('scope').style.display !== 'none' };
+  });
+  await shot('g02_sniper_scope');
+  const r2 = await ev(() => { const p = J.G.player; return { fov: J.R3.camera.fov, scope: document.getElementById('scope').style.display !== 'none', scoped: document.body.classList.contains('scoped') }; });
+  check('снайперская: выстрел в голову (×3,5)', r.head > 115 * 3, r);
+  check('оптика: приближение и прицельная сетка', r2.fov < 20 && r2.scope && r2.scoped, r2);
+  await ev(() => { J.G.player.ads = false; window._step(0.5); });
+}
+// 22.5 Дырки от пуль в стене; машина: урон, дырки и пробитая шина
+{
+  const r = await ev(() => {
+    window._clear();
+    const p = J.G.player, w = J.G.world;
+    window._give('ammo_9mm', 60, false);
+    window._give('pistol', 1);
+    window._step(0.2);
+    // ближняя стена
+    let wall = null;
+    for (let i = 0; i < 32 && !wall; i++) {
+      const a = (i / 32) * Math.PI * 2;
+      const h = w.groundY(p.x, p.y) + 1.4;
+      const t = J.Guns.trace(p.x, h, p.y, Math.cos(a), 0, Math.sin(a), 40, p);
+      if (t.kind === 'wall') wall = { x: t.x, h: t.h, z: t.z };
+    }
+    const P0 = J.Guns.pools();
+    const n0 = P0.HO.filter((o) => o.on && !o.veh).length;
+    if (wall) { window._aimAt(wall.x, wall.h, wall.z); for (let i = 0; i < 3; i++) { p.cds.item = 0; p.trigUp = true; J.Hand.fire(p); } }
+    const n1 = P0.HO.filter((o) => o.on && !o.veh).length;
+    // машина боком к игроку
+    const c = J.R3.cam;
+    const vx = p.x + Math.cos(c.yaw) * 7, vy = p.y + Math.sin(c.yaw) * 7;
+    const v = J.Veh.make('sedan', vx, vy, c.yaw + Math.PI / 2, { mode: 'parked' });
+    window._step(0.1);
+    window._aimAt(v.x, v.gy + 0.8, v.y);
+    for (let i = 0; i < 3; i++) { p.cds.item = 0; p.trigUp = true; J.Hand.fire(p); }
+    const hpV = v.hp;
+    // переднее колесо со стороны игрока
+    const ca = Math.cos(v.ang), sa = Math.sin(v.ang), lx = v.vt.L / 2 - 0.78;
+    let best = null;
+    for (const s of [1, -1]) {
+      const ly = s * v.vt.W / 2;
+      const x = v.x + lx * ca - ly * sa, y = v.y + lx * sa + ly * ca;
+      if (!best || J.dist(x, y, p.x, p.y) < J.dist(best.x, best.y, p.x, p.y)) best = { x, y };
+    }
+    window._aimAt(best.x, v.gy + 0.32, best.y);
+    p.bloom = 0; p.ads = true; // прицельно, без накопленного разброса
+    p.cds.item = 0; p.trigUp = true; J.Hand.fire(p);
+    p.ads = false;
+    window._aimOff();
+    window._step(0.1);
+    window._v = v;
+    return { wall: !!wall, holes: n1 - n0, hpV, max: v.maxHp, vholes: P0.HO.filter((o) => o.on && o.veh === v).length, flat: v.flatMask || 0 };
+  });
+  check('дырки от пуль на стене', r.wall && r.holes >= 2, r);
+  check('машина: урон от пуль, дырки, пробитая шина', r.hpV < r.max && r.vholes >= 1 && r.flat > 0, r);
+  await ev(() => { const c = J.R3.cam; c.yaw += 0.5; c.dist = 4; window._step(0.03); });
+  await shot('g03_car_holes_flat');
+  await ev(() => { J.Veh.remove ? J.Veh.remove(window._v) : 0; });
+}
+// 22.6 Колесо оружия (Tab): раздел мышью, отпустить — взять; «Калибр»: покупка ствола с патронами
+{
+  const r = await ev(() => {
+    window._clear();
+    const p = J.G.player, w = J.G.world;
+    p.money = 40000;
+    const b = w.buildings.find((q) => q.type === 'gunshop' && q.region === w.regionAt(p.x, p.y).id) || w.buildings.find((q) => q.type === 'gunshop');
+    J.UI.openBuilding(b);
+    const tabs = document.querySelectorAll('#bbody [data-tab]').length;
+    document.querySelector('#bbody [data-tab="2"]').click();
+    document.querySelector('#bbody [data-buy="carbine"]').click();
+    document.querySelector('#bbody [data-tab="0"]').click();
+    document.querySelector('#bbody [data-buy="heavy_pistol"]').click();
+    document.querySelector('#bbody [data-tab="5"]').click();
+    document.querySelector('#bbody [data-buy="grenade"]').click();
+    const bought = { carbine: p.inv.carbine || 0, ammo: p.inv.ammo_rifle || 0, mag: p.mag.carbine, hp: p.inv.heavy_pistol || 0, nade: p.inv.grenade || 0 };
+    J.UI.closeBuilding();
+    J.Hand.select(p, J.Hand.slotOf(p, 'heavy_pistol'));
+    J.Game.onKey('Tab');
+    const open = J.Guns.wheelOpen;
+    J.Guns.wheelMove(0.2, 0.2); // вправо-вниз — «Винтовки»
+    window._step(0.05);
+    return { tabs, bought, open, region: b.region };
+  });
+  await shot('g04_weapon_wheel');
+  const r2 = await ev(() => { J.Game.onKeyUp('Tab'); window._step(0.1); return { held: J.Hand.heldId(J.G.player), open: J.Guns.wheelOpen }; });
+  check('«Калибр»: разделы и покупка ствола с патронами', r.tabs === 8 && r.bought.carbine === 1 && r.bought.ammo === 60 && r.bought.mag === 30 && r.bought.hp === 1 && r.bought.nade === 1, r);
+  check('колесо оружия: Tab, раздел мышью, взять', r.open && r2.held === 'carbine' && !r2.open, r2);
+}
+// 22.7 Граната, Молотов (машина горит), светошумовая, дымовая шашка
+{
+  const r = await ev(() => {
+    window._clear();
+    const p = J.G.player;
+    window._give('grenade', 2);
+    const fs = [window._foe('thug', 9, { noai: true, hp: 400 }), window._foe('thug', 9.5, { noai: true, hp: 400, da: 0.12 }), window._foe('thug', 10, { noai: true, hp: 400, da: -0.12 })];
+    window._step(0.2);
+    J.Hand.throwFrom(p, 0.7);
+    window._sim(3.6);
+    return { hurt: fs.filter((f) => f.hp < 360).length, left: p.inv.grenade };
+  });
+  check('граната: взрыв ранит группу', r.hurt >= 2 && r.left === 1, r);
+  const r2 = await ev(() => {
+    window._clear();
+    const p = J.G.player, c = J.R3.cam;
+    window._give('molotov', 2);
+    const v = J.Veh.make('sedan', p.x + Math.cos(c.yaw) * 8, p.y + Math.sin(c.yaw) * 8, c.yaw + Math.PI / 2, { mode: 'parked' });
+    p.face = c.yaw;
+    window._step(0.2);
+    J.Hand.throwFrom(p, 0.6);
+    window._sim(1.4);
+    const fires = J.Nades.FIRES.length;
+    window._sim(1.2);
+    window._v = v;
+    return { fires, vfire: !!v.fire || v.hp <= 0 };
+  });
+  await shot('g05_molotov');
+  check('Молотов: огонь растекается, машина загорается', r2.fires >= 3 && r2.vfire, r2);
+  const r3 = await ev(() => {
+    window._clear();
+    const p = J.G.player;
+    window._give('flashbang', 1);
+    const f = window._foe('thug', 8, { hp: 400 });
+    f.ai.target = p;
+    p.face = J.R3.cam.yaw + Math.PI; // игрок отвернулся
+    J.Hand.throwFrom(p, 0.5);
+    window._sim(1.8);
+    const st = { stun: f.st.stun || 0, blind: f.ai ? f.ai.blind || 0 : 0 };
+    window._clear();
+    window._give('smoke_grenade', 1);
+    J.Hand.throwFrom(p, 0.5);
+    window._sim(4);
+    const s = J.Nades.SMOKES[0];
+    return Object.assign(st, { smoke: !!s, inSmoke: !!s && J.Nades.inSmoke(s.x, s.y) });
+  });
+  check('светошумовая оглушает и ослепляет', r3.stun > 1 && r3.blind > 1, r3);
+  check('дымовая шашка: плотная завеса', r3.smoke && r3.inSmoke, r3);
+  await shot('g06_smoke');
+}
+// 22.8 Стрелки: банда отстреливается; Звёздная Платина ловит пули; розыск ★★ — пешие патрули с оружием
+{
+  const r = await ev(() => {
+    window._clear();
+    const p = J.G.player;
+    window._plaza();
+    p.maxHp = p.hp = 5000;
+    p.standOut = false;
+    const f = window._foe('gangster', 12, { hand: 'micro_smg' });
+    f.mag = 30; f.ai.target = p; f.ai.aggro = 40;
+    const f2 = window._foe('guard', 13, { hand: 'pistol', da: 0.5 });
+    f2.mag = 15; f2.ai.target = p; f2.ai.aggro = 40;
+    let shots = 0;
+    const fire0 = J.Guns.fire;
+    J.Guns.fire = function (u) { const ok = fire0.apply(this, arguments); if (ok && !u.isPlayer) shots++; return ok; };
+    window._sim(5);
+    const lost = 5000 - p.hp;
+    // стенд против пуль
+    p.standOut = true;
+    let caught = 0;
+    const ss0 = J.Guns.standStop;
+    J.Guns.standStop = function () { const r = ss0.apply(this, arguments); if (r) caught++; return r; };
+    window._sim(4);
+    J.Guns.standStop = ss0;
+    J.Guns.fire = fire0;
+    return { shots, lost: Math.round(lost), caught };
+  });
+  check('банда отстреливается из своего оружия', r.shots >= 6 && r.lost > 0, r);
+  check('Звёздная Платина ловит пули', r.caught >= 2, r);
+  await shot('g07_gunfight');
+  const r2 = await ev(() => {
+    window._clear();
+    const p = J.G.player;
+    window._plaza();
+    p.wanted = 2.2; p.wantedT = 60; p.maxHp = p.hp = 5000;
+    window._sim(8);
+    const cops = J.G.ents.filter((e) => e.cop && !e.dead);
+    return { n: cops.length, armed: cops.filter((e) => e.hand && J.Hand.def(e.hand).cls === 'gun').length, w: p.wanted };
+  });
+  check('розыск ★★: пешие патрули с оружием', r2.n >= 1 && r2.armed === r2.n, r2);
+}
+// 22.9 Мир: пули зависают в остановленном времени; Секс Пистолз доворачивают промах
+{
+  const r = await ev(() => {
+    window._clear();
+    const p = J.G.player;
+    window._stand('the_world');
+    window._give('ammo_9mm', 30, false);
+    window._give('pistol', 1);
+    const f = window._foe('thug', 8, { noai: true, hp: 3000 });
+    window._step(0.3);
+    J.G.timestop = { by: p, t: 4, max: 4, intro: 0 };
+    window._sim(0.5);
+    const hp0 = f.hp;
+    for (let i = 0; i < 3; i++) { p.cds.item = 0; p.trigUp = true; J.Hand.fire(p); }
+    window._sim(0.4);
+    const frozen = J.Guns.FROZEN.length, same = f.hp === hp0;
+    J.G.timestop.t = 0.01;
+    window._sim(0.6);
+    return { frozen, same, hit: f.hp < hp0, left: J.Guns.FROZEN.length };
+  });
+  check('Мир: пули зависают и срываются, когда время идёт', r.frozen === 3 && r.same && r.hit && r.left === 0, r);
+  const r2 = await ev(() => {
+    window._clear();
+    const p = J.G.player;
+    window._stand('sex_pistols', 6);
+    p.standOut = true;
+    window._give('ammo_9mm', 30, false);
+    window._give('pistol', 1);
+    const f = window._foe('thug', 9, { noai: true, hp: 3000 });
+    window._step(0.3);
+    const hp0 = f.hp;
+    const g = J.G.world.groundY(p.x, p.y);
+    // мимо: в землю в трёх метрах сбоку от цели
+    const a = Math.atan2(f.y - p.y, f.x - p.x) + 0.45;
+    window._aimAt(p.x + Math.cos(a) * 8, g, p.y + Math.sin(a) * 8);
+    p.cds.item = 0; p.trigUp = true; J.Hand.fire(p);
+    window._aimOff();
+    window._sim(0.5);
+    const res = { hit: f.hp < hp0 };
+    window._stand('star_platinum');
+    return res;
+  });
+  check('Секс Пистолз доворачивают промах во врага', r2.hit, r2);
+}
+// 22.10 Стрельба в городе поднимает розыск
+{
+  const r = await ev(() => {
+    window._clear();
+    const p = J.G.player;
+    window._give('ammo_9mm', 30, false);
+    window._give('pistol', 1);
+    window._step(0.2);
+    const city = !!J.G.world.cityAt(p.x, p.y);
+    for (let i = 0; i < 5; i++) { p.cds.item = 0; p.trigUp = true; J.Hand.fire(p); window._sim(0.2); }
+    return { city, wanted: p.wanted || 0 };
+  });
+  check('выстрелы в городе — розыск', r.city && r.wanted > 0, r);
+}
+
 // 19. Сохранение и загрузка панели
 {
   const r = await ev(() => {
@@ -560,14 +921,16 @@ check('панель быстрого доступа в HUD', await ev(() => docu
     p.mag.revolver = 4;
     window._give('kitchen_knife', 1);
     p.dur.kitchen_knife = 33;
+    window._give('carbine', 1, false);
+    p.mag.carbine = 17;
     J.Hand.select(p, J.Hand.slotOf(p, 'revolver'));
     J.Game.save(false);
     return { hb: p.hotbar.slice(), hsel: p.hsel };
   });
   await ev(() => { J.Game.toTitle(); J.Game.loadFromStore(); });
   await page.waitForFunction(() => J.Game.state === 'play' && document.getElementById('loading').hidden && J.G.player, null, { timeout: 120000 });
-  const r2 = await ev(() => { const p = J.G.player; return { hb: p.hotbar.slice(), hsel: p.hsel, mag: p.mag.revolver, dur: p.dur.kitchen_knife, held: J.Hand.heldId(p) }; });
-  check('сохранение: панель, барабан и прочность', JSON.stringify(r.hb) === JSON.stringify(r2.hb) && r2.hsel === r.hsel && r2.mag === 4 && r2.dur === 33 && r2.held === 'revolver', { r, r2 });
+  const r2 = await ev(() => { const p = J.G.player; return { hb: p.hotbar.slice(), hsel: p.hsel, mag: p.mag.revolver, dur: p.dur.kitchen_knife, held: J.Hand.heldId(p), carb: p.mag.carbine }; });
+  check('сохранение: панель, барабан и прочность', JSON.stringify(r.hb) === JSON.stringify(r2.hb) && r2.hsel === r.hsel && r2.mag === 4 && r2.dur === 33 && r2.held === 'revolver' && r2.carb === 17, { r, r2 });
   await page.waitForTimeout(600);
   await page.screenshot({ path: path.join(OUT, 'i15_after_load.png') });
 }

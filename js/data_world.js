@@ -155,7 +155,7 @@
 
   // Здания в городах (по порядку важности; остальное — жилые дома)
   J.CITY_BUILDINGS = {
-    morioh: ['station', 'kame_yu', 'trussardi', 'hospital', 'school', 'hotel', 'rohan', 'gym', 'library', 'police', 'shop', 'bar', 'office'],
+    morioh: ['station', 'kame_yu', 'trussardi', 'hospital', 'school', 'hotel', 'rohan', 'gym', 'library', 'police', 'shop', 'bar', 'office', 'gunshop'],
     naples: ['station', 'passione', 'polpo_prison', 'restaurant', 'hotel', 'shop', 'hospital', 'gym', 'bar', 'black_market', 'dock', 'church', 'police', 'gunshop'],
     rome: ['station', 'colosseum', 'restaurant', 'hotel', 'shop', 'hospital', 'bar', 'church', 'library', 'black_market'],
     venice: ['station', 'restaurant', 'hotel', 'shop', 'bar', 'dock', 'church'],
