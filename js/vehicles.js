@@ -139,8 +139,11 @@
         v.reverse = true;
       }
     }
+    // пробитые шины (guns.js): тянет хуже, катится тяжелее, уводит к спущенному колесу
+    const fl = v.flat || 0;
+    if (fl && a > 0 && !braking) a *= Math.max(0.35, 1 - fl * 0.17);
     // сопротивление качению и воздуха
-    const res = (0.25 + 0.45 * surf) + 0.0011 * vf * vf * Math.sign(vf) * Math.sign(vf);
+    const res = (0.25 + 0.45 * surf + fl * 0.5) + 0.0011 * vf * vf * Math.sign(vf) * Math.sign(vf);
     if (Math.abs(vf) > 0.05) a -= Math.sign(vf) * res;
     if (hb) {
       a -= Math.sign(vf) * Math.min(Math.abs(vf) / dt, 6.5);
@@ -157,7 +160,8 @@
     // поворот кузова и сцепление
     let yawT = (vf * Math.tan(v.steer)) / vt.wb;
     const slide = Math.abs(vl);
-    let grip = vt.grip * gk;
+    let grip = vt.grip * gk * (fl ? Math.max(0.45, 1 - fl * 0.14) : 1);
+    if (fl && v.flatPull) yawT += v.flatPull * 0.05 * Math.min(1, Math.abs(vf) / 8) * Math.sign(vf);
     if (hb) {
       grip *= 0.16;
       yawT *= 1.55;

@@ -272,6 +272,8 @@
   function smoke(o) {
     N.SMOKES.push({ x: o.x, y: o.y, t: 0, life: 16, r: 0.5, own: o.owner, emT: 0 });
     Gn.snd('hiss', o.x, o.y, { k: 1.2, dur: 2.5 });
+    // первый клуб — сразу
+    if (pwOk() && near(o.x, o.y, 80)) J.Pw.smoke(o.x, gy(o.x, o.y) + 0.6, o.y, 18, '#cfd2d6', 1.6, 4, 0.8, 1.6, 0.95);
   }
   function updSmokes(dt) {
     const S = N.SMOKES;
@@ -291,10 +293,12 @@
         if (s.emT <= 0) {
           s.emT = 0.05;
           const h0 = gy(s.x, s.y);
-          // шашка шипит и густо дымит; облако расползается
-          if (s.t < s.life - 3) J.Pw.smoke(s.x, h0 + 0.15, s.y, 1, '#e4e6e8', 0.35, 1.2, 1.6, 0.05, 0.8);
-          const a = rnd() * TAU, r = rnd() * s.r;
-          J.Pw.smoke(s.x + Math.cos(a) * r, h0 + 0.4 + rnd() * 1.6, s.y + Math.sin(a) * r, 1, rnd() < 0.5 ? '#cfd2d5' : '#b9bdc1', 1.6 + rnd() * 0.8, 3.2, 0.12, 0.6, 0.55 * fade);
+          // шашка шипит и густо дымит; облако расползается (плотнее к центру)
+          if (s.t < s.life - 3) J.Pw.smoke(s.x, h0 + 0.15, s.y, 2, '#e4e6e8', 0.45, 1.4, 1.8, 0.08, 0.85);
+          for (let k = 0; k < 3; k++) {
+            const a = rnd() * TAU, r = Math.sqrt(rnd()) * s.r * 0.85;
+            J.Pw.smoke(s.x + Math.cos(a) * r, h0 + 0.2 + rnd() * 2.2, s.y + Math.sin(a) * r, 1, rnd() < 0.5 ? '#e0e2e5' : '#cdd0d4', 2.2 + rnd() * 1.1, 5, 0.08, 0.7, fade);
+          }
         }
       }
     }

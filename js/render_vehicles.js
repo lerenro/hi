@@ -404,7 +404,11 @@
       const gr = vw.group;
       gr.visible = true;
       gr.position.set(v.x, v.gy + (v.bob || 0), v.y);
-      e3.set(v.pitch || 0, Math.PI / 2 - v.ang, v.roll || 0, 'YXZ');
+      // кузов кренится на спущенные колёса
+      const fm = v.flatMask || 0;
+      const fRoll = fm ? ((fm & 2 ? 1 : 0) + (fm & 8 ? 1 : 0) - (fm & 1 ? 1 : 0) - (fm & 4 ? 1 : 0)) * 0.035 : 0;
+      const fPitch = fm ? ((fm & 1 ? 1 : 0) + (fm & 2 ? 1 : 0) - (fm & 4 ? 1 : 0) - (fm & 8 ? 1 : 0)) * 0.02 : 0;
+      e3.set((v.pitch || 0) + fPitch, Math.PI / 2 - v.ang, (v.roll || 0) + fRoll, 'YXZ');
       gr.rotation.copy(e3);
       gr.updateMatrix();
       gr.updateMatrixWorld(true);
@@ -419,7 +423,9 @@
       const hwT = vt.tr / 2, hz = vt.wb / 2, r = vt.wr, zoff = vw.geo.zoff;
       for (let k = 0; k < 4; k++) {
         const front = k < 2, sx = k % 2 ? -1 : 1;
-        pp.set(sx * hwT, r, (front ? hz : -hz) + zoff);
+        // спущенная шина (guns.js) — диск ниже, колесо проседает
+        const flat = v.flatMask && v.flatMask & (1 << k);
+        pp.set(sx * hwT, flat ? r * 0.74 : r, (front ? hz : -hz) + zoff);
         qq.setFromEuler(e3.set(v.spin || 0, front ? v.steer || 0 : 0, 0, 'YXZ'));
         ss.set(0.2 + r * 0.25, r, r);
         mL.compose(pp, qq, ss);

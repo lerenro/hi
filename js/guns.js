@@ -343,7 +343,9 @@
   const a2 = (o, m) => Object.assign({}, o, m);
   CL.shoot.aim = true;
   Object.assign(CL, {
-    shootH: { hit: 0, left: true, aim: true, K: [[0, AIM], [0.1, a2(AIM, { AR: -2.05, FR: -0.45, WR: 1.15, SX: -0.08 }), 'outExpo'], [0.55, AIM, 'inOut'], [1, AIM]] },
+    // отдача пистолета: короткий подброс кисти; тяжёлый калибр и револьвер — сильнее, с отходом корпуса
+    shootP: { hit: 0, left: true, aim: true, K: [[0, AIM], [0.1, a2(AIM, { AR: -1.68, FR: -0.14, WR: 1.4, SX: -0.03 }), 'outExpo'], [0.5, AIM, 'inOut'], [1, AIM]] },
+    shootH: { hit: 0, left: true, aim: true, K: [[0, AIM], [0.1, a2(AIM, { AR: -1.84, FR: -0.3, WR: 1.3, SX: -0.07 }), 'outExpo'], [0.55, AIM, 'inOut'], [1, AIM]] },
     shootR: { hit: 0, left: true, aim: true, K: [[0, AIMR], [0.12, a2(AIMR, { AR: -0.72, FR: -1.55, WR: 2.02, SX: -0.07, AL: -1.5 }), 'outExpo'], [0.6, AIMR, 'inOut'], [1, AIMR]] },
     pump: { hit: 0, left: true, aim: true, K: [[0, AIMR], [0.35, a2(AIMR, { AL: -1.1, ALZ: 0.55, FL: -0.75 }), 'outQuad'], [0.7, AIMR, 'inQuad'], [1, AIMR]] },
     bolt: { hit: 0, left: true, aim: true, K: [[0, AIMR], [0.25, a2(AIMR, { AR: -0.45, WR: 2.3, SX: 0.06, AL: -1.25, FL: -0.5 }), 'outQuad'], [0.6, a2(AIMR, { AR: -0.45, WR: 2.3, SX: 0.06, AL: -1.25, FL: -0.5 })], [1, AIMR, 'inOut']] },
@@ -478,6 +480,17 @@
     return POOL;
   }
   Gn.pools = () => initPools();
+  // прогрев шейдеров пулов (трассеры, гильзы, дыры, вспышки) вместе с остальными — без фриза на первом выстреле
+  const warm0 = R3.warmup;
+  R3.warmup = function () {
+    warm0.apply(this, arguments);
+    try {
+      const P0 = initPools();
+      for (const f of P0.fl) f.g.visible = true;
+      R3.renderer.compile(R3.scene, R3.camera);
+      for (const f of P0.fl) f.g.visible = false;
+    } catch (e) {}
+  };
 
   // трассер из точки по направлению на длину d
   Gn.tracer = function (x, h, z, dx, dh, dz, d, o) {
@@ -1544,7 +1557,7 @@
     gsnd(d.snd || 'pistol', u.x, u.y, { mine: pl, prio: pl });
     // анимация отдачи и затвор
     const grip = d.grip || 'pistol';
-    const sc = grip === 'rifle' ? 'shootR' : d.snd === 'heavy' ? 'shootH' : 'shoot';
+    const sc = grip === 'rifle' ? 'shootR' : d.snd === 'heavy' || d.snd === 'revolver' || d.snd === 'shotgun' ? 'shootH' : 'shootP';
     u.anim = { type: 'item', iclip: sc, t: 0.28, max: 0.28 };
     if (d.act) {
       g.timers.push({

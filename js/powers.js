@@ -1670,7 +1670,7 @@
     if (Pw.ready) return;
     const tex = puffTex();
     ADD = makeSys(1400, true, tex);
-    ALP = makeSys(700, false, tex);
+    ALP = makeSys(1100, false, tex); // с запасом под дымовые шашки (nades.js)
     const cyl = new THREE.CylinderGeometry(1, 1, 1, 7, 1);
     const cylG = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true);
     makeIM('seg', cyl, glowPatch(new THREE.MeshLambertMaterial({ color: '#ffffff' }), 0.18), 700);
