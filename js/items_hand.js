@@ -757,6 +757,8 @@
         if (slot >= 0) {
           H.assign(e, slot, d.breaksTo);
           e.hsel = slot;
+          // остальные целые бутылки — в свободную ячейку
+          if (cnt(e, id) > 0) H.autoAssign(e, id);
         }
         J.UI.toast(`${it.name} разбилась — в руке ${J.ITEMS[d.breaksTo].name.toLowerCase()}!`, 'gold');
       } else J.UI.toast(`${it.name}: сломано!`, 'red');
@@ -1818,9 +1820,11 @@
         const T = tg && !tg.dead ? tg : null;
         const base = T ? Math.atan2(T.y - sy, T.x - sx) : p.face;
         const pw = J.P.standPower(p);
-        const spread = n > 1 ? 0.5 : 0;
+        // веер шириной ~0.8 м у цели (все ножи в тело), без цели — шире
+        const dist = T ? Math.max(1.5, J.dist(sx, sy, T.x, T.y)) : 0;
+        const spread = n > 1 ? (T ? Math.min(0.5, 2 * Math.atan(0.4 / dist)) : 0.4) : 0;
         for (let i = 0; i < n; i++) {
-          const a = base + (n > 1 ? spread * (i / (n - 1) - 0.5) : 0) + (rnd() - 0.5) * (0.1 - cap.pre * 0.015);
+          const a = base + (n > 1 ? spread * (i / (n - 1) - 0.5) : 0) + (rnd() - 0.5) * Math.max(0.01, 0.08 - cap.pre * 0.015);
           const v = cap.spd;
           let elev = 0.02;
           if (T) {
@@ -2216,6 +2220,85 @@
     syncHeld(e);
   };
 
+
+  // ---------- Ввод: клавиши, средняя кнопка, взаимодействие ----------
+  const ready = (p) => J.Game.state === 'play' && p && !p.dead && !J.UI.blocking() && !p.inCar && !(J.Cb && J.Cb.inClash && J.Cb.inClash(p));
+  const onKey0 = J.Game.onKey;
+  J.Game.onKey = function (code) {
+    const p = G().player;
+    if (ready(p)) {
+      H.ensure(p);
+      const i = code.length === 6 && code.startsWith('Digit') ? KEYS.indexOf(code[5]) : -1;
+      if (i >= 0) return H.select(p, i);
+      if (code === 'Digit0') {
+        if (p.hsel >= 0) setSel(p, -1);
+        return;
+      }
+      if (code === 'KeyB') return H.aimStart(p);
+      if (code === 'KeyN') return void H.give(p);
+      if (code === 'KeyY') return H.drop(p);
+    }
+    return onKey0.apply(this, arguments);
+  };
+  const onKeyUp0 = J.Game.onKeyUp;
+  J.Game.onKeyUp = function (code) {
+    const p = G().player;
+    if (code === 'KeyB' && p && p.thrAim) {
+      if (ready(p)) H.aimRelease(p);
+      else p.thrAim = null;
+    }
+    return onKeyUp0.apply(this, arguments);
+  };
+  // средняя кнопка мыши — прицельный бросок
+  H.bindMouse = function () {
+    const cv = document.getElementById('game');
+    if (!cv || H._mouseBound) return;
+    H._mouseBound = true;
+    cv.addEventListener('mousedown', (e) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      const p = G().player;
+      if (ready(p)) H.aimStart(p);
+    });
+    window.addEventListener('mouseup', (e) => {
+      if (e.button !== 1) return;
+      const p = G().player;
+      if (p && p.thrAim) {
+        if (ready(p)) H.aimRelease(p);
+        else p.thrAim = null;
+      }
+    });
+  };
+  // F рядом с вещью — подобрать (люди и выход из машины важнее, двери и машины — если вещь ближе)
+  const itTarget0 = J.Game.interactTarget;
+  J.Game.interactTarget = function () {
+    const r = itTarget0.apply(this, arguments);
+    const p = G().player;
+    if (!p || p.dead || p.inCar || (r && r.exit) || !GROUND.length) return r;
+    const gi = H.nearItem(p, 1.4);
+    if (!gi) return r;
+    if (r && r.ent && J.dist(p.x, p.y, r.ent.x, r.ent.y) < J.dist(p.x, p.y, gi.x, gi.y)) return r;
+    return { item: gi };
+  };
+  const interact0 = J.Game.interact;
+  J.Game.interact = function () {
+    const it = J.Game.interactTarget();
+    if (it && it.item) return H.pickup(G().player, it.item);
+    return interact0.apply(this, arguments);
+  };
+  // сенсорные кнопки рядом с панелью: бросок (держать — прицел), отдать стенду, выбросить
+  const touchAct = (k, down) => {
+    const p = G().player;
+    if (!p) return;
+    if (k === 'thr') {
+      if (down && ready(p)) H.aimStart(p);
+      else if (!down && p.thrAim) H.aimRelease(p);
+    } else if (down && ready(p)) {
+      if (k === 'give') H.give(p);
+      else if (k === 'drop') H.drop(p);
+    }
+  };
+
   // ---------- Интерфейс: панель быстрого доступа ----------
   const ICON_C = { blade: '#dfe5ec', blunt: '#c99a5e', gun: '#8a9099', throw: '#cfd6de', food: '#f2c230' };
   const ICONS = {
@@ -2260,7 +2343,7 @@
     if (!hud || document.getElementById('hotbar')) return;
     const wrap = document.createElement('div');
     wrap.id = 'hotwrap';
-    wrap.innerHTML = `<div id="hand-name"></div><div id="hotbar">${KEYS.map((k, i) => `<div class="hs" data-slot="${i}"><span class="hk">${k}</span><span class="hi"></span><b class="hn"></b><i class="hd"><s></s></i></div>`).join('')}</div>`;
+    wrap.innerHTML = `<div id="hand-name"></div><div id="hotbar">${KEYS.map((k, i) => `<div class="hs" data-slot="${i}"><span class="hk">${k}</span><span class="hi"></span><b class="hn"></b><i class="hd"><s></s></i></div>`).join('')}</div><div id="hotact"><button class="tb sm" data-ha="thr">Бросок</button><button class="tb sm" data-ha="give">Стенду</button><button class="tb sm" data-ha="drop">Выбр.</button></div>`;
     hud.appendChild(wrap);
     BAR = { wrap, name: wrap.querySelector('#hand-name'), slots: [...wrap.querySelectorAll('.hs')] };
     BAR.slots.forEach((el, i) => {
@@ -2279,6 +2362,23 @@
       el.addEventListener('touchstart', tap, { passive: false });
       el.addEventListener('mousedown', tap);
     });
+    wrap.querySelectorAll('[data-ha]').forEach((b) => {
+      const k = b.dataset.ha;
+      b.addEventListener('touchstart', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        b.classList.add('on');
+        touchAct(k, true);
+      }, { passive: false });
+      const up = (ev) => {
+        ev.preventDefault();
+        b.classList.remove('on');
+        touchAct(k, false);
+      };
+      b.addEventListener('touchend', up, { passive: false });
+      b.addEventListener('touchcancel', up, { passive: false });
+    });
+    H.bindMouse();
     H.dirty = true;
   };
   let lastSig = '';
@@ -2390,7 +2490,8 @@
       const ic = document.createElement('span');
       ic.className = 'iico';
       ic.innerHTML = H.icon(id);
-      row.prepend(ic);
+      const info = row.firstElementChild;
+      if (info && info !== b) info.prepend(ic);
       const it = J.ITEMS[id];
       if (it.type === 'weapon' || it.type === 'gun') {
         b.textContent = H.heldId(p) === id ? 'В руке' : 'В руку';
@@ -2409,8 +2510,7 @@
         const s = document.createElement('div');
         s.className = 'muted small';
         s.textContent = d.cls === 'gun' ? `Барабан ${H.magOf(p, id)}/${d.mag} · урон ${d.dmg}` : `Прочность ${Math.ceil(H.durOf(p, id))}/${d.dur} · урон ${d.dmg} · вес ${d.w} кг`;
-        const info = row.firstElementChild && row.firstElementChild.nextElementSibling;
-        if (info) info.appendChild(s);
+        if (info && info !== b) info.appendChild(s);
       }
     });
   };

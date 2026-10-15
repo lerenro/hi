@@ -118,6 +118,8 @@
     });
     cv.addEventListener('wheel', (e) => {
       e.preventDefault();
+      // колёсико листает вещи в руке (если они есть); с Shift/Ctrl/Alt — приближение камеры
+      if (!e.shiftKey && J.Hand && J.Hand.wheel(e)) return;
       J.R3.zoomCam(e.deltaY > 0 ? 1.1 : 0.9);
     }, { passive: false });
     document.addEventListener('pointerlockchange', () => {
@@ -469,7 +471,7 @@
   };
 
   // ---------- Сохранение ----------
-  const PF = ['name', 'look', 'origin', 'stats', 'statXp', 'points', 'lvl', 'xp', 'money', 'inv', 'discs', 'corpse', 'hunger', 'energy', 'blood', 'stamina', 'hp', 'stand', 'se', 'hamon', 'spin', 'vampire', 'ultimate', 'style', 'breath', 'flags', 'codex', 'rep', 'kills', 'mount', 'maxHpPenalty', 'x', 'y', 'face', 'homeId', 'homeRegion'];
+  const PF = ['name', 'look', 'origin', 'stats', 'statXp', 'points', 'lvl', 'xp', 'money', 'inv', 'discs', 'corpse', 'hunger', 'energy', 'blood', 'stamina', 'hp', 'stand', 'se', 'hamon', 'spin', 'vampire', 'ultimate', 'style', 'breath', 'flags', 'codex', 'rep', 'kills', 'mount', 'maxHpPenalty', 'x', 'y', 'face', 'homeId', 'homeRegion', 'hotbar', 'hsel', 'dur', 'mag'];
   Game.save = function (manual) {
     if (!G.player || G.player.dead) return;
     const p = G.player;
