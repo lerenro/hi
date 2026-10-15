@@ -125,7 +125,7 @@ check('панель быстрого доступа в HUD', await ev(() => docu
     const prompt = document.getElementById('prompt').textContent;
     J.Game.interact();
     window._step(0.3);
-    return { tgt: !!(tgt && tgt.item === gi), prompt, inv: p.inv.kitchen_knife || 0, held: J.Hand.heldId(p), mesh: !!(p.view && p.view.heldMesh), ground: J.Hand.GROUND.length };
+    return { tgt: !!(tgt && tgt.item === gi), prompt, inv: p.inv.kitchen_knife || 0, held: J.Hand.heldId(p), mesh: !!(p.view && p.view.heldMesh), ground: J.Hand.GROUND.indexOf(gi) >= 0 ? 1 : 0 };
   });
   check('подбор: F подбирает нож, он в руке', r.tgt && r.inv === 1 && r.held === 'kitchen_knife' && r.mesh && r.ground === 0, r);
   check('подсказка «Подобрать»', /Подобрать/.test(r.prompt), r.prompt);

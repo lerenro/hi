@@ -888,12 +888,15 @@
       if (fxOk()) J.Fx.sparks(hp.x, hp.h, hp.z, metal || d.cls === 'blade' ? 10 : 4, a + Math.PI, metal || d.cls === 'blade' ? '#ffd27a' : '#c8a070', 5);
     }
   }
+  const GUN_BUTT = {};
   // удар предметом в руке; k — заряд тяжёлого (undefined — обычный)
   H.melee = function (u, k) {
     const g = G();
     const id = H.heldId(u);
-    const d = H.def(id);
+    let d = H.def(id);
     if (!d || d.cls === 'ammo') return false;
+    // револьвер в ближнем бою — удар рукоятью, а не выстрел в упор
+    if (d.cls === 'gun') d = GUN_BUTT[id] || (GUN_BUTT[id] = Object.assign({}, d, { dmg: 9, reach: 1.0, arc: 1.1, stun: 0.4, knock: 1.4, bleed: 0 }));
     const heavy = k !== undefined;
     if (!heavy && u.cds.item > 0) {
       if (u.isPlayer) u.buf = g.t;
