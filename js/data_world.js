@@ -287,12 +287,12 @@
   J.ORIGINS = [
     { id: 'student', name: 'Школьник из Морио', region: 'morioh', money: 300, stats: { int: 1, cha: 1 }, items: { onigiri: 2, coffee: 1 }, desc: 'Обычный старшеклассник. Ничего странного... пока.', perk: 'Учёба даёт больше опыта. Дом в Морио.' },
     { id: 'joestar', name: 'Наследник Джостаров', region: 'newyork', money: 900, stats: { spi: 1, end: 1 }, items: { tea: 2 }, mark: true, desc: 'Родимое пятно-звезда на шее. Кровь Джостаров зовёт к приключениям.', perk: 'Шанс пережить Стрелу +25%. Хамон учится быстрее. Особая судьба.' },
-    { id: 'gangster', name: 'Уличный бандит', region: 'naples', money: 150, stats: { str: 1, agi: 1 }, items: { bandage: 2 }, desc: 'Мечтаешь подняться в Пассионе. У тебя есть мечта!', perk: 'Пассионе быстрее примет тебя. Больше денег за поручения.' },
+    { id: 'gangster', name: 'Уличный бандит', region: 'naples', money: 150, stats: { str: 1, agi: 1 }, items: { bandage: 2, switchblade: 1 }, desc: 'Мечтаешь подняться в Пассионе. У тебя есть мечта!', perk: 'Пассионе быстрее примет тебя. Больше денег за поручения.' },
     { id: 'zeppeli', name: 'Потомок Цеппели', region: 'london', money: 500, stats: { end: 1, spi: 1 }, items: { wine: 1 }, hamon: 1, desc: 'Искусство хамона — семейная традиция.', perk: 'Начинаешь с хамоном 1 уровня.' },
     { id: 'archaeologist', name: 'Археолог', region: 'cairo', money: 600, stats: { int: 2 }, items: { water: 3 }, desc: 'Ищешь древние артефакты. Иногда они находят тебя.', perk: 'Раскопки чаще дают артефакты: стрелы, маски.' },
-    { id: 'jockey', name: 'Жокей', region: 'sandiego', money: 400, stats: { agi: 2 }, items: { horse: 1, water: 2 }, desc: 'Лошадь, седло и бескрайняя прерия.', perk: 'Начинаешь с лошадью. Вращение учится быстрее.' },
+    { id: 'jockey', name: 'Жокей', region: 'sandiego', money: 400, stats: { agi: 2 }, items: { horse: 1, water: 2, revolver: 1, bullets: 12 }, desc: 'Лошадь, седло и бескрайняя прерия.', perk: 'Начинаешь с лошадью. Вращение учится быстрее.' },
     { id: 'brando', name: 'Потомок Брандо', region: 'london', money: 800, stats: { cha: 2 }, items: { wine: 2 }, mark: true, desc: 'Тёмное наследие. Каменная маска манит тебя.', perk: 'Сильнее как вампир. Шанс пережить Стрелу +15%.' },
-    { id: 'prisoner', name: 'Осуждённый', region: 'florida', money: 60, stats: { str: 1, end: 1 }, items: { bandage: 1 }, desc: 'Тебя подставили. Свобода — дорогое удовольствие.', perk: 'Стенд-диски чаще попадают к тебе.' },
+    { id: 'prisoner', name: 'Осуждённый', region: 'florida', money: 60, stats: { str: 1, end: 1 }, items: { bandage: 1, brick: 1 }, desc: 'Тебя подставили. Свобода — дорогое удовольствие.', perk: 'Стенд-диски чаще попадают к тебе.' },
     { id: 'born', name: 'Прирождённый стенд-юзер', region: null, money: 200, stats: { spi: 1 }, items: { onigiri: 1 }, stand: true, desc: 'Твой стенд был с тобой с рождения. Но враги тоже его видят.', perk: 'Начинаешь со случайным стендом. Случайный город.' },
   ];
 

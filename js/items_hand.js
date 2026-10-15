@@ -2170,7 +2170,11 @@
     if (it && it.type === 'pack') return J.P.addItem(p, it.pack[0], it.pack[1] * n, meta, silent);
     const had = p && p.inv ? cnt(p, id) : 0;
     const r = addItem0.call(this, p, id, n, meta, silent);
-    if (p && p.isPlayer && !had && H.isWeapon(id)) H.autoAssign(p, id);
+    if (p && p.isPlayer && !had && H.isWeapon(id) && H.autoAssign(p, id) >= 0 && p.flags && !p.flags.hbTip && J.Game.state === 'play') {
+      // подсказка один раз за игру
+      p.flags.hbTip = true;
+      G().timers.push({ t: 1.2, fn: () => J.UI.toast(`${J.ITEMS[id].name} — на панели внизу. ${H.KEYS[0]}–${H.KEYS[SLOTS - 1]} или колёсико — взять в руку, B — бросить, N — отдать стенду, 0 — убрать.`, 'gold') });
+    }
     H.dirty = true;
     return r;
   };
