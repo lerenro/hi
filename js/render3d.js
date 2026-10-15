@@ -1044,7 +1044,7 @@
   const setCast = (v, on) => {
     v.cast = on;
     v.group.traverse((o) => {
-      if (o.isMesh) o.castShadow = on;
+      if (o.isMesh && !o.userData.noCast) o.castShadow = on;
     });
   };
   R3.makeView = function (e) {
@@ -1154,6 +1154,8 @@
     // в остановленном времени застывают и «дыхание», и парение стенда
     const tl = e.st && e.st.timefrozen ? (e._tf === undefined ? (e._tf = t) : e._tf) : ((e._tf = undefined), t);
     if (v.legL && (d2 < 2025 || important)) R3.animateRig(v, e, sw, spd, tl, dt);
+    // дальний план — упрощённая модель (без пальцев и мелких черт лица)
+    if (v.lodG) R3.rigLod(v, !e.isPlayer && d2 > (R3.quality === 0 ? 144 : 484));
     if (v.legs) v.legs.forEach((l, i) => (l.rotation.x = (i % 2 ? sw : -sw) * 0.6));
     if (v.kind === 'creature' && e.model === 'bug') v.group.position.y += 0.3 + Math.sin(tl * 8 + v.phase) * 0.1;
     // смерть: люди падают через J.Anim (реакции), звери — набок; сбитый машиной — тоже набок

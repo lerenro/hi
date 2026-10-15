@@ -514,6 +514,23 @@
     uniform vec3 uC; uniform float uA; varying float vE;
     void main() { gl_FragColor = vec4(uC * (0.18 + pow(vE, 1.6) * 1.2) * uA, 1.0); }`;
   const GHM = [];
+  // послеобразы персонажей со скелетом: снимок матриц костей в момент вспышки
+  const GHS_VS = `
+    #include <common>
+    #include <skinning_pars_vertex>
+    varying float vE;
+    void main() {
+      #include <beginnormal_vertex>
+      #include <skinbase_vertex>
+      #include <skinnormal_vertex>
+      #include <begin_vertex>
+      #include <skinning_vertex>
+      vec4 mv = modelViewMatrix * vec4(transformed, 1.0);
+      vec3 n = normalize(normalMatrix * objectNormal);
+      vE = 1.0 - abs(dot(n, normalize(-mv.xyz)));
+      gl_Position = projectionMatrix * mv;
+    }`;
+  const GHS = [];
   const GHOSTS = [];
   Pw.ghost = function (view, color, life) {
     if (!view || !view.group || !GHM.length || !view.group.visible) return;
@@ -526,7 +543,25 @@
     if (free < 12) return;
     view.group.updateMatrixWorld(true);
     view.group.traverse((o) => {
-      if (!o.isMesh || !o.visible || list.length >= 14) return;
+      if (!o.isMesh || !o.visible || list.length >= 14 || o.userData.noCast) return;
+      if (o.isSkinnedMesh) {
+        let m = null;
+        for (const g of GHS) if (!g.busy) { m = g; break; }
+        if (!m) return;
+        m.busy = true;
+        o.skeleton.update();
+        m.skel.boneMatrices.set(o.skeleton.boneMatrices.subarray(0, m.skel.boneMatrices.length));
+        if (m.skel.boneTexture) m.skel.boneTexture.needsUpdate = true;
+        m.mesh.geometry = o.geometry;
+        m.mesh.matrixWorld.copy(o.matrixWorld);
+        m.mesh.bindMatrix.copy(o.bindMatrix);
+        m.mesh.bindMatrixInverse.copy(o.matrixWorld).invert();
+        m.mat.uniforms.uC.value.copy(col(color));
+        m.mat.uniforms.uA.value = 1;
+        m.mesh.visible = true;
+        list.push(m);
+        return;
+      }
       let m = null;
       for (const g of GHM) if (!g.busy) { m = g; break; }
       if (!m) return;
@@ -1701,6 +1736,23 @@
       R3.scene.add(mesh);
       GHM.push({ mesh, mat, busy: false });
     }
+    for (let i = 0; i < 16; i++) {
+      const mat = new THREE.ShaderMaterial({ uniforms: { uC: { value: new THREE.Color() }, uA: { value: 0 } }, vertexShader: GHS_VS, fragmentShader: GH_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, skinning: true });
+      const bones = [];
+      for (let k = 0; k < 11; k++) bones.push(new THREE.Bone());
+      const skel = new THREE.Skeleton(bones);
+      // матрицы костей — снимок, кадр за кадром не пересчитываются
+      skel.update = function () {};
+      const mesh = new THREE.SkinnedMesh(GH_DUMMY, mat);
+      mesh.bind(skel, new THREE.Matrix4());
+      // мировая матрица и обратная привязки задаются снимком
+      mesh.matrixAutoUpdate = false;
+      mesh.updateMatrixWorld = function () {};
+      mesh.frustumCulled = false;
+      mesh.visible = false;
+      R3.scene.add(mesh);
+      GHS.push({ mesh, mat, skel, busy: false });
+    }
     // надписи
     for (let i = 0; i < 12; i++) {
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false, fog: false }));
@@ -1717,7 +1769,7 @@
   // прогрев шейдеров: первая сила в бою не должна давать фриз компиляции
   Pw.warm = function () {
     const r = R3.renderer, sc = R3.scene, cam = R3.camera;
-    const objs = [ADD.mesh, ALP.mesh].concat(Object.values(IM).map((o) => o.m), DEC.map((d) => d.m), [GHM[0].mesh, SPR[0].sp], RINGS.map((o) => o.m), FLASH.map((o) => o.m));
+    const objs = [ADD.mesh, ALP.mesh].concat(Object.values(IM).map((o) => o.m), DEC.map((d) => d.m), [GHM[0].mesh, GHS[0].mesh, SPR[0].sp], RINGS.map((o) => o.m), FLASH.map((o) => o.m));
     const vis = objs.map((o) => o.visible);
     for (const o of objs) o.visible = true;
     for (const k in IM) IM[k].m.count = 1;

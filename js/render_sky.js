@@ -388,6 +388,8 @@
     R3.hemi.color.copy(cHC);
     R3.hemi.groundColor.copy(C_GROUND).multiplyScalar(0.35 + 0.65 * Math.min(1, s.hi * 2.2));
     R3.hemi.intensity = s.hi * (1 - overcast * 0.15);
+    // контурный свет на персонажах — цвет неба (ночью почти гаснет)
+    if (R3.uChSky) R3.uChSky.value.copy(cH).lerp(cZ, 0.35).multiplyScalar(0.25 + 0.75 * Math.min(1, s.hi * 1.6));
     // звёзды и луна
     const night = 1 - day;
     R3.starMat.opacity = Math.max(0, 1 - day * 2.2) * (1 - overcast);

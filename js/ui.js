@@ -1402,7 +1402,7 @@
 
   UI.creator = {
     name: 'Джоджо',
-    look: { gender: 'm', skin: J.SKINS[1], hair: 'pompadour', hairColor: J.HAIR_COLORS[0], top: J.OUTFIT_COLORS[0], bottom: J.OUTFIT_COLORS[0] },
+    look: { gender: 'm', skin: J.SKINS[1], hair: 'pompadour', style: 'gakuran', hairColor: J.HAIR_COLORS[0], top: J.OUTFIT_COLORS[0], bottom: J.OUTFIT_COLORS[0] },
     origin: 'student',
     stats: { str: 1, agi: 1, end: 1, spi: 1, cha: 1, int: 1 },
     pts: 6,
@@ -1423,6 +1423,7 @@
       <label class="field"><span>Имя</span><input id="cr-name" maxlength="20" value="${esc(C.name)}"></label>
       <div class="field"><span>Пол</span><div class="seg"><button data-g="m" class="${C.look.gender === 'm' ? 'on' : ''}">Мужской</button><button data-g="f" class="${C.look.gender === 'f' ? 'on' : ''}">Женский</button></div></div>
       <div class="field"><span>Причёска</span><div class="seg wrap">${J.HAIR_STYLES.map((h) => `<button data-h="${h.id}" class="${C.look.hair === h.id ? 'on' : ''}">${h.name}</button>`).join('')}</div></div>
+      <div class="field"><span>Одежда</span><div class="seg wrap">${J.OUTFIT_STYLES.filter((o) => o.id !== 'dress' || C.look.gender === 'f').map((o) => `<button data-st="${o.id}" class="${(C.look.style || 'gakuran') === o.id ? 'on' : ''}">${o.name}</button>`).join('')}</div></div>
       <div class="field"><span>Кожа</span><div class="sws">${swatches(J.SKINS, 'skin')}</div></div>
       <div class="field"><span>Волосы</span><div class="sws">${swatches(J.HAIR_COLORS, 'hairColor')}</div></div>
       <div class="field"><span>Верх</span><div class="sws">${swatches(J.OUTFIT_COLORS, 'top')}</div></div>
@@ -1432,7 +1433,8 @@
       <div class="field"><span>Характеристики · осталось ${C.pts}</span><div class="crstats">${['str', 'agi', 'end', 'spi', 'cha', 'int'].map((k) => `<div class="crs"><span>${J.P.STAT_RU[k]}</span><button data-s="${k}" data-d="-1">−</button><b>${C.stats[k] + (og.stats[k] || 0)}</b><button data-s="${k}" data-d="1">+</button></div>`).join('')}</div></div>
     `;
     $('#cr-name').oninput = (e) => (C.name = e.target.value);
-    box.querySelectorAll('[data-g]').forEach((b) => (b.onclick = () => { C.look.gender = b.dataset.g; if (b.dataset.g === 'f' && C.look.hair === 'pompadour') C.look.hair = 'buns'; UI.renderCreator(); UI.refreshPreview(); }));
+    box.querySelectorAll('[data-g]').forEach((b) => (b.onclick = () => { C.look.gender = b.dataset.g; if (b.dataset.g === 'f' && C.look.hair === 'pompadour') C.look.hair = 'buns'; if (b.dataset.g === 'm' && C.look.style === 'dress') C.look.style = 'shirt'; UI.renderCreator(); UI.refreshPreview(); }));
+    box.querySelectorAll('[data-st]').forEach((b) => (b.onclick = () => { C.look.style = b.dataset.st; UI.renderCreator(); UI.refreshPreview(); }));
     box.querySelectorAll('[data-h]').forEach((b) => (b.onclick = () => { C.look.hair = b.dataset.h; UI.renderCreator(); UI.refreshPreview(); }));
     box.querySelectorAll('.sw').forEach((b) => (b.onclick = () => { C.look[b.dataset.k] = b.dataset.v; UI.renderCreator(); UI.refreshPreview(); }));
     box.querySelectorAll('[data-o]').forEach((b) => (b.onclick = () => { C.origin = b.dataset.o; UI.renderCreator(); }));
@@ -1450,6 +1452,7 @@
     const R = J.R;
     C.look.gender = R() < 0.5 ? 'm' : 'f';
     C.look.hair = R.pick(J.HAIR_STYLES).id;
+    C.look.style = R.pick(J.OUTFIT_STYLES.filter((o) => o.id !== 'dress' || C.look.gender === 'f')).id;
     C.look.skin = R.pick(J.SKINS);
     C.look.hairColor = R.pick(J.HAIR_COLORS);
     C.look.top = R.pick(J.OUTFIT_COLORS);

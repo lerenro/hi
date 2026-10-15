@@ -1859,7 +1859,7 @@
     invScene = new THREE.Scene();
     invScene.add(invQuad);
     invCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    blackMat = new THREE.MeshBasicMaterial({ color: 0x0b0610, fog: false });
+    blackMat = new THREE.MeshBasicMaterial({ color: 0x0b0610, fog: false, skinning: true });
     Fx.warm();
     Fx.ready = true;
   };

@@ -69,6 +69,7 @@
         top: R.pick(['#3a4a6a', '#6a3a3a', '#3a6a4a', '#d8d0c0', '#2a2a33', '#7a5a8a', '#c98a4a', '#4a7aa8', '#e8e8f0', '#a83a5a']),
         bottom: R.pick(['#2a2a38', '#3a3a4a', '#5a4a3a', '#1f2a44', '#6a6a7a']),
         build: R() < 0.25 ? 'slim' : R() < 0.85 ? 'normal' : 'muscular',
+        style: R.pick(gender === 'f' ? ['shirt', 'jacket', 'tee', 'dress', 'tee'] : ['shirt', 'jacket', 'tee', 'tee', 'gakuran']),
       },
       over || {}
     );
