@@ -366,10 +366,13 @@
   // поэтому новых сочетаний много, а собирать приходится мало.
   const partCache = new Map();
   const rigCache = new Map();
+  // один общий буфер сборки на все части (part() копирует результат) — без лишнего мусора для сборщика
+  let SCB = null;
   const part = (key, fn) => {
     let p = key && partCache.get(key);
     if (p) return p;
-    const gb = new CB();
+    const gb = SCB || (SCB = new CB());
+    gb.v = gb.ni = 0;
     fn(gb);
     p = gb.part();
     if (key) partCache.set(key, p);
@@ -402,7 +405,8 @@
       fixNeck(g);
       return g;
     };
-    const G = { b, geo: one(false), lo: spec.lod ? one(true) : null, inv: boneInverses(b), extra: null };
+    // упрощённая копия собирается лениво — когда персонаж впервые окажется вдали
+    const G = { b, geo: one(false), lo: null, loF: spec.lod ? () => G.lo || (G.lo = one(true)) : null, inv: boneInverses(b), extra: null };
     if (spec.extra) {
       const gb = new CB();
       spec.extra(gb);
@@ -454,7 +458,7 @@
     g.add(mesh);
     mesh.bind(skel, IDENT);
     const v = {
-      group: g, body, torso: spine, spine, head, skin: mesh, skel, lodG: G.lo ? [G.geo, G.lo] : null, lodI: 0,
+      group: g, body, torso: spine, spine, head, skin: mesh, skel, lodG: G.loF ? [G.geo, G.lo] : null, lodF: G.loF, lodI: 0,
       legL: legs[0].thigh, legR: legs[1].thigh, shinL: legs[0].shin, shinR: legs[1].shin,
       armL: arms[0].upper, armR: arms[1].upper, foreL: arms[0].fore, foreR: arms[1].fore,
       mats: [mat], baseColors: [new THREE.Color(1, 1, 1)],
@@ -472,6 +476,7 @@
     const want = far ? 1 : 0;
     if (v.lodI !== want) {
       v.lodI = want;
+      if (!v.lodG[want]) v.lodG[want] = v.lodF();
       v.skin.geometry = v.lodG[want];
     }
   };
@@ -980,6 +985,7 @@
       for (const build of ['normal', 'slim', 'muscular'])
         for (let i = 0; i < Math.max(H[g].length, ST[g].length); i++) {
           const v = R3.buildHuman({ gender: g, build, hair: H[g][i % H[g].length], style: ST[g][i % ST[g].length], skin: '#eac09f', hairColor: '#222', top: '#333', bottom: '#333' });
+          if (v.lodF) v.lodF();
           v.mats.forEach((m) => m.dispose());
         }
   };
@@ -1490,8 +1496,7 @@
         uniforms: { uC: { value: C1.clone().lerp(C2, 0.3) }, uA: { value: 0.5 }, uW: { value: 0.016 } },
         vertexShader: SHELL_VS, fragmentShader: SHELL_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.BackSide, skinning: true,
       });
-      // ореолу хватает упрощённой геометрии
-      const sh = new THREE.SkinnedMesh(v.lodG ? v.lodG[1] : v.skin.geometry, sm);
+      const sh = new THREE.SkinnedMesh(v.skin.geometry, sm);
       sh.renderOrder = 1;
       sh.userData.noCast = true;
       v.group.add(sh);
