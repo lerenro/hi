@@ -114,10 +114,7 @@
     p.reloadT = 0;
     p.hsel = i;
     const id = H.heldId(p);
-    if (id) {
-      J.R3.text(p.x, p.y, J.ITEMS[id].name, 'tmiss', 0.7, 2.3);
-      if (J.Sfx && J.Sfx.whoosh) J.Sfx.whoosh(0.1, false, 0.05);
-    }
+    if (id && J.Sfx && J.Sfx.whoosh) J.Sfx.whoosh(0.1, false, 0.05);
     H.dirty = true;
   };
   // клавиша ячейки: повторное нажатие — убрать в карман
@@ -1962,6 +1959,12 @@
     hotel: [['bottle', 0.25]],
     casino: [['bottle', 0.3]],
     hospital: [['bandage', 0.2]],
+    dig: [['pipe', 0.45], ['brick', 0.35], ['rock', 0.2]],
+    farm: [['pipe', 0.3], ['rock', 0.3]],
+    black_market: [['switchblade', 0.15], ['bottle', 0.4]],
+    police: [['road_sign', 0.12]],
+    church: [['rock', 0.1]],
+    library: [['brick', 0.08]],
   };
   const lootDone = new Set();
   function lootTick(p) {

@@ -457,7 +457,7 @@ body.is-touch #speedo .sp-v b { font-size: 30px; min-width: 58px; }
 #hotact { display: none; gap: 4px; pointer-events: auto; }
 #hotact .tb { width: 64px; }
 body.is-touch #hotact { display: flex; }
-body.is-touch #hotwrap { bottom: calc(12px + var(--sab)); }
+body.is-touch #hotwrap { bottom: calc(10px + var(--sab)); left: calc(162px + var(--sal)); transform: none; align-items: flex-start; }
 body.is-touch .hs { width: 42px; height: 42px; }
 body.driving #hotwrap { display: none; }
 #prompt { bottom: calc(176px + var(--sab)); }
