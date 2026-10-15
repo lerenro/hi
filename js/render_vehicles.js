@@ -228,7 +228,7 @@ vec3 carSky(vec3 d) {
   c = mix(c, uGnd * 0.5 + uHor * 0.06, step(h, bh) * step(-0.02, h) * uCity);
   c = mix(c, uGnd * 0.55, smoothstep(0.0, -0.12, h));
   float sd = max(dot(d, uSunD), 0.0);
-  c += uSunC * (pow(sd, 14.0) * 0.22 + pow(sd, 900.0) * 9.0) * uSunV;
+  c += uSunC * (pow(sd, 48.0) * 0.18 + pow(sd, 900.0) * 7.0) * uSunV;
   return c;
 }
 #ifdef CAR_CRACK
@@ -315,8 +315,8 @@ float cVor(vec2 p) {
     // сгоревший остов: та же модель, обугленная
     R3.wreckMat = carPatch(phong({ shininess: 20 }), R3.carGlowOff, 1, null, 'b');
     // стёкла: прозрачные, у края — зеркальные; разбитые — в трещинах
-    R3.carGlassMat = carPatch(phong({ transparent: true, opacity: 0.38, depthWrite: false, shininess: 160, specular: new THREE.Color(0.9, 0.9, 0.9) }), R3.carGlowOff, 0, { CAR_GLASS: '' }, 'g');
-    R3.carGlassBroken = carPatch(phong({ transparent: true, opacity: 0.38, depthWrite: false, shininess: 60, side: THREE.DoubleSide }), R3.carGlowOff, 0, { CAR_GLASS: '', CAR_CRACK: '' }, 'gc');
+    R3.carGlassMat = carPatch(phong({ transparent: true, opacity: 0.6, depthWrite: false, shininess: 300, specular: new THREE.Color(0.55, 0.55, 0.55) }), R3.carGlowOff, 0, { CAR_GLASS: '' }, 'g');
+    R3.carGlassBroken = carPatch(phong({ transparent: true, opacity: 0.5, depthWrite: false, shininess: 60, side: THREE.DoubleSide }), R3.carGlowOff, 0, { CAR_GLASS: '', CAR_CRACK: '' }, 'gc');
     R3.carBrakeMat = new THREE.MeshBasicMaterial({ vertexColors: true });
     R3.carBrakeMat.color.setRGB(1.25, 1.25, 1.25);
     R3.sirenMats = [new THREE.MeshBasicMaterial({ vertexColors: true }), new THREE.MeshBasicMaterial({ vertexColors: true })];

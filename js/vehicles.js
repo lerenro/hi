@@ -118,6 +118,11 @@
   GRIPK[T.SNOW] = 0.55;
   GRIPK[T.SAND] = GRIPK[T.DESERT] = 0.7;
   GRIPK[T.GRASS] = GRIPK[T.LAWN] = 0.8;
+  // Двухосная модель («велосипед»): боковые силы шин по углу увода (кривая Пасейки), нагрузка на оси с переносом веса
+  // при разгоне и торможении, круг трения (газ у заднеприводных срывает зад в занос), ручник блокирует задние колёса.
+  // На малой скорости — кинематика (без вырождения углов увода).
+  const GRAV = 9.81;
+  const tyre = (al, D) => -D * Math.sin(1.25 * Math.atan(10 * al));
   Veh.physics = function (v, dt, thr, st, hb) {
     const w = G().world, vt = v.vt;
     const ti = w.tile(v.x, v.y);
@@ -127,46 +132,100 @@
     // двигатель и тормоза
     let a = 0;
     v.reverse = false;
-    let braking = false;
+    let braking = false, drive = 0;
     if (v.hp <= 0) thr = 0;
     if (thr > 0.05) {
       if (vf < -0.4) { a = vt.brk * thr; braking = true; }
-      else a = vt.acc * thr * Math.max(0, 1 - (vf / vt.vmax) * (vf / vt.vmax)) / Math.max(1, surf * 0.5);
+      else {
+        drive = thr;
+        a = vt.acc * thr * Math.max(0, 1 - (vf / vt.vmax) * (vf / vt.vmax)) / Math.max(1, surf * 0.5);
+      }
     } else if (thr < -0.05) {
       if (vf > 0.4) { a = -vt.brk * -thr; braking = true; }
       else {
         a = vf > -vt.vmax * 0.26 ? -vt.acc * 0.6 * -thr : 0;
         v.reverse = true;
+        drive = -thr;
       }
     }
     // сопротивление качению и воздуха
-    const res = (0.25 + 0.45 * surf) + 0.0011 * vf * vf * Math.sign(vf) * Math.sign(vf);
+    const res = (0.25 + 0.45 * surf) + 0.0011 * vf * vf;
+    let aW = a; // для переноса веса — только тяга и тормоза (сопротивление и трение заноса не входят)
     if (Math.abs(vf) > 0.05) a -= Math.sign(vf) * res;
     if (hb) {
-      a -= Math.sign(vf) * Math.min(Math.abs(vf) / dt, 6.5);
+      const hbA = Math.sign(vf) * Math.min(Math.abs(vf) / dt, 6.5);
+      a -= hbA;
+      aW -= hbA * 0.5;
       braking = true;
     }
+    v.axS = (v.axS || 0) + (J.clamp(aW * Math.sign(vf || 1), -12, 10) - (v.axS || 0)) * Math.min(1, dt * 5);
+    // занос гасит скорость (шины скользят боком)
+    const slide = Math.abs(vl);
+    a -= Math.sign(vf) * Math.min(Math.abs(vf) / dt, slide * 0.3);
     const nvf = vf + a * dt;
     // торможение не разгоняет в обратную сторону
     if ((braking || (thr === 0 && Math.abs(vf) < 1.5)) && Math.sign(nvf) !== Math.sign(vf) && vf !== 0) vf = 0;
     else vf = nvf;
     if (thr === 0 && !hb && Math.abs(vf) < 0.08) vf = 0;
-    // руль: на скорости угол меньше
-    const sMax = vt.steer / (1 + Math.abs(vf) / 11);
+    // руль: на скорости угол меньше (в заносе — можно контрить сильнее)
+    // в заносе руль против вращения (контрруление) поворачивается сильнее
+    const counter = st * v.yawRate < 0 && slide > 1.5 ? 1 + Math.min(1, slide / 8) * 0.8 : 1;
+    const sMax = (vt.steer / (1 + Math.abs(vf) / 11)) * counter;
     v.steer += (st * sMax - v.steer) * Math.min(1, dt * 7);
-    // поворот кузова и сцепление
-    let yawT = (vf * Math.tan(v.steer)) / vt.wb;
-    const slide = Math.abs(vl);
-    let grip = vt.grip * gk;
-    if (hb) {
-      grip *= 0.16;
-      yawT *= 1.55;
+    // перенос веса: при разгоне нагружается зад, при торможении — перед
+    const m = vt.m, hcg = vt.H * 0.36, lf = vt.wb / 2, lr = vt.wb / 2;
+    const dN = J.clamp((m * v.axS * hcg) / vt.wb, -m * GRAV * 0.08, m * GRAV * 0.08);
+    const Nf = m * GRAV * 0.5 - dN, Nr = m * GRAV - Nf;
+    const mu = (vt.grip / 9) * 1.3 * gk * (surf > 2 ? 0.85 : 1);
+    // устойчивый баланс (зад держит чуть лучше перёда — машина недоворачивает, а не крутится сама)
+    let muF = mu, muR = mu * 1.18;
+    // полный газ: заднеприводная срывается в занос (на малой и средней скорости), переднеприводная недоворачивает
+    if (drive > 0.85) {
+      if (vt.rwd) muR *= Math.abs(vf) < 16 ? 0.66 : Math.abs(vf) < 24 ? 0.66 + (Math.abs(vf) - 16) * 0.0425 : 1;
+      else muF *= 0.86;
     }
-    if (slide > 4) grip *= 0.7; // уже в заносе — держит хуже
-    v.yawRate += (yawT - v.yawRate) * Math.min(1, dt * (hb ? 3.2 : 8.5) * gk);
-    vl *= Math.exp(-grip * dt);
-    // в заносе скорость гасится
-    vf -= Math.sign(vf) * Math.min(Math.abs(vf), slide * 0.35 * dt);
+    if (braking && !hb) {
+      muF *= 0.9;
+      muR *= 0.86;
+    }
+    if (hb) muR *= 0.3; // задние колёса заблокированы
+    const I = (m * (vt.L * vt.L + vt.W * vt.W)) / 12;
+    const sp = Math.abs(vf);
+    let r = v.yawRate;
+    if (sp < 3) {
+      // кинематика на малой скорости
+      const yawT = (vf * Math.tan(v.steer)) / vt.wb;
+      r += (yawT - r) * Math.min(1, dt * 10);
+      vl *= Math.exp(-vt.grip * gk * dt);
+      v.ay = vf * r;
+    } else {
+      const n = 3, h = dt / n, cd = Math.cos(v.steer), sd = Math.sin(v.steer);
+      let ay = 0;
+      for (let k = 0; k < n; k++) {
+        // скорость колёс в их собственных осях → угол увода
+        const vfw = vl + r * lf;
+        const latF = -vf * sd + vfw * cd, lonF = vf * cd + vfw * sd;
+        const Ff = tyre(Math.atan2(latF, Math.abs(lonF) + 0.3), muF * Nf);
+        const Fr = tyre(Math.atan2(vl - r * lr, sp + 0.3), muR * Nr);
+        ay = (Ff * cd + Fr) / m;
+        vl += (ay - r * vf) * h;
+        r += ((lf * Ff * cd - lr * Fr) / I) * h;
+      }
+      // плавный переход к кинематике около 3–5 м/с (без рывка)
+      if (sp < 5) {
+        const k = (5 - sp) / 2, yawT = (vf * Math.tan(v.steer)) / vt.wb;
+        r += (yawT - r) * k * Math.min(1, dt * 10);
+      }
+      v.ay = ay;
+    }
+    if (!Number.isFinite(r) || !Number.isFinite(vl)) {
+      r = 0;
+      vl = 0;
+    }
+    v.yawRate = J.clamp(r, -5, 5);
+    // скольжение колёс (для дыма и следов шин): боковое, пробуксовка на старте, блокировка ручником / резким тормозом
+    v.skid = Math.max(J.clamp((slide - 1.6) / 4, 0, 1), hb && sp > 3 ? 0.9 : 0, braking && sp > 9 && thr < -0.5 ? 0.5 : 0, drive > 0.8 && sp < 7 && vt.acc > 6.5 && surf < 1.2 ? 0.7 : 0);
+    v.v2 = vf;
     v.vx = ca * vf - sa * vl;
     v.vy = sa * vf + ca * vl;
     v.ang += v.yawRate * dt;
@@ -231,11 +290,25 @@
     // подвеска: мягкое следование за землёй (бордюр — толчок)
     const k = Math.min(1, dt * 14);
     v.gy += (gy - v.gy) * k;
-    const pitchT = tp + J.clamp(-v.accel * 0.0075, -0.045, 0.06);
-    const rollT = tr + J.clamp(-v.vf * v.yawRate * 0.0055, -0.07, 0.07);
-    v.pitch += (pitchT - v.pitch) * Math.min(1, dt * 7);
-    v.roll += (rollT - v.roll) * Math.min(1, dt * 6);
+    // кузов на пружинах: клевок при торможении, приседание при разгоне, крен наружу поворота (с затухающим покачиванием)
+    const ay = v.ay !== undefined ? v.ay : v.vf * v.yawRate;
+    const soft = vt.m > 3000 ? 1.4 : vt.id === 'sports' ? 0.6 : 1;
+    const pitchT = tp + J.clamp(-v.accel * 0.0062 * soft, -0.055, 0.07);
+    const rollT = tr + J.clamp(-ay * 0.0085 * soft, -0.09, 0.09);
+    const kS = 90, cS = 11, h2 = Math.min(dt, 0.034) / 2;
+    for (let k = 0; k < 2; k++) {
+      v.pitchV = (v.pitchV || 0) + ((pitchT - v.pitch) * kS - (v.pitchV || 0) * cS) * h2;
+      v.rollV = (v.rollV || 0) + ((rollT - v.roll) * kS * 0.8 - (v.rollV || 0) * cS) * h2;
+      v.pitch += v.pitchV * h2;
+      v.roll += v.rollV * h2;
+    }
+    // удар по подвеске на бордюре / кочке
+    const dy = gy - (v.gyPrev === undefined ? gy : v.gyPrev);
+    v.gyPrev = gy;
+    if (Math.abs(dy) > 0.03 && full) v.pitchV -= dy * 6 * Math.sign(v.vf || 1);
     v.spin += (v.vf / vt.wr) * dt;
+    // буксующие колёса крутятся быстрее
+    if (v.skid > 0.6 && v.mode === 'player' && Math.abs(v.vf) < 7 && !v.braking) v.spin += 18 * dt;
   };
 
   // ---------- Урон машине ----------

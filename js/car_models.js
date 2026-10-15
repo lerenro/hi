@@ -225,8 +225,8 @@
     let cx = 0, cy = 0, cz = 0;
     for (const p of ring) { cx += p[0]; cy += p[1]; cz += p[2]; }
     const c = [cx / ring.length, cy / ring.length, cz / ring.length];
-    for (let k = 0; k < ring.length - 1; k++) {
-      const a = ring[k], b = ring[k + 1];
+    for (let k = 0; k < ring.length; k++) {
+      const a = ring[k], b = ring[(k + 1) % ring.length];
       const ux = a[0] - c[0], uy = a[1] - c[1], uz = a[2] - c[2], vx = b[0] - c[0], vy = b[1] - c[1], vz = b[2] - c[2];
       const nz = (uy * vz - uz * vy) * nrm[0] + (uz * vx - ux * vz) * nrm[1] + (ux * vy - uy * vx) * nrm[2];
       if (nz >= 0) gb.triN(c, nrm, a, nrm, b, nrm, cl, refOf(cl), 0);
@@ -250,6 +250,27 @@
       if (s > 0) gb.triN([x, y, z], n, p0, n, p1, n, cl, ref, glow);
       else gb.triN([x, y, z], n, p1, n, p0, n, cl, ref, glow);
     }
+  }
+
+  // ---------- Номерные знаки: шрифт 3×5 и текст по региону ----------
+  const FONT = {
+    0: ['111', '101', '101', '101', '111'], 1: ['010', '110', '010', '010', '111'], 2: ['111', '001', '111', '100', '111'], 3: ['111', '001', '011', '001', '111'],
+    4: ['101', '101', '111', '001', '001'], 5: ['111', '100', '111', '001', '111'], 6: ['111', '100', '111', '101', '111'], 7: ['111', '001', '010', '010', '010'],
+    8: ['111', '101', '111', '101', '111'], 9: ['111', '101', '111', '001', '111'], A: ['010', '101', '111', '101', '101'], B: ['110', '101', '110', '101', '110'],
+    C: ['011', '100', '100', '100', '011'], E: ['111', '100', '110', '100', '111'], H: ['101', '101', '111', '101', '101'], K: ['101', '110', '100', '110', '101'],
+    M: ['101', '111', '111', '101', '101'], P: ['110', '101', '110', '100', '100'], T: ['111', '010', '010', '010', '010'], X: ['101', '101', '010', '101', '101'],
+    '-': ['000', '000', '111', '000', '000'],
+  };
+  function plateText(region, seed) {
+    let h = 2166136261;
+    for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
+    const L = 'ABCEHKMPTX', rn = () => ((h = Math.imul(h ^ (h >>> 13), 1274126177)) >>> 0) / 4294967296;
+    const d = () => String(Math.floor(rn() * 10)), l = () => L[Math.floor(rn() * L.length)];
+    if (region === 'japan') return d() + d() + '-' + d() + d();
+    if (region === 'italy' || region === 'swiss') return l() + l() + d() + d() + d() + l() + l();
+    if (region === 'london') return l() + l() + d() + d() + l() + l() + l();
+    if (region === 'usa' || region === 'hw' || region === 'western' || region === 'mexico') return d() + l() + l() + l() + d() + d() + d();
+    return d() + d() + d() + l() + l() + d();
   }
 
   // ---------- Легковой кузов (седан, хэтчбек, такси, полиция, спорткар, кей-кар, малолитражка, пикап, фургон) ----------
@@ -495,12 +516,12 @@
       const s = lowSec(dWs + 0.18);
       for (const sg of [1, -1]) {
         const x = sg * (s[5][0] + 0.02), y = s[5][1] + 0.1, z = s[0][2];
-        const xo = x + sg * 0.17;
+        const xo = x + sg * 0.15;
         body.box(x, y - 0.03, z - 0.04, x + sg * 0.08, y + 0.01, z + 0.02, t.id === 'taxi' && region !== 'usa' ? C.CHROME : C.TRIM, 0.2);
         // корпус зеркала (каплевидный: ящик со срезанным носом)
-        const hx = sg * 0.06, yy0 = y - 0.06, yy1 = y + 0.07;
-        const m0 = [x + sg * 0.06, yy0, z + 0.06], m1 = [xo + hx * 0.3, yy0, z + 0.06], m2 = [xo + hx * 0.3, yy1, z + 0.06], m3 = [x + sg * 0.06, yy1, z + 0.06];
-        const b0 = [x + sg * 0.07, yy0 + 0.01, z - 0.05], b1 = [xo, yy0 + 0.01, z - 0.04], b2 = [xo, yy1 - 0.01, z - 0.04], b3 = [x + sg * 0.07, yy1 - 0.01, z - 0.05];
+        const hx = sg * 0.05, yy0 = y - 0.045, yy1 = y + 0.05;
+        const m0 = [x + sg * 0.06, yy0 + 0.01, z + 0.045], m1 = [xo + hx * 0.2, yy0 + 0.012, z + 0.03], m2 = [xo + hx * 0.2, yy1 - 0.008, z + 0.03], m3 = [x + sg * 0.06, yy1 - 0.01, z + 0.045];
+        const b0 = [x + sg * 0.065, yy0, z - 0.035], b1 = [xo + hx * 0.3, yy0, z - 0.03], b2 = [xo + hx * 0.3, yy1, z - 0.03], b3 = [x + sg * 0.065, yy1, z - 0.035];
         const pc = livery ? C.TRIM : van || bed || t.id === 'kei' ? C.TRIM : paint;
         const Q = (a, b, c, d, cl, rf) => (sg > 0 ? body.quad(a, b, c, d, cl, rf) : body.quad(a, d, c, b, cl, rf));
         Q(m0, m1, m2, m3, pc);
@@ -563,7 +584,9 @@
     } else {
       for (const sg of [1, -1]) {
         const ly0 = lk.slimLights ? lightY0 + 0.06 : lightY0;
+        plate(body, sg * (lightX0 + 0.012), sg * (lightX1 - 0.014), ly0 - 0.016, lightY1 + 0.014, fz - 0.002, 1, C.TRIM, 0.4);
         plate(body, sg * lightX0, sg * lightX1, ly0, lightY1, fz, 1, C.HEADB, 2.2);
+        if (hi) plate(body, sg * lightX0, sg * lightX1, ly0 - 0.012, ly0 - 0.003, fz + 0.004, 1, C.HEAD, 0.9, 1); // ходовые огни
         plate(body, sg * (lightX0 - 0.025), sg * ((lightX0 + lightX1) / 2 + 0.01), ly0 + 0.02, lightY1 - 0.02, fz + 0.003, 1, C.HEAD, 0.9, 1);
         plate(body, sg * ((lightX0 + lightX1) / 2 - 0.01), sg * (lightX1 + 0.02), ly0 + 0.02, lightY1 - 0.02, fz + 0.003, 1, C.HEAD, 0.9, 1);
         frontLamps.push([sg * (lightX0 + lightX1) / 2, (ly0 + lightY1) / 2]);
@@ -597,12 +620,29 @@
       if (pst.eu) plate(body, s * -pw, s * (-pw + 0.035), y - ph, y + ph, z + s * 0.003, s, C.EU, 0.1);
       if (pst.band) plate(body, -pw, pw, y + ph - 0.016, y + ph - 0.004, z + s * 0.003, s, col(pst.band), 0.1);
       if (pst.top) plate(body, -pw, pw, y + ph - 0.03, y + ph, z + s * 0.003, s, col(pst.top), 0.1);
-      // «символы»
-      const n = 6, cw = (pw * 1.6) / n;
-      for (let k = 0; k < n; k++) {
-        if (k === 2 && (region === 'japan' || region === 'italy')) continue;
-        const x = -pw * 0.8 + cw * (k + 0.2) + (pst.eu ? 0.02 : 0);
-        plate(body, s * x, s * (x + cw * 0.62), y - ph * 0.55, y + ph * (pst.top || pst.band ? 0.35 : 0.55), z + s * 0.004, s, fg, 0);
+      // надпись номера: буквы и цифры шрифтом 3×5 (вблизи), вдали — просто полоса
+      const txt = plateText(region, t.id + paint.getHexString());
+      if (!hi) {
+        plate(body, -pw * 0.8, pw * 0.8, y - ph * 0.4, y + ph * 0.3, z + s * 0.004, s, fg, 0);
+        return;
+      }
+      const gh = (pst.top || pst.band ? 1.25 : 1.45) * ph, gw = Math.min((pw * 1.7) / (txt.length * 1.25), gh * 0.62);
+      const x0 = -(txt.length * gw * 1.25 - gw * 0.25) / 2 + (pst.eu ? 0.018 : 0), yb = y - gh / 2 - (pst.top || pst.band ? 0.012 : 0);
+      for (let k = 0; k < txt.length; k++) {
+        const gl = FONT[txt[k]];
+        if (!gl) continue;
+        const cx = x0 + k * gw * 1.25, px = gw / 3, py = gh / 5;
+        for (let r = 0; r < 5; r++) {
+          const row = gl[r];
+          for (let c = 0; c < 3; c++) {
+            if (row[c] !== '1') continue;
+            let e = c;
+            while (e < 2 && row[e + 1] === '1') e++;
+            const xa = cx + c * px, xb = cx + (e + 1) * px, ya = yb + (4 - r) * py;
+            plate(body, s * xa, s * xb, ya, ya + py * 1.02, z + s * 0.004, s, fg, 0);
+            c = e;
+          }
+        }
       }
     };
     plateAt(fz + 0.001, 1, ybF + fh * 0.3, false);
@@ -613,10 +653,26 @@
     const tY0 = van ? ybT + th * 0.45 : ybT + th * 0.58, tY1 = van ? ybT + th * 0.95 : ytT - 0.03;
     const tX0 = hwT - 0.03, tX1 = van ? hwT - 0.2 : hwT * (t.id === 'kei' ? 0.66 : 0.5);
     const rearLamps = [];
+    const sR = lowSec(L - 0.16);
     for (const sg of [1, -1]) {
-      plate(body, sg * tX0, sg * tX1, tY0, tY1, rz, -1, C.TAIL, 0.8, 0.42);
-      plate(body, sg * (tX1 + 0.06 * sg * sg), sg * tX1, tY0 + 0.02, (tY0 + tY1) / 2, rz - 0.002, -1, C.REV, 0.8, 0);
-      plate(brake, sg * (tX0 + 0.005), sg * (tX1 - 0.005), tY0 - 0.005, tY1 + 0.005, rz - 0.012, -1, col('#ff2a1a'), 0, 0);
+      // фонарь: тёмная рамка, красное стекло, полоса-разделитель, белый фонарь заднего хода и янтарный поворотник внизу
+      const ym = tY0 + (tY1 - tY0) * 0.42, xm = tX1 + (tX0 - tX1) * 0.45;
+      plate(body, sg * (tX0 + 0.012), sg * (tX1 - 0.018), tY0 - 0.018, tY1 + 0.016, rz, -1, C.TRIM, 0.4);
+      plate(body, sg * tX0, sg * tX1, ym, tY1, rz - 0.002, -1, C.TAIL, 0.8, 0.42);
+      plate(body, sg * tX0, sg * xm, tY0, ym - 0.012, rz - 0.002, -1, C.AMBER, 0.8, 0.2);
+      plate(body, sg * xm - sg * 0.012, sg * tX1, tY0, ym - 0.012, rz - 0.002, -1, hi ? C.REV : C.TAIL, 0.8, 0);
+      if (hi) for (let k = 1; k < 3; k++) {
+        const yy = ym + ((tY1 - ym) * k) / 3;
+        plate(body, sg * tX0, sg * tX1, yy - 0.005, yy + 0.005, rz - 0.004, -1, C.TAILD, 0.6, 0.2);
+      }
+      // загиб фонаря на боковину
+      if (!van) {
+        const x = sg * (sR[3][0] + 0.003), z0 = rz + 0.03, z1 = rz + 0.2;
+        const a = [x, ym, z0], b = [x, tY1, z0], c = [x, tY1 - 0.01, z1], d = [x, ym + 0.01, z1];
+        if (sg > 0) body.quad(a, b, c, d, C.TAIL, 0.8, 0.42);
+        else body.quad(a, d, c, b, C.TAIL, 0.8, 0.42);
+      }
+      plate(brake, sg * (tX0 + 0.005), sg * (tX1 - 0.005), ym - 0.005, tY1 + 0.005, rz - 0.012, -1, col('#ff2a1a'), 0, 0);
       rearLamps.push([sg * (tX0 + tX1) / 2, (tY0 + tY1) / 2]);
     }
     // задний бампер, номер, глушитель
