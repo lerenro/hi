@@ -322,6 +322,11 @@
       gb.geo(SPH(), M4(0, 0.006, 0.012, 0.011, 0.011, 0.011), c);
       gb.geo(SPH(), M4(0.012, -0.004, 0.006, 0.011, 0.011, 0.011), c);
     },
+    coin(gb) {
+      const c = C('#d8c27a');
+      gb.geo(CYL16(), M4(0, 0, 0.012, 0.0133, 0.002, 0.0133, HALF), c);
+      gb.geo(CYL16(), M4(0.004, 0.006, 0.006, 0.0133, 0.002, 0.0133, HALF, 0.4), C('#c9b064'));
+    },
     steelball(gb) {
       gb.geo(SPH(), M4(0, 0, 0.035, 0.045, 0.045, 0.045), C('#c8ccd2'));
       gb.geo(TOR(), M4(0, 0, 0.035, 0.0455, 0.0455, 0.0455, 0, HALF, 0), C('#e0b030'));
@@ -661,7 +666,7 @@
     }
     return gi;
   };
-  const LIFT = { bat: 0.034, pipe: 0.022, sign: 0.03, bottle: 0.034, bbottle: 0.034, brick: 0.035, rock: 0.04, steelball: 0.045, revolver: 0.016, bearing: 0.011 };
+  const LIFT = { coin: 0.004, bat: 0.034, pipe: 0.022, sign: 0.03, bottle: 0.034, bbottle: 0.034, brick: 0.035, rock: 0.04, steelball: 0.045, revolver: 0.016, bearing: 0.011 };
   function placeGround(gi) {
     const m = gi.mesh;
     const d = H.def(gi.item);
@@ -1763,7 +1768,7 @@
     const tg = aim.target;
     p.face = aim.ang;
     // Звёздная Платина: щелчок подшипника — пуля
-    if (cap.flick && (id === 'ball_bearings' || id === 'rock')) {
+    if (cap.flick && (id === 'ball_bearings' || id === 'rock' || id === 'coins')) {
       p.se -= 6;
       p.cds.give = 0.45;
       p.anim = { type: 'punch', t: 0.22, max: 0.22, stand: true, tgt: tg };
@@ -1926,7 +1931,7 @@
     if (H._polT > 0) return;
     H._polT = 0.5;
     const d = H.held(p);
-    const armed = d && WEAPON[d.cls] && d.model !== 'bearing' && d.model !== 'rock';
+    const armed = d && WEAPON[d.cls] && d.model !== 'bearing' && d.model !== 'rock' && d.model !== 'coin';
     if (!armed || p.inCar || !G().world.cityAt(p.x, p.y) || !J.Veh || !J.Veh.copNear) {
       p.copSeen = Math.max(0, (p.copSeen || 0) - 1);
       return;
@@ -1957,7 +1962,7 @@
     office: [['brick', 0.08], ['road_sign', 0.04]],
     station: [['bottle', 0.3], ['road_sign', 0.08]],
     hotel: [['bottle', 0.25]],
-    casino: [['bottle', 0.3]],
+    casino: [['bottle', 0.3], ['coins', 0.3]],
     hospital: [['bandage', 0.2]],
     dig: [['pipe', 0.45], ['brick', 0.35], ['rock', 0.2]],
     farm: [['pipe', 0.3], ['rock', 0.3]],
@@ -2269,6 +2274,11 @@
       const p = G().player;
       if (ready(p)) H.aimStart(p);
     });
+    // окно потеряло фокус — отпущенная клавиша броска не дойдёт, прицел снимаем
+    window.addEventListener('blur', () => {
+      const p = G().player;
+      if (p) p.thrAim = null;
+    });
     window.addEventListener('mouseup', (e) => {
       if (e.button !== 1) return;
       const p = G().player;
@@ -2322,6 +2332,7 @@
     bbottle: '<path d="M14 3 H18 V10 Q23 12 23 16 L21 20 L19 16 L17 22 L15 17 L12 21 L9 16 Q9 12 14 10 Z" fill="#3e8c4c"/>',
     brick: '<path d="M3 13 L22 10 L29 14 L29 21 L10 24 L3 20 Z" fill="#a8462f"/><path d="M3 13 L22 10 L29 14 L10 17 Z" fill="#c25a40"/>',
     rock: '<path d="M6 21 L9 12 L17 8 L25 12 L27 20 L20 26 L10 26 Z" fill="#7b766e"/><path d="M9 12 L17 8 L20 14 L12 17 Z" fill="#938d84"/>',
+    coin: '<ellipse cx="13" cy="19" rx="8" ry="6" fill="#c9b064"/><ellipse cx="18" cy="14" rx="8" ry="6" fill="#d8c27a" stroke="#a89040" stroke-width="1"/>',
     bearing: '<circle cx="11" cy="18" r="5" fill="#dfe5ec"/><circle cx="20" cy="13" r="5" fill="#c8ccd2"/><circle cx="9" cy="16" r="1.5" fill="#fff"/>',
     steelball: '<circle cx="16" cy="16" r="10" fill="#c8ccd2"/><path d="M6 16 Q16 22 26 16" stroke="#e0b030" stroke-width="1.6" fill="none"/><path d="M16 6 Q10 16 16 26" stroke="#e0b030" stroke-width="1.6" fill="none"/>',
     revolver: '<path d="M4 12 H22 V15 H4 Z" fill="#3a3e46"/><rect x="14" y="10" width="7" height="8" rx="2" fill="#555b64"/><path d="M19 15 L25 15 L28 27 L22 28 Z" fill="#5b3a22"/><path d="M16 18 Q16 22 20 22" stroke="#3a3e46" stroke-width="1.6" fill="none"/>',

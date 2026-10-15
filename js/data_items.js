@@ -74,6 +74,8 @@
     hand: { cls: 'throw', model: 'rock', dmg: 10, reach: 1.0, arc: 1.1, w: 0.8, dur: 999, stun: 0.3, knock: 1.4, thr: { dmg: 16, spin: 7, stun: 0.5 } } });
   add('ball_bearings', { name: 'Подшипниковые шарики', type: 'weapon', price: 6, desc: 'Стальные шарики. Рукой — так себе, а щелчок Звёздной Платины пробивает насквозь.',
     hand: { cls: 'throw', model: 'bearing', dmg: 4, reach: 1.0, arc: 1.0, w: 0.03, dur: 999, stun: 0.05, knock: 0.2, thr: { dmg: 8, spin: 0, speed: 1.2 } } });
+  add('coins', { name: 'Монеты по 500 иен', type: 'weapon', price: 5, desc: 'Тяжёлые монеты. Рукой бросать бессмысленно, но щелчок стенда превращает монету в пулю.',
+    hand: { cls: 'throw', model: 'coin', dmg: 2, reach: 1.0, arc: 1.0, w: 0.01, dur: 999, stun: 0.05, knock: 0.1, thr: { dmg: 5, spin: 20, speed: 1.2 } } });
   add('bullets', { name: 'Патроны .38', type: 'ammo', price: 3, desc: 'Патроны к револьверу. Когда барабан пуст, перезарядка идёт сама.', hand: { cls: 'ammo', model: 'ammo' } });
   // упаковки: при покупке распаковываются в поштучные вещи
   add('ammo_box', { name: 'Коробка патронов .38', type: 'pack', pack: ['bullets', 12], price: 30, desc: '12 патронов к револьверу.' });
@@ -105,8 +107,9 @@
     shop: ['onigiri', 'sandwich', 'coffee', 'water', 'cola', 'energy_drink', 'bandage', 'coffee_gum', 'lottery', 'kitchen_knife'],
     restaurant: ['pizza', 'burger', 'curry', 'wine', 'tea', 'coffee'],
     hospital: ['medkit', 'bandage', 'blood_pack'],
-    black_market: ['arrow', 'stone_mask', 'rokakaka', 'revolver', 'ammo_box', 'knife_set', 'switchblade', 'bearing_bag', 'rumor_map', 'umbrella', 'blood_pack', 'luck_charm', 'clackers'],
+    black_market: ['arrow', 'stone_mask', 'rokakaka', 'revolver', 'ammo_box', 'knife_set', 'switchblade', 'bearing_bag', 'coins', 'rumor_map', 'umbrella', 'blood_pack', 'luck_charm', 'clackers'],
     gym: ['bat', 'energy_drink', 'water'],
+    bar: ['cola', 'wine'],
     stable: ['horse', 'water', 'sandwich'],
     sport: ['clackers', 'energy_drink', 'water', 'bandage'],
   };

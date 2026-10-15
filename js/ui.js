@@ -1028,6 +1028,7 @@
             J.P.trainStat(p, st, 14);
             UI.renderBuilding();
           });
+        (J.SHOPS.gym || []).forEach((id) => buy(id));
         break;
       case 'library':
       case 'school':
@@ -1056,6 +1057,7 @@
           J.P.trainStat(p, 'cha', 3);
           UI.toast('Бармен: «' + J.Story.rumorLine() + '»', 'muted');
         });
+        (J.SHOPS.bar || []).forEach((id) => buy(id));
         add('Доска заданий: доставка', '', () => J.Story.offerSide('delivery', b));
         add('Доска заданий: потерявшийся кот', '', () => J.Story.offerSide('cat', b));
         add('Доска заданий: громилы', '', () => J.Story.offerSide('thugs', b));
