@@ -343,11 +343,168 @@
     const C1 = col(sd.c1), C2 = col(sd.c2);
     const C1D = C1.clone().multiplyScalar(0.72), C2D = C2.clone().multiplyScalar(0.7);
     const GLOW = col('#ffffff');
-    const mat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.88, emissive: C1.clone().multiplyScalar(0.32) });
+    // блестящая «живая» поверхность: блики по мускулам вместо плоской пластмассы
+    const mat = new THREE.MeshPhongMaterial({ vertexColors: true, transparent: true, opacity: 0.9, emissive: C1.clone().multiplyScalar(0.2), specular: col('#6a6a78'), shininess: 34 });
     // контурный свет цвета стенда и светящиеся глаза (powers.js), затем обесцвечивание
     if (R3.standPatch) R3.standPatch(mat, sd.c1, sd.c2);
     R3.fxPatch(mat);
     const head = sd.head;
+    const id = sd.id;
+    const DK = col('#1a1424'), WH = col('#f4f0e8'), GOLD = col('#e8b830');
+    // сердечко лицом вперёд (+z)
+    const heart = (gb, c, x, y, z, s) => {
+      ell(gb, c, x - s * 0.45, y + s * 0.2, z, s * 0.55, s * 0.5, s * 0.3);
+      ell(gb, c, x + s * 0.45, y + s * 0.2, z, s * 0.55, s * 0.5, s * 0.3);
+      gb.geo(PR.cone4, M4(x, y - s * 0.4, z, s * 0.75, s * 0.9, s * 0.3, Math.PI), c);
+    };
+    const skull = (gb, x, y, z, s) => {
+      ell(gb, WH, x, y, z, s, s * 0.9, s * 0.6);
+      ell(gb, WH, x, y - s * 0.7, z + s * 0.05, s * 0.6, s * 0.4, s * 0.45);
+      ell(gb, DK, x - s * 0.38, y - s * 0.05, z + s * 0.5, s * 0.25, s * 0.28, s * 0.12, 0, 0, 0, true);
+      ell(gb, DK, x + s * 0.38, y - s * 0.05, z + s * 0.5, s * 0.25, s * 0.28, s * 0.12, 0, 0, 0, true);
+    };
+    // молния-застёжка: полоса с зубчиками
+    const zip = (gb, x, y0, z, len, ax) => {
+      box(gb, DK, x, y0 - len / 2, z, 0.012, len, 0.012, ax);
+      for (let k = 0; k < Math.round(len / 0.035); k++) box(gb, col('#d8dce6'), x, y0 - 0.02 - k * 0.035, z + 0.004, 0.034, 0.012, 0.012, ax);
+    };
+    // Узнаваемые детали стендов (в общей кэшированной геометрии — ничего не стоят в кадре)
+    const deco = {
+      torso(gb, b) {
+        // воротник-кольцо и тёмные стыки — у всех
+        tube(gb, C2D, 0, 1.56, 0, 0.078, 0.085, 0.035);
+        switch (id) {
+          case 'star_platinum':
+          case 'star_platinum_tw':
+            // шарф и набедренная повязка
+            tube(gb, col('#c4283c'), 0, 1.565, 0, 0.09, 0.1, 0.06);
+            box(gb, col('#c4283c'), -0.05, 1.42, -0.13, 0.05, 0.26, 0.015, 0.25);
+            box(gb, col('#a82034'), 0.04, 1.4, -0.14, 0.05, 0.3, 0.015, 0.32);
+            box(gb, C2, 0, 0.83, b.hip * 0.7, 0.13, 0.28, 0.02, -0.08);
+            box(gb, C2, 0, 0.83, -b.hip * 0.7, 0.13, 0.28, 0.02, 0.08);
+            ell(gb, GOLD, 0, 1.08, b.waist + 0.01, 0.05, 0.035, 0.02);
+            break;
+          case 'the_world':
+            // сердце на поясе, трубки на спине
+            heart(gb, C2, 0, 1.08, b.waist + 0.02, 0.05);
+            for (const sx of [-1, 1]) tube(gb, C2D, sx * 0.07, 1.6, -0.15, 0.022, 0.018, 0.5, 1, 0.12);
+            box(gb, C2, 0, 1.38, b.chest * 0.66, 0.2, 0.035, 0.02);
+            break;
+          case 'crazy_diamond':
+            heart(gb, C2, 0, 1.38, b.chest * 0.7, 0.045);
+            for (const sx of [-1, 1]) heart(gb, C2, sx * (b.sh + 0.02), 1.46, 0.07, 0.035);
+            for (const sx of [-1, 1]) tube(gb, C2D, sx * 0.06, 1.62, -0.13, 0.02, 0.016, 0.42, 1, 0.1);
+            break;
+          case 'killer_queen':
+          case 'kq_btd':
+            skull(gb, 0, 1.09, b.waist + 0.03, 0.045);
+            for (let k = 0; k < 3; k++) box(gb, C2, 0, 1.24 + k * 0.07, b.chest * 0.6, 0.18 - k * 0.02, 0.012, 0.02);
+            break;
+          case 'gold_experience':
+          case 'ger':
+            for (const sx of [-1, 1]) ell(gb, C2, sx * 0.09, 1.36, b.chest * 0.74, 0.035, 0.035, 0.015);
+            heart(gb, DK, 0, 1.22, b.waist * 0.85, 0.03);
+            break;
+          case 'silver_chariot':
+            // латы
+            ell(gb, C2, 0, 1.35, 0.03, b.chest + 0.03, 0.17, b.chest * 0.85);
+            for (const sx of [-1, 1]) ell(gb, C2, sx * (b.sh + 0.03), 1.47, 0, 0.12, 0.07, 0.11);
+            box(gb, col('#e8eefc'), 0, 1.35, b.chest * 0.82, 0.02, 0.2, 0.01);
+            break;
+          case 'magicians_red':
+            for (const sx of [-1, 1]) for (let k = 0; k < 3; k++) gb.geo(PR.cone4, M4(sx * (b.sh + 0.05), 1.5 - k * 0.05, -0.02 - k * 0.03, 0.03, 0.16, 0.02, -0.4, 0, sx * (0.9 + k * 0.25)), C2);
+            break;
+          case 'hierophant_green':
+            // дольки «дыни» и ленты-щупальца
+            for (let k = -2; k <= 2; k++) box(gb, C1D, k * 0.06, 1.3, b.chest * 0.66 - Math.abs(k) * 0.02, 0.012, 0.32, 0.012, 0, k * 0.25);
+            for (const sx of [-1, 1]) tube(gb, C2, sx * 0.09, 1.0, -0.08, 0.025, 0.008, 0.7, 1, 0.5, sx * 0.3);
+            break;
+          case 'sticky_fingers':
+            zip(gb, 0, 1.5, b.chest * 0.66, 0.42, -0.08);
+            break;
+          case 'king_crimson':
+            for (let k = -2; k <= 2; k++) {
+              box(gb, C2, k * 0.06, 1.3, b.chest * 0.66, 0.008, 0.36, 0.012, 0, 0, 0.6);
+              box(gb, C2, k * 0.06, 1.3, b.chest * 0.66, 0.008, 0.36, 0.012, 0, 0, -0.6);
+            }
+            break;
+          case 'stone_free':
+            for (let k = 0; k < 5; k++) tube(gb, C2, 0, 1.46 - k * 0.09, 0, b.chest * 0.95 + 0.01, b.chest * 0.95 + 0.01, 0.012);
+            break;
+          case 'the_hand':
+            for (let k = 0; k < 4; k++) box(gb, C2, 0, 1.44 - k * 0.09, b.chest * 0.62, 0.22, 0.02, 0.02);
+            break;
+          case 'whitesnake':
+            for (let k = 0; k < 6; k++) box(gb, DK, (k % 2 ? 0.05 : -0.05), 1.45 - k * 0.06, b.chest * 0.64, 0.05, 0.012, 0.012);
+            break;
+          case 'made_in_heaven':
+            box(gb, C2, 0, 1.3, b.chest * 0.66, 0.02, 0.3, 0.02);
+            for (const sx of [-1, 1]) gb.geo(PR.cone4, M4(sx * 0.12, 1.45, -0.2, 0.05, 0.3, 0.02, -1.2, 0, sx * 0.6), C2);
+            break;
+          case 'echoes_3':
+            box(gb, C2, 0, 1.3, b.chest * 0.64, 0.05, 0.12, 0.02);
+            break;
+        }
+      },
+      head(gb, y) {
+        switch (id) {
+          case 'the_world':
+            for (const sx of [-1, 1]) tube(gb, C2D, sx * 0.08, y + 0.02, -0.09, 0.02, 0.016, 0.22, 1, 0.5);
+            box(gb, C2, 0, y + 0.06, 0.11, 0.17, 0.02, 0.012);
+            break;
+          case 'crazy_diamond':
+            heart(gb, C2, 0, y + 0.1, 0.1, 0.03);
+            break;
+          case 'killer_queen':
+          case 'kq_btd':
+            box(gb, C2, 0, y + 0.12, 0.04, 0.02, 0.06, 0.12);
+            break;
+          case 'star_platinum':
+          case 'star_platinum_tw':
+            ell(gb, col('#c4283c'), 0, y + 0.07, 0.1, 0.07, 0.016, 0.01);
+            break;
+        }
+      },
+      upper(gb, b, sx) {
+        // тёмный стык у плеча
+        tube(gb, C1D, 0, -0.02, 0, b.arm * 1.05, b.arm * 1.02, 0.03);
+        if (id === 'sticky_fingers') zip(gb, b.arm * sx * 0.9, -0.02, 0.02, 0.26);
+        if (id === 'killer_queen' || id === 'kq_btd') tube(gb, C2, 0, -0.18, 0, b.arm * 0.95, b.arm * 0.92, 0.03);
+      },
+      fore(gb, b, sx) {
+        switch (id) {
+          case 'killer_queen':
+          case 'kq_btd':
+            if (sx > 0) skull(gb, 0, -0.24, b.arm * 0.7, 0.025);
+            break;
+          case 'star_platinum':
+          case 'star_platinum_tw':
+          case 'the_world':
+            tube(gb, GOLD, 0, -0.17, 0, b.arm * 0.88, b.arm * 0.88, 0.035);
+            break;
+          case 'crazy_diamond':
+            heart(gb, C2, 0, -0.08, b.arm * 0.8, 0.022);
+            break;
+          case 'silver_chariot':
+            tube(gb, C2, 0, -0.02, 0, b.arm * 0.95, b.arm * 0.9, 0.14);
+            break;
+        }
+      },
+      shin(gb, b) {
+        switch (id) {
+          case 'the_world':
+          case 'crazy_diamond':
+            heart(gb, C2, 0, -0.02, b.leg * 0.72, 0.04);
+            break;
+          case 'silver_chariot':
+            ell(gb, C2, 0, -0.18, 0.02, b.leg * 0.8, 0.2, b.leg * 0.75);
+            break;
+          case 'sticky_fingers':
+            zip(gb, 0, -0.04, b.leg * 0.66, 0.24);
+            break;
+        }
+      },
+    };
     const v = makeRig({
       cacheKey: 'stand|' + sd.id,
       gender: 'm',
@@ -374,6 +531,7 @@
         tube(gb, C1, 0, 1.585, 0, 0.06, 0.07, 0.11);
         if (head === 'cloak') tube(gb, C2D, 0, 1.5, -0.03, 0.2, 0.42, 1.1, 0.8);
         if (head === 'eyes') for (let k = 0; k < 6; k++) ell(gb, GLOW, Math.cos(k * 1.3) * 0.12, 1.15 + (k % 3) * 0.09, b.chest * 0.6, 0.022, 0.022, 0.012, 0, 0, 0, true);
+        deco.torso(gb, b);
       },
       head(gb) {
         const y = 1.71;
@@ -444,6 +602,7 @@
             break;
           default:
         }
+        deco.head(gb, y);
       },
       thigh(gb, b) {
         tube(gb, C1, 0, 0.02, 0, b.leg, b.leg * 0.7, 0.46);
@@ -453,17 +612,20 @@
         tube(gb, C1, 0, 0, 0, b.leg * 0.68, b.leg * 0.4, 0.4);
         tube(gb, C2, 0, -0.3, 0, b.leg * 0.5, b.leg * 0.44, 0.08);
         gb.geo(PR.cone4, M4(0, -0.43, 0.06, 0.05, 0.16, 0.04, Math.PI / 2 + 0.3), C2);
+        deco.shin(gb, b);
       },
-      upper(gb, b) {
+      upper(gb, b, sx) {
         ell(gb, C1, 0, -0.03, 0, b.arm * 1.4, 0.08, b.arm * 1.35);
         tube(gb, C1, 0, 0, 0, b.arm, b.arm * 0.8, 0.3);
         if (head === 'vines') for (let k = 0; k < 3; k++) gb.geo(PR.torus, M4(0, -0.06 - k * 0.08, 0, b.arm * 1.1, b.arm * 1.1, b.arm * 1.1, Math.PI / 2), C2);
+        deco.upper(gb, b, sx);
       },
       fore(gb, b, sx) {
         tube(gb, C1, 0, 0, 0, b.arm * 0.82, b.arm * 0.68, 0.22);
         tube(gb, C2, 0, -0.15, 0, b.arm * 0.82, b.arm * 0.82, 0.09);
         ell(gb, C2, 0, -0.29, 0.005, 0.045, 0.07, 0.035);
         if (head === 'vines') for (let k = 0; k < 3; k++) gb.geo(PR.torus, M4(0, -0.04 - k * 0.07, 0, b.arm * 0.95, b.arm * 0.95, b.arm * 0.95, Math.PI / 2), C2);
+        deco.fore(gb, b, sx);
       },
       extra(gb) {
         if (sd.extra === 'sword' || sd.extra === 'arrow') {

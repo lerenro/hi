@@ -571,8 +571,15 @@
     cv.width = 256;
     cv.height = 128;
     const c = cv.getContext('2d');
-    const fs = Math.min(84, Math.floor(230 / Math.max(2, word.length) * 1.6));
-    c.font = '900 ' + fs + 'px "Hiragino Kaku Gothic Pro", "Noto Sans JP", "Yu Gothic", Impact, sans-serif';
+    const FONT = 'px "Hiragino Kaku Gothic Pro", "Noto Sans JP", "Yu Gothic", Impact, sans-serif';
+    let fs = 84;
+    c.font = '900 ' + fs + FONT;
+    // длинное слово ужимается, чтобы целиком влезть в холст (иначе края обрезаны)
+    const w0 = c.measureText(word).width + 16;
+    if (w0 > 240) {
+      fs = Math.max(20, Math.floor((fs * 240) / w0));
+      c.font = '900 ' + fs + FONT;
+    }
     c.textAlign = 'center';
     c.textBaseline = 'middle';
     c.lineJoin = 'round';
@@ -603,6 +610,7 @@
   Pw.freeSprite = function (s) {
     if (!s) return;
     s.busy = false;
+    s.trap = false;
     s.sp.visible = false;
   };
 
@@ -3836,9 +3844,14 @@
     const id = t.owner && t.owner.stand ? t.owner.stand.id : '';
     return { echoes_2: 'word', bad_company: 'mine', diver_down: 'punch', twentieth_century_boy: 'dynamite', hierophant_green: 'emerald', stone_free: 'string' }[id] || 'orb';
   };
+  // надписи ловушек: если список ловушек сбросили целиком (новая игра, загрузка), надпись висела бы вечно
+  const TSPR = [];
+  let trapFrame = 0;
   function drawTraps(dt) {
     const g = G();
+    trapFrame++;
     for (const t of g.traps) {
+      if (t.spr) t.spr.tf = trapFrame;
       const vis = (t._vis = t._vis || trapVis(t));
       const h = gy(t.x, t.y);
       const tt = Pw.simT + t.x;
@@ -3846,6 +3859,11 @@
         case 'word':
           if (!t.spr) {
             t.spr = Pw.wordSprite(['ドゴォン', 'ボヨヨン', 'ジュウウ'][(rnd() * 3) | 0], t.color);
+            if (t.spr) {
+              t.spr.tf = trapFrame;
+              t.spr.trap = true;
+              TSPR.push(t.spr);
+            }
           }
           if (t.spr) {
             t.spr.sp.position.set(t.x, h + 0.35 + Math.sin(tt * 3) * 0.05, t.y);
@@ -3870,6 +3888,12 @@
           Pw.gem(t.x, h + 0.4 + Math.sin(tt * 3) * 0.1, t.y, 0.18, t.color, 0, tt * 3, 1.3);
           Pw.orb(t.x, h + 0.4 + Math.sin(tt * 3) * 0.1, t.y, 0.3, t.color);
       }
+    }
+    for (let i = TSPR.length - 1; i >= 0; i--) {
+      const s = TSPR[i];
+      if (s.trap && s.tf === trapFrame) continue;
+      if (s.trap) Pw.freeSprite(s);
+      TSPR.splice(i, 1);
     }
   }
   // срабатывание ловушки
