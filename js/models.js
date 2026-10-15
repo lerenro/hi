@@ -999,24 +999,74 @@
     }`;
   const SHELL_FS = `
     uniform vec3 uC; uniform float uA; varying float vF;
-    void main() { gl_FragColor = vec4(uC * (0.15 + pow(vF, 2.0) * 1.1) * uA, 1.0); }`;
+    void main() { gl_FragColor = vec4(uC * (0.03 + pow(vF, 3.0) * 1.3) * uA, 1.0); }`;
+
+  // Облик стендов по аниме: свои цвета тела, деталей, волос и кулаков там, где цвета данных — для эффектов
+  const STAND_LOOK = {
+    star_platinum: { c2: '#d6b25e', hair: '#1c1830', fist: '#5e4aa8' },
+    star_platinum_tw: { c2: '#d6b25e', hair: '#1c1830', fist: '#5e4aa8' },
+    the_world: { c1: '#e6b832', c2: '#2a6e52', fist: '#d9a92a' },
+    crazy_diamond: { c1: '#d988c8', c2: '#58b8e0' },
+    killer_queen: { c1: '#dc8cc4', c2: '#6a4a96' },
+    kq_btd: { c1: '#d07ab8' },
+    magicians_red: { c1: '#c8462e', c2: '#f0a22a' },
+    silver_chariot: { c1: '#b8bfcc', c2: '#8a98b8' },
+    hierophant_green: { c1: '#3aa86a', c2: '#c6ef8a' },
+    gold_experience: { c1: '#e2b838' },
+    sticky_fingers: { c1: '#4a66c4', c2: '#e8c446' },
+    king_crimson: { c1: '#b8304a', c2: '#f0d0d0' },
+  };
+  // тело стенда чуть приглушённее цвета данных: живая кожа вместо неона
+  const mute = (c, k) => {
+    const h = {};
+    c.getHSL(h);
+    return c.setHSL(h.h, h.s * k, Math.min(h.l, 0.66));
+  };
+  // Материал стенда: PBR с влажным блеском «кожи-брони», мелким рельефом по шуму, тонким контуром цвета стенда,
+  // светящимися вставками (сумма каналов вершины > 2.85); на низком качестве — Ламберт с контуром из powers.js
+  const STAND_FS_HEAD = 'uniform vec3 uRimC; uniform float uRimK; uniform vec3 uChSky; varying vec3 vOP;' + NOISE_GLSL;
+  R3.standMaterial = function (C1, C2) {
+    if (R3.quality === 0) {
+      const m = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: C1.clone().multiplyScalar(0.1), skinning: true });
+      if (R3.standPatch) R3.standPatch(m, '#' + C1.getHexString(), '#' + C2.getHexString());
+      return m;
+    }
+    const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.36, metalness: 0.12, emissive: C1.clone().multiplyScalar(0.05), skinning: true });
+    const U = { uRimC: { value: C1.clone().lerp(C2, 0.35).multiplyScalar(1.1) }, uRimK: { value: 0.35 } };
+    m.userData.rim = U;
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.uRimC = U.uRimC;
+      sh.uniforms.uRimK = U.uRimK;
+      sh.uniforms.uChSky = R3.uChSky;
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vOP;').replace('#include <color_vertex>', '#include <color_vertex>\nvOP = position;');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\n' + STAND_FS_HEAD)
+        // рельеф: крупные «мышечные» пятна и мелкая шероховатость — поверхность перестаёт быть пластмассой
+        .replace('#include <color_fragment>', '#include <color_fragment>\nfloat jjG = step(2.85, vColor.r + vColor.g + vColor.b); float jjN1 = jjN(vOP * 9.0); float jjN2 = jjN(vOP * 46.0); diffuseColor.rgb *= 1.0 + ((jjN1 - 0.5) * 0.22 + (jjN2 - 0.5) * 0.1) * (1.0 - jjG);')
+        .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = roughness * (0.8 + jjN2 * 0.45);')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vColor * 0.85 * jjG;')
+        // контур цвета стенда и отсвет неба по силуэту
+        .replace('#include <dithering_fragment>', '{ float rimF = 1.0 - abs(dot(normal, normalize(vViewPosition))); gl_FragColor.rgb += uRimC * pow(rimF, 3.0) * uRimK + uChSky * pow(rimF, 2.0) * 0.18 * diffuseColor.rgb; }\n#include <dithering_fragment>');
+    };
+    m.customProgramCacheKey = () => 'jj-stand-pbr';
+    return m;
+  };
 
   R3.buildStand = function (sd) {
     if (sd.head === 'plane' || sd.head === 'tiny' || sd.head === 'bug') return R3.buildStandSimple(sd);
-    const C1 = col(sd.c1), C2 = col(sd.c2);
-    const C1D = C1.clone().multiplyScalar(0.62), C2D = C2.clone().multiplyScalar(0.62), C1L = C1.clone().lerp(col('#ffffff'), 0.18);
+    const SL = STAND_LOOK[sd.id] || {};
+    const C1 = mute(col(SL.c1 || sd.c1), 0.82), C2 = mute(col(SL.c2 || sd.c2), 0.9);
+    const C1D = C1.clone().multiplyScalar(0.62), C2D = C2.clone().multiplyScalar(0.62), C1L = C1.clone().lerp(col('#ffffff'), 0.12);
+    const HAIR = SL.hair ? col(SL.hair) : C2, FIST = SL.fist ? col(SL.fist) : C2, FISTD = FIST.clone().multiplyScalar(0.62);
     const GLOW = col('#ffffff');
     // самосветящиеся вставки цвета стенда (сумма каналов > 2.85 — шейдер добавляет свечение)
     const GEM = C2.clone().lerp(col('#ffffff'), 0.25);
     const gs = GEM.r + GEM.g + GEM.b;
     GEM.multiplyScalar(3.1 / Math.max(0.3, gs));
-    // блестящая «живая» поверхность: блики по мускулам вместо плоской пластмассы
-    const mat = new THREE.MeshPhongMaterial({ vertexColors: true, transparent: true, opacity: 0.9, emissive: C1.clone().multiplyScalar(0.16), specular: col('#7a7a88'), shininess: 42, skinning: true });
-    // контурный свет цвета стенда и светящиеся глаза (powers.js), затем обесцвечивание
-    if (R3.standPatch) R3.standPatch(mat, sd.c1, sd.c2);
+    const mat = R3.standMaterial(C1, C2);
     R3.fxPatch(mat);
     // оружие на кисти — без скелета
-    const xmat = new THREE.MeshPhongMaterial({ vertexColors: true, transparent: true, opacity: 0.92, specular: col('#c8d0e0'), shininess: 80 });
+    const xmat = new THREE.MeshPhongMaterial({ vertexColors: true, specular: col('#c8d0e0'), shininess: 80 });
     mat.userData.extraMat = xmat;
     const head = sd.head;
     const id = sd.id;
@@ -1175,10 +1225,10 @@
     // кулак стенда: ладонь, ряд костяшек (ударная поверхность снизу), подогнутые пальцы, большой палец
     const fist = (gb, b, sx) => {
       // сжатый кулак: ладонь, блок подогнутых пальцев, бугорки костяшек, большой палец поверх
-      ell(gb, C2, 0, -0.29, 0.004, 0.036, 0.048, 0.044);
-      ell(gb, C2, -sx * 0.006, -0.335, 0.004, 0.034, 0.03, 0.046);
-      for (let f = 0; f < 4; f++) ell(gb, C2D, sx * 0.012, -0.352, -0.027 + f * 0.018, 0.016, 0.012, 0.0095, 0, 0, 0, true);
-      ell(gb, C2, -sx * 0.026, -0.318, 0.03, 0.012, 0.03, 0.012, 0.9, 0, sx * 0.6);
+      ell(gb, FIST, 0, -0.29, 0.004, 0.036, 0.048, 0.044);
+      ell(gb, FIST, -sx * 0.006, -0.335, 0.004, 0.034, 0.03, 0.046);
+      for (let f = 0; f < 4; f++) ell(gb, FISTD, sx * 0.012, -0.352, -0.027 + f * 0.018, 0.016, 0.012, 0.0095, 0, 0, 0, true);
+      ell(gb, FIST, -sx * 0.026, -0.318, 0.03, 0.012, 0.03, 0.012, 0.9, 0, sx * 0.6);
       // наручи у локтя
       tube(gb, C2D, 0, -0.245, 0, b.arm * 0.74, b.arm * 0.8, 0.03);
     };
@@ -1210,7 +1260,7 @@
         ], 16, 2.1, true, false);
         // рельеф: грудные, пресс, косые
         for (const sx of [-1, 1]) {
-          ell(gb, C1L, sx * 0.082, 1.355, c * 0.5, 0.1, 0.07, 0.07, 0.1, 0, sx * 0.1);
+          ell(gb, C1L, sx * 0.078, 1.37, c * 0.5, 0.098, 0.062, 0.05, 0.3, 0, sx * 0.14);
           ell(gb, C1, sx * w * 0.8, 1.17, 0.025, 0.045, 0.09, 0.07, 0, 0, sx * 0.12);
         }
         for (let k = 0; k < 3; k++) for (const sx of [-1, 1]) ell(gb, C1L, sx * 0.038, 1.24 - k * 0.055, w * 0.66, 0.033, 0.024, 0.02, 0, 0, 0, true);
@@ -1256,8 +1306,18 @@
         ell(gb, GLOW, 0.038, y + 0.008, 0.103, 0.02, 0.0095, 0.008, 0, 0, -0.18, true);
         switch (head) {
           case 'mane':
-            gb.geo(PR.cap, M4(0, y + 0.01, -0.01, 0.115, 0.135, 0.125, -0.42), C2);
-            for (let k = 0; k < 7; k++) gb.geo(PR.cone4, M4(-0.1 + k * 0.034, y + 0.02 - Math.abs(k - 3) * 0.01, -0.12, 0.032, 0.24 - Math.abs(k - 3) * 0.02, 0.03, -1.1 - (k % 2) * 0.22, 0, (k - 3) * 0.08), C2);
+            // грива Звёздной Платины: густые пряди назад и вверх, длинные — по плечам, чёлка на лоб
+            gb.geo(PR.cap, M4(0, y + 0.012, -0.012, 0.118, 0.138, 0.128, -0.42), HAIR);
+            for (let k = 0; k < 7; k++) {
+              const u = k - 3;
+              gb.geo(PR.cone6, M4(u * 0.032, y + 0.1 - Math.abs(u) * 0.012, -0.1, 0.045, 0.3 - Math.abs(u) * 0.025, 0.036, -1.25 - (k % 2) * 0.18, 0, u * 0.12), HAIR);
+            }
+            for (let k = 0; k < 6; k++) {
+              const u = k - 2.5;
+              gb.geo(PR.cone6, M4(u * 0.04, y - 0.06, -0.14 - Math.abs(u) * 0.005, 0.042, 0.34 - Math.abs(u) * 0.03, 0.03, -2.55 + (k % 2) * 0.12, 0, u * 0.1), HAIR);
+            }
+            for (const sx of [-1, 1]) gb.geo(PR.cone6, M4(sx * 0.1, y - 0.04, -0.03, 0.032, 0.2, 0.03, -2.9, 0, -sx * 0.25), HAIR);
+            for (let k = 0; k < 3; k++) gb.geo(PR.cone4, M4(-0.04 + k * 0.04, y + 0.085, 0.1, 0.022, 0.08, 0.016, 2.3, 0, (k - 1) * 0.3), HAIR);
             break;
           case 'helmet':
             // шлем: купол, гребень, нащёчники, козырёк над глазами
@@ -1411,7 +1471,7 @@
     // ореол-оболочка (на низком качестве — без неё)
     if (R3.quality > 0) {
       const sm = new THREE.ShaderMaterial({
-        uniforms: { uC: { value: C1.clone().lerp(C2, 0.3) }, uA: { value: 0.55 }, uW: { value: 0.022 } },
+        uniforms: { uC: { value: C1.clone().lerp(C2, 0.3) }, uA: { value: 0.5 }, uW: { value: 0.016 } },
         vertexShader: SHELL_VS, fragmentShader: SHELL_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.BackSide, skinning: true,
       });
       // ореолу хватает упрощённой геометрии

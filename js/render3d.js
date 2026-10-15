@@ -1299,8 +1299,8 @@
       const op = e.isPlayer && R3.cam.near ? 0.35 : 1;
       if (sv.op !== op) {
         sv.op = op;
-        const m = sv.mats[0];
-        if (m.isMeshPhongMaterial) {
+        const m = sv.skin ? sv.skin.material : null;
+        if (m) {
           if (m.transparent !== op < 1) {
             m.transparent = op < 1;
             m.needsUpdate = true;
