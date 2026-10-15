@@ -726,8 +726,9 @@ vec2 cVor(vec2 p) {
       const bl = blinker(v, t);
       if (bl && blinkOn && ii < 250 && v.d2 < 6400) {
         const fx = g.fx;
-        for (const side of bl === 2 ? [1, -1] : [bl]) {
-          for (const P of [fx.indF, fx.indR]) {
+        for (const side of bl === 2 ? SIDES2 : bl > 0 ? SIDE_L : SIDE_R) {
+          for (let q = 0; q < 2; q++) {
+            const P = q ? fx.indR : fx.indF;
             pp.set(side * P[0], P[1], P[2]);
             qq.identity();
             ss.set(1, 1, 1);
@@ -796,6 +797,7 @@ vec2 cVor(vec2 p) {
     } else b.intensity = 0;
   };
   const ax1 = new THREE.Vector3(1, 0, 0);
+  const SIDES2 = [1, -1], SIDE_L = [1], SIDE_R = [-1];
 
   // ---------- Светофоры: горящая секция по фазе ----------
   // Головы светофоров ищутся по той же раскладке углов, что и в генераторе (world.decorateCities).

@@ -1027,6 +1027,13 @@
   // «перебои» цилиндров (модуляция), шум впуска. Обороты считаются по передачам — при переключении проседают.
   // Шины: визг — узкополосный шум с тоном; гул протектора и ветер растут со скоростью.
   let A = null;
+  // плавная смена параметра; пропускаем почти одинаковые значения (меньше событий автоматизации)
+  const setP = (prm, val, t, tc) => {
+    const o = prm._v;
+    if (o !== undefined && Math.abs(val - o) <= Math.abs(o) * 0.004 + 1e-5) return;
+    prm._v = val;
+    prm.setTargetAtTime(val, t, tc);
+  };
   function noiseBuf(ac) {
     const nb = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate), nd = nb.getChannelData(0);
     for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
@@ -1172,15 +1179,15 @@
   }
   Veh.sound = function (v, on) {
     const a = A || (on ? audio() : null);
-    if (!a) return;
+    if (!a || a.ac.state !== 'running') return;
     const t = a.ac.currentTime, e = a.eng;
     if (!on || !v || v.hp <= 0 || !J.UI.sound) {
-      e.eg.gain.setTargetAtTime(0, t, 0.08);
-      e.ig.gain.setTargetAtTime(0, t, 0.08);
-      e.lg.gain.setTargetAtTime(0, t, 0.08);
-      a.sq.gain.setTargetAtTime(0, t, 0.05);
-      a.rg.gain.setTargetAtTime(0, t, 0.1);
-      a.wg.gain.setTargetAtTime(0, t, 0.1);
+      setP(e.eg.gain, 0, t, 0.08);
+      setP(e.ig.gain, 0, t, 0.08);
+      setP(e.lg.gain, 0, t, 0.08);
+      setP(a.sq.gain, 0, t, 0.05);
+      setP(a.rg.gain, 0, t, 0.1);
+      setP(a.wg.gain, 0, t, 0.1);
       return;
     }
     const thr = J.Input && J.Input.keys ? ((J.Input.keys.KeyW || J.Input.keys.ArrowUp) ? 1 : 0) || (J.Input.touch && J.Input.tmy < -0.2 ? 1 : 0) : 0;
@@ -1195,26 +1202,26 @@
     a.rpm += (want - a.rpm) * (want > a.rpm ? 0.16 : 0.1);
     const [f0, f1, vol] = engOf(v.vt);
     const f = f0 + (f1 - f0) * a.rpm;
-    e.o1.frequency.setTargetAtTime(f, t, 0.03);
-    e.o2.frequency.setTargetAtTime(f * 0.5, t, 0.03);
-    e.o3.frequency.setTargetAtTime(f * 1.503, t, 0.03);
-    e.lfo.frequency.setTargetAtTime(f * 0.25, t, 0.05);
-    e.lg.gain.setTargetAtTime((0.012 + 0.01 * (1 - a.rpm)) * vol, t, 0.1);
-    e.lp.frequency.setTargetAtTime(260 + a.rpm * 1300 + load * 900, t, 0.06);
-    e.eg.gain.setTargetAtTime((0.04 + 0.035 * load + 0.025 * a.rpm) * vol, t, 0.06);
-    e.bp.frequency.setTargetAtTime(350 + a.rpm * 1400, t, 0.08);
-    e.ig.gain.setTargetAtTime((0.004 + 0.02 * load * a.rpm) * vol, t, 0.08);
+    setP(e.o1.frequency, f, t, 0.03);
+    setP(e.o2.frequency, f * 0.5, t, 0.03);
+    setP(e.o3.frequency, f * 1.503, t, 0.03);
+    setP(e.lfo.frequency, f * 0.25, t, 0.05);
+    setP(e.lg.gain, (0.012 + 0.01 * (1 - a.rpm)) * vol, t, 0.1);
+    setP(e.lp.frequency, 260 + a.rpm * 1300 + load * 900, t, 0.06);
+    setP(e.eg.gain, (0.04 + 0.035 * load + 0.025 * a.rpm) * vol, t, 0.06);
+    setP(e.bp.frequency, 350 + a.rpm * 1400, t, 0.08);
+    setP(e.ig.gain, (0.004 + 0.02 * load * a.rpm) * vol, t, 0.08);
     // шины, протектор, ветер
     const sp = Math.abs(v.vf);
     const skid = J.clamp((v.skid || 0) * Math.min(1, sp / 4), 0, 1);
-    a.sq.gain.setTargetAtTime(skid * 0.085, t, 0.04);
-    a.rg.gain.setTargetAtTime(Math.min(0.06, sp * 0.0022), t, 0.1);
-    a.wg.gain.setTargetAtTime(Math.min(0.05, sp * sp * 0.000022), t, 0.1);
+    setP(a.sq.gain, skid * 0.085, t, 0.04);
+    setP(a.rg.gain, Math.min(0.06, sp * 0.0022), t, 0.1);
+    setP(a.wg.gain, Math.min(0.05, sp * sp * 0.000022), t, 0.1);
   };
   // звук окружающего потока: ближайшая едущая машина и сирены (вызывается каждый кадр)
   Veh.ambient = function () {
     const a = A;
-    if (!a || !J.UI.sound) return;
+    if (!a || !J.UI.sound || a.ac.state !== 'running') return;
     const t = a.ac.currentTime, cx = J.R3.cam.tx, cz = J.R3.cam.tz, p = G().player;
     let best = null, bd = 26, sir = null, sd = 90;
     for (const v of G().vehs) {
@@ -1234,28 +1241,28 @@
       const sp = Math.abs(best.vf), [f0, f1, vol] = engOf(best.vt);
       const r = 0.2 + Math.min(0.7, (sp / best.vt.vmax) * 1.6) * (0.6 + 0.4 * ((sp * 0.37) % 1));
       const f = f0 + (f1 - f0) * r;
-      e.o1.frequency.setTargetAtTime(f, t, 0.08);
-      e.o2.frequency.setTargetAtTime(f * 0.5, t, 0.08);
-      e.o3.frequency.setTargetAtTime(f * 1.5, t, 0.08);
-      e.lfo.frequency.setTargetAtTime(f * 0.25, t, 0.1);
-      e.lp.frequency.setTargetAtTime(240 + r * 700, t, 0.1);
+      setP(e.o1.frequency, f, t, 0.08);
+      setP(e.o2.frequency, f * 0.5, t, 0.08);
+      setP(e.o3.frequency, f * 1.5, t, 0.08);
+      setP(e.lfo.frequency, f * 0.25, t, 0.1);
+      setP(e.lp.frequency, 240 + r * 700, t, 0.1);
       const k = (1 - bd / 26) ** 2;
-      e.eg.gain.setTargetAtTime(0.045 * k * vol, t, 0.12);
-      e.lg.gain.setTargetAtTime(0.008 * k, t, 0.12);
-      e.ig.gain.setTargetAtTime(0.004 * k, t, 0.12);
+      setP(e.eg.gain, 0.045 * k * vol, t, 0.12);
+      setP(e.lg.gain, 0.008 * k, t, 0.12);
+      setP(e.ig.gain, 0.004 * k, t, 0.12);
     } else {
-      e.eg.gain.setTargetAtTime(0, t, 0.2);
-      e.lg.gain.setTargetAtTime(0, t, 0.2);
-      e.ig.gain.setTargetAtTime(0, t, 0.2);
+      setP(e.eg.gain, 0, t, 0.2);
+      setP(e.lg.gain, 0, t, 0.2);
+      setP(e.ig.gain, 0, t, 0.2);
     }
     // сирена: «вой» (плавно вверх-вниз) или «йелп» вблизи
     if (sir) {
       const k = (1 - sd / 90) ** 1.5, ph = G().t;
       const yelp = sd < 25;
       const f = yelp ? 900 + 500 * Math.abs(((ph * 3) % 2) - 1) : 700 + 650 * (0.5 - 0.5 * Math.cos(ph * 1.6));
-      a.sr.frequency.setTargetAtTime(f, t, 0.03);
-      a.srg.gain.setTargetAtTime(0.05 * k, t, 0.1);
-    } else a.srg.gain.setTargetAtTime(0, t, 0.15);
+      setP(a.sr.frequency, f, t, 0.03);
+      setP(a.srg.gain, 0.05 * k, t, 0.1);
+    } else setP(a.srg.gain, 0, t, 0.15);
   };
   Veh.horn = function (on) {
     const a = A || (on ? audio() : null);
@@ -1264,7 +1271,7 @@
     const p = G().player, big = p && p.inCar && p.inCar.vt.m > 3000;
     a.h1.frequency.value = big ? 233 : 415;
     a.h2.frequency.value = big ? 294 : 523;
-    a.hg.gain.setTargetAtTime(on ? 0.07 : 0, a.ac.currentTime, 0.015);
+    setP(a.hg.gain, on ? 0.07 : 0, a.ac.currentTime, 0.015);
     if (on) {
       if (p && p.inCar) J.scare(p.inCar.x + Math.cos(p.inCar.ang) * 8, p.inCar.y + Math.sin(p.inCar.ang) * 8, 6, p.inCar.x, p.inCar.y, Math.cos(p.inCar.ang), Math.sin(p.inCar.ang));
     }
