@@ -348,12 +348,15 @@
   };
 
   R3.setQuality = function (q, shadows) {
+    // материалы персонажей зависят от качества (PBR или Ламберт, ореол стенда) — пересобрать виды
+    if (R3.quality !== q && J.G && J.G.ents) for (const e of J.G.ents) R3.dropView(e);
     R3.quality = q;
     R3.shadows = shadows;
     const P = (R3.preset = PRESET[q] || PRESET[1]);
     R3.viewR = P.viewR;
     R3.chunkMs = P.chunkMs;
     R3.charCast = P.charCast;
+    R3.lodD2 = [81, 169, 400][q] || 169;
     if (!R3.renderer) return;
     const r = R3.renderer, sun = R3.sun;
     const on = shadows && P.shadows;
@@ -1110,6 +1113,7 @@
 
   // Обновление вида сущности
   R3.viewBudget = 99;
+  R3.lodD2 = 169;
   R3.updateView = function (e, dt, t, playerHasStand) {
     const w = J.G.world;
     // за рулём персонажа не видно (стёкла тонированные), стенд спрятан
@@ -1155,7 +1159,8 @@
     const tl = e.st && e.st.timefrozen ? (e._tf === undefined ? (e._tf = t) : e._tf) : ((e._tf = undefined), t);
     if (v.legL && (d2 < 2025 || important)) R3.animateRig(v, e, sw, spd, tl, dt);
     // дальний план — упрощённая модель (без пальцев и мелких черт лица)
-    if (v.lodG) R3.rigLod(v, !e.isPlayer && d2 > (R3.quality === 0 ? 144 : 484));
+    // порог детализации по пресету: низкое — 9 м, среднее — 13 м, высокое — 20 м
+    if (v.lodG) R3.rigLod(v, !e.isPlayer && d2 > R3.lodD2);
     if (v.legs) v.legs.forEach((l, i) => (l.rotation.x = (i % 2 ? sw : -sw) * 0.6));
     if (v.kind === 'creature' && e.model === 'bug') v.group.position.y += 0.3 + Math.sin(tl * 8 + v.phase) * 0.1;
     // смерть: люди падают через J.Anim (реакции), звери — набок; сбитый машиной — тоже набок
@@ -1283,16 +1288,25 @@
         });
       }
       if (sv.armL) R3.animateStand(sv, e, attacking, tl, dt);
+      if (sv.lodG) R3.rigLod(sv, !e.isPlayer && d2 > R3.lodD2);
       // аура, контурный свет, послеобразы; без доспехов Колесница тоньше
       if (J.Pw && J.Pw.ready) J.Pw.standFx(e, sv, attacking, dt);
       if (e.st.armorOff > 0) {
         sv.group.scale.x *= 0.8;
         sv.group.scale.z *= 0.8;
       }
-      const op = e.isPlayer && R3.cam.near ? 0.35 : 0.88;
+      // тело стенда непрозрачное (иначе свои же слои просвечивают пятнами); вблизи камеры — полупрозрачное
+      const op = e.isPlayer && R3.cam.near ? 0.35 : 1;
       if (sv.op !== op) {
         sv.op = op;
-        sv.mats.forEach((m) => (m.opacity = m.transparent ? op : m.opacity));
+        const m = sv.mats[0];
+        if (m.isMeshPhongMaterial) {
+          if (m.transparent !== op < 1) {
+            m.transparent = op < 1;
+            m.needsUpdate = true;
+          }
+          m.opacity = op;
+        } else sv.mats.forEach((mm) => (mm.opacity = mm.transparent ? op : mm.opacity));
       }
       if (Math.random() < dt * 14) R3.aura(sv.pos.x, sv.pos.z, sv.pos.y, sd.c1);
       if (!J.Fx && attacking && e.anim.type === 'rush' && Math.random() < 0.7) {
