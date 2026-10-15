@@ -1205,7 +1205,9 @@
         for (const o of g.ents) {
           if (o.dead || (by && !J.hostile(by, o))) continue;
           if (J.dist(o.x, o.y, r.x, r.y) > 2.7 + o.r) continue;
-          J.hurt(o, 45 + (by ? by.dmg : 20), by, { knock: 9, stun: 0.8, finisher: true, ang: Math.atan2(o.y - r.y, o.x - r.x), gdmg: 80 });
+          // у игрока нет поля dmg — сила стенда вместо него
+          const base = by && by.dmg > 0 ? by.dmg : 20;
+          J.hurt(o, (45 + base) * (by && by.isPlayer ? J.Abil.pw(by) : 1), by, { knock: 9, stun: 0.8, finisher: true, ang: Math.atan2(o.y - r.y, o.x - r.x), gdmg: 80 });
         }
         if (r.m) J.R3.removeMesh(r.m);
         g.roller = null;

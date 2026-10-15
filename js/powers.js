@@ -518,7 +518,12 @@
   Pw.ghost = function (view, color, life) {
     if (!view || !view.group || !GHM.length || !view.group.visible) return;
     const life0 = life || 0.4;
-    const list = [];
+    const list = GH_LIST;
+    list.length = 0;
+    // хватит ли свободных мешей на весь силуэт (половинчатый призрак хуже, чем никакого)
+    let free = 0;
+    for (const g of GHM) if (!g.busy) free++;
+    if (free < 12) return;
     view.group.updateMatrixWorld(true);
     view.group.traverse((o) => {
       if (!o.isMesh || !o.visible || list.length >= 14) return;
@@ -534,8 +539,9 @@
       m.mesh.visible = true;
       list.push(m);
     });
-    if (list.length) GHOSTS.push({ list, t: life0, max: life0 });
+    if (list.length) GHOSTS.push({ list: list.slice(), t: life0, max: life0 });
   };
+  const GH_LIST = [];
   function updateGhosts(dt) {
     let j = 0;
     for (const g of GHOSTS) {
@@ -623,17 +629,16 @@
       mv.xy += position.xy * vec2(0.62, 1.0) * uS;
       gl_Position = projectionMatrix * mv;
     }`;
+  // шум — из маленькой текстуры (дешевле, чем считать хэши в каждом пикселе)
   const AURA_FS = `
-    uniform float uT; uniform vec3 uC1; uniform vec3 uC2; uniform float uA; varying vec2 vUv;
-    float h1(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-    float n2(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-      return mix(mix(h1(i), h1(i + vec2(1.0, 0.0)), f.x), mix(h1(i + vec2(0.0, 1.0)), h1(i + vec2(1.0, 1.0)), f.x), f.y); }
+    uniform float uT; uniform vec3 uC1; uniform vec3 uC2; uniform float uA; uniform sampler2D uN; varying vec2 vUv;
     void main() {
       vec2 p = vUv * 2.0 - 1.0;
       float body = 1.0 - length(p * vec2(1.05, 0.82));
-      float fl = n2(vec2(vUv.x * 5.0, vUv.y * 3.0 - uT * 2.0)) * 0.62 + n2(vec2(vUv.x * 12.0, vUv.y * 8.0 - uT * 3.6)) * 0.38;
+      if (body < -0.3) discard;
+      float fl = texture2D(uN, vec2(vUv.x * 0.6, vUv.y * 0.4 - uT * 0.25)).r * 0.62 + texture2D(uN, vec2(vUv.x * 1.4 + 0.3, vUv.y * 1.0 - uT * 0.45)).g * 0.38;
       // языки пламени тянутся вверх, к краям — на нет (без видимой границы)
-      float rise = n2(vec2(vUv.x * 7.0, vUv.y * 2.5 - uT * 2.8));
+      float rise = texture2D(uN, vec2(vUv.x * 0.9 + 0.6, vUv.y * 0.35 - uT * 0.35)).b;
       float a = body + (fl - 0.5) * 0.7 + (rise - 0.5) * 0.5 * vUv.y;
       a = smoothstep(0.0, 0.7, a);
       a *= a;
@@ -642,12 +647,47 @@
       gl_FragColor = vec4(c * uA, 1.0);
     }`;
   const auraGeo = new THREE.PlaneGeometry(2, 2);
+  // плавный шум в трёх каналах (повторяется по краям)
+  let NTEX = null;
+  function noiseTex() {
+    if (NTEX) return NTEX;
+    const N = 64;
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = N;
+    const c = cv.getContext('2d');
+    const id = c.createImageData(N, N);
+    const R = J.rng(5);
+    const grid = (g) => {
+      const v = [];
+      for (let i = 0; i < g * g; i++) v.push(R());
+      return (x, y) => {
+        const fx = (x / N) * g, fy = (y / N) * g;
+        const ix = Math.floor(fx), iy = Math.floor(fy);
+        let tx = fx - ix, ty = fy - iy;
+        tx = tx * tx * (3 - 2 * tx);
+        ty = ty * ty * (3 - 2 * ty);
+        const at = (a, b) => v[((b + g) % g) * g + ((a + g) % g)];
+        return (at(ix, iy) * (1 - tx) + at(ix + 1, iy) * tx) * (1 - ty) + (at(ix, iy + 1) * (1 - tx) + at(ix + 1, iy + 1) * tx) * ty;
+      };
+    };
+    const ch = [grid(5), grid(9), grid(6)], ch2 = [grid(13), grid(17), grid(11)];
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++) {
+        const i = (y * N + x) * 4;
+        for (let k = 0; k < 3; k++) id.data[i + k] = Math.round((ch[k](x, y) * 0.7 + ch2[k](x, y) * 0.3) * 255);
+        id.data[i + 3] = 255;
+      }
+    c.putImageData(id, 0, 0);
+    NTEX = new THREE.CanvasTexture(cv);
+    NTEX.wrapS = NTEX.wrapT = THREE.RepeatWrapping;
+    return NTEX;
+  }
   // вызывается из R3.updateView после того, как стенд поставлен на место
   Pw.standFx = function (e, sv, attacking, dt) {
     const sd = J.STANDS[e.stand.id];
     if (!sv.aura && sv.kind === 'human') {
       const m = new THREE.ShaderMaterial({
-        uniforms: { uT: { value: rnd() * 10 }, uC1: { value: new THREE.Color(sd.c1) }, uC2: { value: new THREE.Color(sd.c2) }, uA: { value: 0 }, uS: { value: 1 } },
+        uniforms: { uT: { value: rnd() * 10 }, uC1: { value: new THREE.Color(sd.c1) }, uC2: { value: new THREE.Color(sd.c2) }, uA: { value: 0 }, uS: { value: 1 }, uN: { value: noiseTex() } },
         vertexShader: AURA_VS, fragmentShader: AURA_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
       });
       const a = new THREE.Mesh(auraGeo, m);
@@ -662,11 +702,15 @@
     const fight = attacking || e.inCombat > 0 || e.guard;
     const far = e.isPlayer && R3.cam.near;
     if (sv.aura) {
+      const dx = sv.pos.x - R3.camera.position.x, dz = sv.pos.z - R3.camera.position.z;
+      sv.aura.visible = !Pw.noAura && dx * dx + dz * dz < 900;
+    }
+    if (sv.aura) {
       const U = sv.aura.material.uniforms;
       U.uT.value += dt;
       const want = (far ? 0.08 : fight ? 0.24 : 0.14) + sv.surge * 0.5;
       U.uA.value += (want - U.uA.value) * Math.min(1, dt * 6);
-      U.uS.value = 1 + sv.surge * 0.35 + Math.sin(U.uT.value * 7) * 0.02;
+      U.uS.value = (1 + sv.surge * 0.35 + Math.sin(U.uT.value * 7) * 0.02) * (Pw.auraK === undefined ? 1 : Pw.auraK);
     }
     const rim = sv.mats[0] && sv.mats[0].userData.rim;
     if (rim) rim.uRimK.value = (fight ? 0.42 : 0.32) + sv.surge * 0.9;
@@ -1533,10 +1577,20 @@
     const g = G();
     const live = pdt > 0;
     const cx = R3.cam.tx, cz = R3.cam.tz;
+    // стёртое время: враги бродят вслепую, за ними тянутся багровые послеобразы
+    // ускорение времени: за владельцем Сделано на Небесах — шлейф силуэтов
+    Pw._ghT = (Pw._ghT || 0) - pdt;
+    const ghostTick = live && Pw._ghT <= 0;
+    if (ghostTick) Pw._ghT = 0.14;
+    const sk = g.timeskip;
     for (const e of g.ents) {
       if (e.dead) continue;
       const dx = e.x - cx, dz = e.y - cz;
       if (dx * dx + dz * dz > 1600) continue;
+      if (ghostTick && e.view && Math.hypot(e.vx || 0, e.vy || 0) > 0.4) {
+        if (sk && e !== sk.by && dx * dx + dz * dz < 400) Pw.ghost(e.view, '#ff2a4a', 0.42);
+        else if (e.st.heaven > 0) Pw.ghost(e.view, '#7affc8', 0.3);
+      }
       drawStatus(e, pdt, live && !e.st.timefrozen);
       // Шиер Харт Атак: пыль из-под гусениц
       if (e.sha && live && rnd() < 0.4) Pw.smoke(e.x, gy(e.x, e.y) + 0.05, e.y, 1, '#8a7a6a', 0.25, 0.5, 0.2, 0.2, 0.5);
@@ -1555,6 +1609,7 @@
     if (IM.gseg) IM.gseg.m.material.uniforms.uTime.value = Pw.simT;
     flushSys(ADD);
     flushSys(ALP);
+    if (Pw.noPart) ADD.mesh.visible = ALP.mesh.visible = false;
     updateDecals(pdt);
     updateLights(pdt);
     updateGhosts(rdt);
@@ -1588,7 +1643,7 @@
       DEC.push({ m, life: 0, max: 1, grow: 1, size: 1 });
     }
     // послеобразы
-    for (let i = 0; i < 64; i++) {
+    for (let i = 0; i < 96; i++) {
       const mat = new THREE.ShaderMaterial({ uniforms: { uC: { value: new THREE.Color() }, uA: { value: 0 } }, vertexShader: GH_VS, fragmentShader: GH_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
       const mesh = new THREE.Mesh(GH_DUMMY, mat);
       mesh.matrixAutoUpdate = false;
@@ -2359,17 +2414,49 @@
 
   // ---------- 24. Рука: стирание пространства ----------
   // разрыв-шрам в воздухе (рисуется, пока не схлопнется)
-  Pw.tear = function (u, ax, ay, bx, by, h, dur) {
+  // arc: { x, y, r, a0, a1 } — разрыв по дуге взмаха (иначе — прямой от A до B)
+  Pw.tear = function (u, ax, ay, bx, by, h, dur, arc) {
+    const n = 9;
+    const pts = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const f = i / (n - 1);
+      let x, y;
+      if (arc) {
+        const a = arc.a0 + (arc.a1 - arc.a0) * f;
+        x = arc.x + Math.cos(a) * arc.r;
+        y = arc.y + Math.sin(a) * arc.r;
+      } else {
+        x = ax + (bx - ax) * f;
+        y = ay + (by - ay) * f;
+      }
+      const j = i === 0 || i === n - 1 ? 0 : (rnd() - 0.5) * 0.12;
+      pts[i * 3] = x + j;
+      pts[i * 3 + 1] = h + (rnd() - 0.5) * 0.1 * Math.sin(f * Math.PI);
+      pts[i * 3 + 2] = y - j;
+    }
     Pw.add({
-      u, ax, ay, bx, by, h, dur: dur || 0.5,
+      u, pts, n, dur: dur || 0.5,
       update() {
         return this.t < this.dur;
       },
-      draw() {
+      draw(dt) {
         const k = 1 - this.t / this.dur;
-        const w = 0.16 * k + 0.02;
-        Pw.seg(this.ax, this.h, this.ay, this.bx, this.h, this.by, w, '#050208');
-        Pw.gseg(this.ax, this.h, this.ay, this.bx, this.h, this.by, w * 2.2, '#7a3ac4');
+        const P0 = this.pts;
+        // посередине щель шире, к концам сходится на нет
+        for (let i = 0; i < this.n - 1; i++) {
+          const a = i * 3, b = a + 3;
+          const w = (0.13 * k + 0.015) * Math.sin(((i + 0.5) / (this.n - 1)) * Math.PI);
+          Pw.seg(P0[a], P0[a + 1], P0[a + 2], P0[b], P0[b + 1], P0[b + 2], w, '#030106');
+          Pw.gseg(P0[a], P0[a + 1], P0[a + 2], P0[b], P0[b + 1], P0[b + 2], w * 2.4 + 0.02, '#6a2ab4');
+        }
+        // воздух и пыль затягивает в разрыв
+        if (dt > 0)
+          for (let q = 0; q < 2; q++) {
+            const i = (rnd() * (this.n - 1)) | 0;
+            const x = P0[i * 3], h0 = P0[i * 3 + 1], z = P0[i * 3 + 2];
+            const ox = (rnd() - 0.5) * 1.4, oh = (rnd() - 0.5) * 0.8, oz = (rnd() - 0.5) * 1.4;
+            Pw.puff(x + ox, h0 + oh, z + oz, -ox * 5, -oh * 5, -oz * 5, 0.2, 0.06, 0.02, '#b48aff', null, 0, 0.9);
+          }
       },
     });
   };
@@ -2386,8 +2473,7 @@
         // правая рука проводит дугу: всё на ней стёрто
         const R = (ab.range || 1.8) + 0.4;
         const h = gy(u.x, u.y) + 1.15;
-        const p0 = a - 0.7, p1 = a + 0.7;
-        Pw.tear(u, u.x + Math.cos(p0) * R, u.y + Math.sin(p0) * R, u.x + Math.cos(p1) * R, u.y + Math.sin(p1) * R, h, 0.55);
+        Pw.tear(u, 0, 0, 0, 0, h, 0.55, { x: u.x, y: u.y, r: R, a0: a - 0.75, a1: a + 0.75 });
         Pw.decal('void', u.x + Math.cos(a) * R, u.y + Math.sin(a) * R, 1.2, 4);
         let n = 0;
         for (const o of G().ents) {

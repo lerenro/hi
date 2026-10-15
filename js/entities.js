@@ -198,7 +198,7 @@
   // ---------- Урон ----------
   J.hurt = function (t, amount, src, opt) {
     opt = opt || {};
-    if (!t || t.dead || amount <= 0) return 0;
+    if (!t || t.dead || !(amount > 0)) return 0;
     const g = G();
     const so = src ? J.ownerOf(src) : null;
     if (t.st.invuln > 0 || t.st.void > 0 || t.immortal) {
