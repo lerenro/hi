@@ -103,7 +103,11 @@ await page.evaluate(() => {
   };
 });
 const ev = (f, a) => page.evaluate(f, a);
-const shot = async (n) => { await ev(() => { J.UI.update(0.016); J.R3.render(); }); await page.screenshot({ path: path.join(OUT, n + '.png') }); };
+// снимок: камера встаёт на место (без шага симуляции)
+const shot = async (n) => {
+  await ev(() => { const p = J.G.player; for (let i = 0; i < 4; i++) J.R3.updateCamera(p.x, p.y, J.G.world.groundY(p.x, p.y) + (p.z || 0), 0.5, { mode: 'foot', heading: p.face, moving: false }); J.UI.update(0.016); J.R3.render(); });
+  await page.screenshot({ path: path.join(OUT, n + '.png') });
+};
 const results = [];
 const check = (name, ok, info) => { results.push({ name, ok: !!ok }); console.log((ok ? 'OK   ' : 'FAIL ') + name + (info !== undefined ? '  ' + JSON.stringify(info) : '')); };
 
@@ -493,6 +497,55 @@ check('панель быстрого доступа в HUD', await ev(() => docu
   await shot('i14_inventory');
   await ev(() => J.UI.closePanel());
   check('инвентарь: ячейки, «В руку», иконки', r.slots === 6 && r.inHand && r.icons >= 3, r);
+}
+
+
+// 20. Вещи на улицах: бутылки у баров, трубы и кирпичи у доков, ножи у ресторанов
+{
+  const r = await ev(() => {
+    window._clear();
+    const p = J.G.player, w = J.G.world;
+    const types = {};
+    let gi = null;
+    // обойти несколько улиц города
+    for (let k = 0; k < 8; k++) {
+      const q = w.randomWalkable(window._home.x, window._home.y, 60, J.R, { street: true });
+      if (!q) continue;
+      p.x = q.x; p.y = q.y;
+      window._sim(1.0);
+      for (const g of J.Hand.GROUND) if (g.loot) types[g.item] = (types[g.item] || 0) + 1;
+    }
+    gi = J.Hand.GROUND.find((g) => g.loot);
+    if (gi) {
+      const a = Math.atan2(gi.y - p.y, gi.x - p.x);
+      p.x = gi.x - 1.2; p.y = gi.y; p.face = 0;
+      J.R3.updateChunks(p.x, p.y, true);
+      const c = J.R3.cam; c.yaw = 0.5; c.pitch = 0.45; c.dist = 3;
+      window._sim(0.2);
+    }
+    return { types, n: J.Hand.GROUND.filter((g) => g.loot).length, item: gi && gi.item };
+  });
+  check('на улицах города лежат вещи', r.n > 0, r);
+  await shot('i16_street_loot');
+}
+
+// 21. Полиция замечает оружие в руке
+{
+  const r = await ev(() => {
+    window._clear();
+    const p = J.G.player;
+    p.wanted = 0;
+    const cop = window._foe('guard', 6, { noai: true, da: 0.8 });
+    cop.cop = true; cop.team = 'neutral'; cop.kind = 'civ';
+    window._give('pipe', 1);
+    window._sim(1.6);
+    const warned = p.copSeen || 0;
+    window._sim(5.5);
+    const w1 = p.wanted || 0;
+    J.Game.onKey('Digit0');
+    return { warned, wanted: w1 };
+  });
+  check('полиция: предупреждение и розыск за оружие на виду', r.warned >= 1 && r.wanted > 0, r);
 }
 
 // 19. Сохранение и загрузка панели

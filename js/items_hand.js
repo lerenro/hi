@@ -445,7 +445,8 @@
   let MAT = null;
   const mats = () => {
     if (MAT) return MAT;
-    const mk = (o) => new THREE.MeshPhongMaterial(Object.assign({ vertexColors: true, side: THREE.DoubleSide, shininess: 60, specular: new THREE.Color('#5a5a62') }, o));
+    // лёгкое собственное свечение — сталь не чернеет в тени
+    const mk = (o) => new THREE.MeshPhongMaterial(Object.assign({ vertexColors: true, side: THREE.DoubleSide, shininess: 60, specular: new THREE.Color('#5a5a62'), emissive: new THREE.Color('#15171b') }, o));
     MAT = { w: mk({}), p: mk({}), gw: mk({ transparent: true, opacity: 0.78, shininess: 90 }), gp: mk({ transparent: true, opacity: 0.78, shininess: 90 }) };
     if (R3.fxPatch) {
       R3.fxPatch(MAT.w, R3.uDesat);
@@ -478,7 +479,7 @@
     knife: pose({ AR: -0.35, ARZ: 0.12, FR: -0.95, WR: 1.05, AL: -0.15, ALZ: -0.1, FL: -0.5 }),
     club1: pose({ AR: -0.08, ARZ: 0.1, FR: -0.3, WR: 1.75, AL: -0.15, ALZ: -0.1, FL: -0.5 }),
     small: pose({ AR: -0.2, ARZ: 0.1, FR: -0.75, WR: 1.2, AL: -0.15, ALZ: -0.1, FL: -0.5 }),
-    two: pose({ AR: -0.5, ARZ: 0.32, FR: -2.25, WR: 0.75, AL: -0.15, ALZ: -0.1, FL: -0.5 }),
+    two: pose({ AR: -0.5, ARZ: 0.32, FR: -2.25, WR: 0.25, AL: -0.15, ALZ: -0.1, FL: -0.5 }),
     sign: pose({ AR: -0.55, ARZ: 0.3, FR: -2.3, WR: 0.6, AL: -0.15, ALZ: -0.1, FL: -0.5 }),
     gun: pose({ AR: -0.35, ARZ: 0.05, FR: -0.55, WR: 1.35, AL: -0.15, ALZ: -0.1, FL: -0.5 }),
     food: pose({ AR: -0.22, ARZ: 0.1, FR: -1.15, WR: -0.25, AL: -0.15, ALZ: -0.1, FL: -0.5 }),
@@ -522,6 +523,8 @@
     for (let c = 0; c < NC; c++) out[c] = a[c] + (b[c] - a[c]) * e;
   };
   H.CLIPS = CLIPS;
+  H.IDLE = IDLE;
+  H.rebuildClips = () => { for (const k in BUILT) delete BUILT[k]; };
 
   // Поза поверх обычной анимации (вызывается после J.Anim.rig)
   const NOHOLD = { down: 1, dead: 1, death: 1, air: 1, launch: 1, getup: 1, slump: 1, stagger: 1, gbreak: 1, parried: 1, pummel: 1 };
@@ -1623,9 +1626,12 @@
             o.rot = 0;
           }
           orientFly(o);
-          if (pwOk() && rnd() < 0.08) {
-            const ca = Math.cos(Math.atan2(o.vy, o.vx)), sa = Math.sin(Math.atan2(o.vy, o.vx));
-            J.Pw.orb(o.x + ca * 0.12, o.h, o.y + sa * 0.12, 0.05 + rnd() * 0.05, '#ffffff');
+          if (pwOk() && nearP(o.x, o.y, 40)) {
+            // застывший росчерк полёта позади ножа и блик на острие
+            const sp = Math.hypot(o.vx, o.vy, o.vh) || 1;
+            const ux = o.vx / sp, uh = o.vh / sp, uz = o.vy / sp;
+            J.Pw.gseg(o.x - ux * 0.75, o.h - uh * 0.75, o.y - uz * 0.75, o.x - ux * 0.1, o.h - uh * 0.1, o.y - uz * 0.1, 0.006, '#e8f0ff');
+            if (rnd() < 0.06) J.Pw.orb(o.x + ux * 0.12, o.h + uh * 0.12, o.y + uz * 0.12, 0.04 + rnd() * 0.05, '#ffffff');
           }
           continue;
         }
@@ -1768,12 +1774,12 @@
       g.timers.push({
         t: 0.1,
         fn: () => {
-          const a = tg && !tg.dead ? Math.atan2(tg.y - p.y, tg.x - p.x) : p.face;
           const hp = H.handPos(p, true);
+          const a = tg && !tg.dead ? Math.atan2(tg.y - hp.z, tg.x - hp.x) : p.face;
           const pr = J.spawnProj(p, { ang: a, speed: 42, dmg: (id === 'rock' ? 46 : 38) * J.P.standPower(p), range: 26, shape: 'bullet', color: '#ffffff', size: id === 'rock' ? 0.16 : 0.1, pierce: id === 'rock' ? 0 : 2, stand: true, x: hp.x, y: hp.z });
           pr.knock = id === 'rock' ? 7 : 3;
           pr.stun = 0.4;
-          pr.h = hp.h - gy(hp.x, hp.z);
+          pr.h = J.clamp(hp.h - gy(hp.x, hp.z), 0.9, 1.5);
           if (fxOk()) {
             J.Fx.word('ピシッ', p.x + Math.cos(a), p.y + Math.sin(a), gy(p.x, p.y) + 1.8, 'mid', '#ffffff', '#3a2a7a');
             J.Fx.trauma(0.2);
@@ -1816,7 +1822,7 @@
       fn: () => {
         if (gift && gift.parent) gift.parent.remove(gift);
         const hp = H.handPos(p, true);
-        const sx = hp.x, sy = hp.z, sh = hp.h;
+        const sx = hp.x, sy = hp.z, sh = J.clamp(hp.h, gy(p.x, p.y) + 1.2, gy(p.x, p.y) + 2.1);
         const T = tg && !tg.dead ? tg : null;
         const base = T ? Math.atan2(T.y - sy, T.x - sx) : p.face;
         const pw = J.P.standPower(p);
