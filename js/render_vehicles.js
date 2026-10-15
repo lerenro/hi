@@ -232,16 +232,17 @@ vec3 carSky(vec3 d) {
   return c;
 }
 #ifdef CAR_CRACK
-float cVor(vec2 p) {
+// ячейки Вороного: x — расстояние до границы (трещины), y — случайное число ячейки (выбитые куски)
+vec2 cVor(vec2 p) {
   vec2 i = floor(p), f = fract(p);
-  float d1 = 8.0, d2 = 8.0;
+  float d1 = 8.0, d2 = 8.0, id = 0.0;
   for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
     vec2 o = vec2(float(x), float(y));
     vec2 r = o + vec2(cHash(i + o), cHash(i + o + 17.3)) - f;
     float d = dot(r, r);
-    if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+    if (d < d1) { d2 = d1; d1 = d; id = cHash(i + o + 5.1); } else if (d < d2) d2 = d;
   }
-  return sqrt(d2) - sqrt(d1);
+  return vec2(sqrt(d2) - sqrt(d1), id);
 }
 #endif`;
   const CAR_ENV = `
@@ -267,11 +268,13 @@ float cVor(vec2 p) {
       #endif
     }
     #ifdef CAR_CRACK
-    float e = cVor(vec2(vOP.x * 0.8 + vOP.z, vOP.y * 1.3) * 9.0);
-    float e2 = cVor(vec2(vOP.z - vOP.x * 0.6, vOP.y) * 23.0);
-    float cr = (1.0 - smoothstep(0.0, 0.07, e)) * 0.9 + (1.0 - smoothstep(0.0, 0.05, e2)) * 0.45;
-    outgoingLight = mix(outgoingLight, (uHor * 0.6 + uZen * 0.2 + 0.08) * 1.4, clamp(cr, 0.0, 1.0) * 0.85);
-    diffuseColor.a = max(diffuseColor.a, 0.3 + cr * 0.6);
+    vec2 e = cVor(vec2(vOP.x * 0.8 + vOP.z, vOP.y * 1.3) * 5.0);
+    float e2 = cVor(vec2(vOP.z - vOP.x * 0.6, vOP.y) * 13.0).x;
+    float cr = (1.0 - smoothstep(0.0, 0.035, e.x)) * 0.85 + (1.0 - smoothstep(0.0, 0.025, e2)) * 0.3;
+    outgoingLight = mix(outgoingLight, (uHor * 0.6 + uZen * 0.2 + 0.08) * 1.3, clamp(cr, 0.0, 1.0) * 0.8);
+    // часть кусков выбита — сквозная дыра
+    float hole = step(e.y, 0.3) * step(0.05, e.x);
+    diffuseColor.a = mix(max(diffuseColor.a, 0.42 + cr * 0.5), 0.0, hole);
     #endif
   }`;
   function carPatch(mat, glowU, burn, defs, key) {
@@ -398,6 +401,15 @@ float cVor(vec2 p) {
     R3.indIM.count = 0;
     R3.indIM.frustumCulled = false;
     R3.scene.add(R3.indIM);
+    // следы шин на асфальте: кольцевой буфер полос
+    R3.skidMat = new THREE.MeshBasicMaterial({ color: '#0a0a0a', transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    const sg = new THREE.PlaneGeometry(1, 1);
+    sg.rotateX(-Math.PI / 2);
+    R3.skidIM = new THREE.InstancedMesh(shared(sg), R3.skidMat, SKID_N);
+    R3.skidIM.count = 0;
+    R3.skidIM.frustumCulled = false;
+    R3.skidIM.renderOrder = 1;
+    R3.scene.add(R3.skidIM);
     // настоящий свет — только у машины игрока (добавлен один раз: меняется лишь яркость — без перекомпиляции шейдеров)
     R3.carBeam = new THREE.SpotLight('#fff1d0', 0, 38, 0.52, 0.55, 1.4);
     R3.scene.add(R3.carBeam, R3.carBeam.target);
@@ -414,6 +426,60 @@ float cVor(vec2 p) {
       for (let i = 0; i < Math.min(3, t.colors.length); i++) R3.carGeo(id, t.colors[i], null, 'usa').keep = true;
     }
   };
+  // ---------- Следы шин и дым из-под колёс ----------
+  const SKID_N = 900;
+  let skidHead = 0, skidN = 0;
+  const mS = new THREE.Matrix4(), qS = new THREE.Quaternion(), pS = new THREE.Vector3(), sS = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
+  function skidSeg(x0, y0, x1, y1, h, wdt) {
+    const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy);
+    pS.set((x0 + x1) / 2, h, (y0 + y1) / 2);
+    qS.setFromAxisAngle(UP, Math.PI / 2 - Math.atan2(dy, dx));
+    sS.set(wdt, 1, L + 0.04);
+    mS.compose(pS, qS, sS);
+    R3.skidIM.setMatrixAt(skidHead, mS);
+    skidHead = (skidHead + 1) % SKID_N;
+    if (skidN < SKID_N) skidN++;
+    R3.skidIM.count = skidN;
+    R3.skidIM.instanceMatrix.needsUpdate = true;
+  }
+  R3.clearSkids = function () {
+    skidHead = skidN = 0;
+    if (R3.skidIM) R3.skidIM.count = 0;
+  };
+  // k: 0..3 колесо (0,1 — передние), lx/lz — его место в системе машины
+  function wheelTrail(v, k, lx, lz, dt, skid) {
+    const P = v._sk || (v._sk = new Float32Array(8)), on = v._skOn || 0, bit = 1 << k;
+    if (skid < 0.25) {
+      v._skOn = on & ~bit;
+      return;
+    }
+    const ca = Math.cos(v.ang), sa = Math.sin(v.ang);
+    const x = v.x + ca * lz + sa * lx, y = v.y + sa * lz - ca * lx;
+    if (on & bit) {
+      const px = P[k * 2], py = P[k * 2 + 1], d = Math.hypot(x - px, y - py);
+      if (d > 0.35 && d < 3) {
+        skidSeg(px, py, x, y, v.gy + 0.03, v.vt.wr * 0.62 + 0.03);
+        P[k * 2] = x;
+        P[k * 2 + 1] = y;
+      } else if (d >= 3) {
+        P[k * 2] = x;
+        P[k * 2 + 1] = y;
+      }
+    } else {
+      P[k * 2] = x;
+      P[k * 2 + 1] = y;
+      v._skOn = on | bit;
+    }
+    // дым из-под шин
+    if (J.Pw && J.Pw.smoke && v.d2 < 2500 && dt > 0) {
+      v._smk = (v._smk || 0) + dt * 16 * skid;
+      if (v._smk > 1) {
+        v._smk -= 1;
+        J.Pw.smoke(x, v.gy + 0.2, y, 1, '#d4d2ce', 0.55 + skid * 0.7, 1.5, 0.45, 0.2, 0.22 + 0.2 * skid);
+      }
+    }
+  }
+
   // качество → дальность подробной модели
   R3.carLodD2 = () => [18 * 18, 32 * 32, 46 * 46][R3.quality === undefined ? 1 : R3.quality] || 1024;
 
@@ -564,7 +630,10 @@ float cVor(vec2 p) {
     if (v.latT) return v.latT > 0 ? 1 : -1; // объезд
     return 0;
   }
+  let lastT = 0;
   R3.updateCars = function (list, t, playerCar) {
+    const dt = J.clamp(t - lastT, 0, 0.1);
+    lastT = t;
     const day = R3.dayLevel === undefined ? 1 : R3.dayLevel;
     const night = J.clamp(1 - day * 1.4, 0, 1);
     let wi = 0, wl = 0, pi = 0, di = 0, bi = 0, ii = 0;
@@ -633,6 +702,15 @@ float cVor(vec2 p) {
         mW.multiplyMatrices(gr.matrixWorld, mL);
         if (im === R3.wheelIM) R3.wheelIM.setMatrixAt(wi++, mW);
         else R3.wheelIMlo.setMatrixAt(wl++, mW);
+      }
+      // следы шин и дым: задние колёса в заносе и ручнике, все — при блокировке тормозами
+      if (dt > 0 && v.d2 < 3600 && !wreck) {
+        const sk = v.skid || (v.mode === 'ai' && v.accel < -7 && v.vf > 5 ? 0.4 : 0);
+        const all = v.braking && sk > 0.3 && Math.abs(v.vl || 0) < 2;
+        for (let k = 0; k < 4; k++) {
+          const front = k < 2;
+          wheelTrail(v, k, (k % 2 ? -1 : 1) * hwT, (front ? hz : -hz) + zoff, dt, front && !all ? sk * 0.35 : sk);
+        }
       }
       // водитель за стеклом
       if (vw.hi && !wreck && v.driver && di < 64) {

@@ -1642,7 +1642,7 @@
     g.setAttribute('aCell', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0], 2));
     const mats = [R3.terrainMat, R3.buildMat, R3.lightMat, R3.poolMat, R3.carMat, R3.carMatOff, R3.carBrakeMat, R3.wreckMat, R3.carGlassMat, R3.carGlassBroken].concat(Object.values(R3.cmat || {}), R3.sirenMats || []);
     for (const m of mats) if (m) tmp.add(new THREE.Mesh(g, m));
-    for (const m of [R3.decoMat, R3.bulbMat, R3.wheelMat, R3.beamMat, R3.indMat]) {
+    for (const m of [R3.decoMat, R3.bulbMat, R3.wheelMat, R3.beamMat, R3.indMat, R3.skidMat]) {
       if (!m) continue;
       const im = new THREE.InstancedMesh(g, m, 1);
       im.setMatrixAt(0, new THREE.Matrix4());

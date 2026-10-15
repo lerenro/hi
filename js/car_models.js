@@ -666,9 +666,10 @@
         plate(body, sg * tX0, sg * tX1, yy - 0.005, yy + 0.005, rz - 0.004, -1, C.TAILD, 0.6, 0.2);
       }
       // загиб фонаря на боковину
-      if (!van) {
+      const wy1 = Math.min(tY1, sR[3][1] - 0.01);
+      if (!van && wy1 - ym > 0.05) {
         const x = sg * (sR[3][0] + 0.003), z0 = rz + 0.03, z1 = rz + 0.2;
-        const a = [x, ym, z0], b = [x, tY1, z0], c = [x, tY1 - 0.01, z1], d = [x, ym + 0.01, z1];
+        const a = [x, ym, z0], b = [x, wy1, z0], c = [x, wy1 - 0.01, z1], d = [x, ym + 0.01, z1];
         if (sg > 0) body.quad(a, b, c, d, C.TAIL, 0.8, 0.42);
         else body.quad(a, d, c, b, C.TAIL, 0.8, 0.42);
       }

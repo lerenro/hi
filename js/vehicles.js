@@ -50,6 +50,7 @@
       if (v.spot) v.spot.veh = null;
     }
     g.vehs = [];
+    if (J.R3.clearSkids) J.R3.clearSkids();
     J.Traffic.reset();
     Veh.sound(null, 0);
   };
@@ -314,9 +315,15 @@
   // ---------- Урон машине ----------
   // разбитая машина сначала загорается (несколько секунд, чтобы успеть выскочить), потом взрывается;
   // мгновенный взрыв — только от огромного разового урона (другой взрыв, способности)
-  Veh.damage = function (v, amt, src) {
+  Veh.damage = function (v, amt, src, noDent) {
     if (v.hp <= 0 || !(amt > 0)) return;
     v.hp -= amt;
+    // удар силой, пулей, взрывом рядом — вмятина в случайном месте кузова, при сильном — стёкла
+    if (!noDent && amt >= 12 && J.R3.carDent) {
+      const a = Math.random() * J.TAU;
+      J.R3.carDent(v, v.x + Math.cos(a) * v.vt.L, v.y + Math.sin(a) * v.vt.L, Math.min(16, 4 + amt / 6), 0.5 + Math.random() * 0.5);
+      if (!v.glassBroken && (amt > 50 || v.hp < v.maxHp * 0.3)) Veh.breakGlass(v, v.x, v.y);
+    }
     if (v.hp <= 0 && amt > v.maxHp * 0.9) return Veh.explode(v, src);
     if (v.hp <= v.maxHp * 0.12 && !v.fire) {
       v.fire = true;
@@ -340,15 +347,34 @@
     }
     v.hp = Math.max(1, v.hp);
   };
+  Veh.breakGlass = function (v, x, y, dCam) {
+    v.glassBroken = true;
+    J.R3.burst(x, y, v.gy + v.vt.H * 0.75, '#d8eef4', 14, 3.2, 0.7, 2);
+    if (J.Pw && J.Pw.shards) J.Pw.shards(x, v.gy + v.vt.H * 0.75, y, 10, '#cfe6ee', 3, 0.05, 0);
+    if (dCam === undefined) dCam = Math.hypot(x - J.R3.cam.tx, y - J.R3.cam.tz);
+    if (dCam < 45) Veh.glassSound(dCam);
+  };
   Veh.explode = function (v, src) {
     v.hp = 0;
     v.siren = false;
     const g = G(), R3 = J.R3;
     const gy = v.gy;
-    R3.burst(v.x, v.y, gy + 1, '#ffb030', 36, 9, 0.9, 4);
-    R3.burst(v.x, v.y, gy + 1.4, '#3a3a3a', 26, 4, 1.6, 3);
+    if (J.Pw && J.Pw.explosion) {
+      J.Pw.explosion(v.x, v.y, 3.2, '#ffc070');
+      J.Pw.smoke(v.x, gy + 1.5, v.y, 10, '#1a1614', 1.6, 3.2, 2.2, 1, 0.65);
+      if (J.Pw.shards) J.Pw.shards(v.x, gy + 1, v.y, 12, '#3a3a3e', 7, 0.14, 1, undefined, 4, 12, 1.4);
+    } else {
+      R3.burst(v.x, v.y, gy + 1, '#ffb030', 36, 9, 0.9, 4);
+      R3.burst(v.x, v.y, gy + 1.4, '#3a3a3a', 26, 4, 1.6, 3);
+    }
     R3.flash && R3.flash(v.x, v.y, 4, '#ffcf6a', 0.5, 2);
     R3.ring && R3.ring(v.x, v.y, 5, '#ffb030', 0.5);
+    // кузов подбрасывает и мнёт со всех сторон, стёкла вылетают
+    v.glassBroken = true;
+    v.wreckT = 0;
+    v.pitchV = (v.pitchV || 0) + (Math.random() - 0.5) * 4;
+    v.rollV = (v.rollV || 0) + (Math.random() - 0.5) * 5;
+    if (R3.carDent) for (let k = 0; k < 3; k++) R3.carDent(v, v.x + (Math.random() - 0.5) * v.vt.L, v.y + (Math.random() - 0.5) * v.vt.L, 16, 1.0);
     if (Math.hypot(v.x - R3.cam.tx, v.y - R3.cam.tz) < 30) R3.cam.shake = 0.6;
     Veh.boom(v);
     // взрывная волна
@@ -372,11 +398,14 @@
     v.hitCD = 0.25;
     const R3 = J.R3;
     const dmg = Math.pow(Math.max(0, imp - 2.5), 1.45) * 4.2 * (other ? 0.8 : 1);
-    Veh.damage(v, dmg, v.driver && v.driver.isPlayer ? v.driver : null);
+    Veh.damage(v, dmg, v.driver && v.driver.isPlayer ? v.driver : null, true);
     const gy = v.gy;
     R3.burst(x, y, gy + 0.6, '#ffd27a', Math.min(18, 3 + imp * 1.5), 3 + imp * 0.3, 0.35, 1.5);
     if (imp > 7) R3.burst(x, y, gy + 0.7, '#b8bcc4', 8, 3, 0.6, 1.2); // осколки
     const dCam = Math.hypot(x - R3.cam.tx, y - R3.cam.tz);
+    // вмятина в месте удара, на сильном — разбитые стёкла и оторванный бампер
+    if (imp > 3.5 && R3.carDent) R3.carDent(v, x, y, imp);
+    if (!v.glassBroken && (imp > 12 || (imp > 6 && v.hp < v.maxHp * 0.35))) Veh.breakGlass(v, x, y, dCam);
     if (v.driver && v.driver.isPlayer) {
       R3.cam.shake = Math.max(R3.cam.shake, Math.min(0.5, imp * 0.04));
       // водитель тоже получает удар при сильном столкновении
@@ -856,23 +885,8 @@
           } else v.restT = 0;
         }
       } else Veh.ground(v, dt, false);
-      // дым и огонь у повреждённых
-      if (v.hp < v.maxHp * 0.45 && v.d2 < 3600) {
-        v.smokeT -= dt;
-        if (v.smokeT <= 0) {
-          const k = v.hp / v.maxHp;
-          v.smokeT = k < 0.2 ? 0.05 : 0.18;
-          const ca = Math.cos(v.ang), sa = Math.sin(v.ang), f = v.vt.L / 2 - 0.6;
-          if (v.hp > 0) J.R3.burst(v.x + ca * f, v.y + sa * f, v.gy + v.vt.H * 0.75, k < 0.2 ? '#ff8a30' : '#6a6a6a', 1, 0.8, 0.9, 1.6);
-          else J.R3.burst(v.x, v.y, v.gy + v.vt.H * 0.6, '#2a2a2a', 1, 0.6, 1.2, 1.8);
-          // горит — через несколько секунд взрыв
-          if (v.hp > 0 && v.fire) {
-            v.burnT = (v.burnT || 0) + 0.05;
-            if (Math.random() < 0.5) J.R3.burst(v.x, v.y, v.gy + v.vt.H * 0.6, '#ff6a20', 2, 1.4, 0.5, 2.2);
-            if (v.burnT > 5) Veh.explode(v, mine ? p : null);
-          }
-        }
-      }
+      // дым и огонь у повреждённых: сначала струйка пара, потом чёрный дым, потом пламя из-под капота — и взрыв
+      if (v.hp < v.maxHp * 0.5 && v.d2 < 3600) Veh.burnFx(v, dt, mine ? p : null);
     }
     if (!frozenAll) {
       Veh.collideCars();
@@ -888,7 +902,52 @@
       p.lastSafe = { x: p.x, y: p.y };
       Veh.sound(v, 1);
     }
+    Veh.ambient();
     Veh.updateWanted(dt, p);
+  };
+  const Pw = () => J.Pw;
+  Veh.burnFx = function (v, dt, src) {
+    v.smokeT -= dt;
+    if (v.smokeT > 0) return;
+    const k = Math.max(0, v.hp) / v.maxHp, vt = v.vt;
+    const ca = Math.cos(v.ang), sa = Math.sin(v.ang);
+    // моторный отсек — спереди (у автобуса и фургона — сзади/спереди по типу)
+    const f = vt.shape === 'bus' ? -vt.L / 2 + 1 : vt.L / 2 - Math.min(1, vt.L * 0.22);
+    const x = v.x + ca * f, y = v.y + sa * f, h = v.gy + (vt.shape === 'bus' || vt.shape === 'truck' ? vt.H * 0.5 : vt.H * 0.62);
+    const pw = Pw();
+    // ветер от езды сносит дым назад
+    const wx = -v.vx * 0.25, wy = -v.vy * 0.25;
+    if (v.hp <= 0) {
+      // остов догорает, потом коптит
+      v.smokeT = 0.12;
+      v.wreckT = (v.wreckT || 0) + 0.12;
+      if (pw && pw.fire && v.wreckT < 14) {
+        pw.fire(v.x, v.gy + vt.H * 0.45, v.y, 2, vt.W * 0.35, 1.8, 0.7);
+        if (Math.random() < 0.25) pw.light(v.x, v.gy + 1.2, v.y, '#ff8a3a', 1.6, 8, 0.4);
+      } else if (pw && pw.smoke) pw.smoke(v.x, v.gy + vt.H * 0.7, v.y, 1, '#1a1a1a', 1.1, 2.6, 1.2, 0.4, 0.4);
+      else J.R3.burst(v.x, v.gy + vt.H * 0.6, v.y, '#2a2a2a', 1, 0.6, 1.2, 1.8);
+      return;
+    }
+    if (!pw || !pw.smoke) {
+      v.smokeT = k < 0.2 ? 0.05 : 0.18;
+      J.R3.burst(x, y, h, k < 0.2 ? '#ff8a30' : '#6a6a6a', 1, 0.8, 0.9, 1.6);
+    } else if (v.fire) {
+      v.smokeT = 0.06;
+      pw.fire(x, h, y, 2, 0.35, 2.2, 0.55 + Math.min(0.5, (v.burnT || 0) * 0.08), wx, wy);
+      pw.smoke(x, h + 0.5, y, 1, '#141210', 1.2, 2.4, 1.5, 0.3, 0.55);
+      if (Math.random() < 0.3) pw.light(x, h + 0.6, y, '#ff7a2a', 2.2, 9, 0.35);
+    } else if (k < 0.25) {
+      v.smokeT = 0.08;
+      pw.smoke(x, h, y, 1, '#1f1d1b', 0.9, 2.2, 1.3, 0.25, 0.5);
+    } else {
+      // белёсый пар из радиатора
+      v.smokeT = 0.15;
+      pw.smoke(x, h, y, 1, '#b8b8b4', 0.6, 1.4, 0.9, 0.2, 0.25 + (0.5 - k) * 0.6);
+    }
+    if (v.fire) {
+      v.burnT = (v.burnT || 0) + (v.smokeT || 0.06);
+      if (v.burnT > 6) Veh.explode(v, src);
+    }
   };
   // остановившаяся машина: на свою полосу (если рядом и по курсу) или в припаркованные
   Veh.settle = function (v, tr) {
@@ -963,8 +1022,67 @@
     return drv;
   };
 
-  // ---------- Звук: мотор, занос, удары, сигнал ----------
+  // ---------- Звук: мотор, шины, ветер, сигнал, сирена, удары (синтез WebAudio, без файлов) ----------
+  // Мотор: три пилообразные/прямоугольные гармоники частоты вспышек, мягкое искажение, фильтр по нагрузке,
+  // «перебои» цилиндров (модуляция), шум впуска. Обороты считаются по передачам — при переключении проседают.
+  // Шины: визг — узкополосный шум с тоном; гул протектора и ветер растут со скоростью.
   let A = null;
+  function noiseBuf(ac) {
+    const nb = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate), nd = nb.getChannelData(0);
+    for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+    return nb;
+  }
+  function loopNoise(ac, nb) {
+    const s = ac.createBufferSource();
+    s.buffer = nb;
+    s.loop = true;
+    s.start(0, Math.random());
+    return s;
+  }
+  const filt = (ac, type, f, q) => {
+    const b = ac.createBiquadFilter();
+    b.type = type;
+    b.frequency.value = f;
+    if (q !== undefined) b.Q.value = q;
+    return b;
+  };
+  const gain = (ac, v) => {
+    const g = ac.createGain();
+    g.gain.value = v || 0;
+    return g;
+  };
+  // мотор: osc × 3 → искажение → фильтр → громкость
+  function engineVoice(ac, out, nb) {
+    const o1 = ac.createOscillator(), o2 = ac.createOscillator(), o3 = ac.createOscillator();
+    o1.type = 'sawtooth';
+    o2.type = 'square';
+    o3.type = 'sawtooth';
+    const g2 = gain(ac, 0.55), g3 = gain(ac, 0.22);
+    const sh = ac.createWaveShaper();
+    const cv = new Float32Array(256);
+    for (let i = 0; i < 256; i++) {
+      const x = (i / 255) * 2 - 1;
+      cv[i] = Math.tanh(x * 2.2) * 0.8;
+    }
+    sh.curve = cv;
+    const lp = filt(ac, 'lowpass', 420, 2.5), body = filt(ac, 'peaking', 110, 1.2);
+    body.gain.value = 6;
+    const eg = gain(ac, 0);
+    // неровность работы цилиндров
+    const lfo = ac.createOscillator(), lg = gain(ac, 0);
+    lfo.type = 'triangle';
+    lfo.connect(lg);
+    lg.connect(eg.gain);
+    o1.connect(sh);
+    o2.connect(g2).connect(sh);
+    o3.connect(g3).connect(sh);
+    sh.connect(lp).connect(body).connect(eg).connect(out);
+    // впуск: шум, полоса растёт с оборотами
+    const ns = loopNoise(ac, nb), bp = filt(ac, 'bandpass', 500, 1.1), ig = gain(ac, 0);
+    ns.connect(bp).connect(ig).connect(out);
+    for (const o of [o1, o2, o3, lfo]) o.start();
+    return { o1, o2, o3, lp, eg, lfo, lg, bp, ig };
+  }
   function audio() {
     const UI = J.UI;
     if (!UI.sound) return null;
@@ -972,49 +1090,50 @@
     try {
       if (!UI.ac) UI.ac = new (window.AudioContext || window.webkitAudioContext)();
       const ac = UI.ac;
-      const master = ac.createGain();
-      master.gain.value = 0.9;
-      master.connect(ac.destination);
-      // мотор: пила + квадрат на пол-октавы ниже через фильтр
-      const o1 = ac.createOscillator(), o2 = ac.createOscillator(), lp = ac.createBiquadFilter(), eg = ac.createGain();
-      o1.type = 'sawtooth';
-      o2.type = 'square';
-      lp.type = 'lowpass';
-      lp.frequency.value = 420;
-      eg.gain.value = 0;
-      o1.connect(lp);
-      o2.connect(lp);
-      lp.connect(eg);
-      eg.connect(master);
-      o1.start();
-      o2.start();
-      // шум (занос, удары)
-      const nb = ac.createBuffer(1, ac.sampleRate, ac.sampleRate), nd = nb.getChannelData(0);
-      for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
-      const ns = ac.createBufferSource();
-      ns.buffer = nb;
-      ns.loop = true;
-      const bp = ac.createBiquadFilter(), sg = ac.createGain();
-      bp.type = 'bandpass';
-      bp.frequency.value = 1600;
-      bp.Q.value = 1.4;
-      sg.gain.value = 0;
-      ns.connect(bp);
-      bp.connect(sg);
-      sg.connect(master);
-      ns.start();
-      // сигнал: два квадрата
-      const h1 = ac.createOscillator(), h2 = ac.createOscillator(), hg = ac.createGain();
-      h1.type = h2.type = 'square';
+      const master = gain(ac, 0.9), comp = ac.createDynamicsCompressor();
+      comp.threshold.value = -14;
+      comp.ratio.value = 3;
+      master.connect(comp).connect(ac.destination);
+      const nb = noiseBuf(ac);
+      const eng = engineVoice(ac, master, nb);
+      // машины потока рядом (ближайшая) — тише и глуше
+      const tLp = gain(ac, 1), traffic = engineVoice(ac, tLp, nb);
+      tLp.connect(master);
+      // визг шин: две узкие полосы шума + тон с дрожанием
+      const sq = gain(ac, 0);
+      const n1 = loopNoise(ac, nb), b1 = filt(ac, 'bandpass', 1050, 9), b2 = filt(ac, 'bandpass', 1900, 12);
+      n1.connect(b1).connect(sq);
+      n1.connect(b2).connect(sq);
+      const so = ac.createOscillator(), sog = gain(ac, 0.18), vib = ac.createOscillator(), vg = gain(ac, 22);
+      so.type = 'triangle';
+      so.frequency.value = 980;
+      vib.frequency.value = 7;
+      vib.connect(vg).connect(so.frequency);
+      so.connect(sog).connect(sq);
+      so.start();
+      vib.start();
+      sq.connect(master);
+      // гул протектора и ветер
+      const n2 = loopNoise(ac, nb), rl = filt(ac, 'lowpass', 300, 0.7), rg = gain(ac, 0);
+      n2.connect(rl).connect(rg).connect(master);
+      const wb = filt(ac, 'bandpass', 700, 0.4), wg = gain(ac, 0);
+      n2.connect(wb).connect(wg).connect(master);
+      // сигнал: две ноты через полосовой фильтр (тембр клаксона)
+      const h1 = ac.createOscillator(), h2 = ac.createOscillator(), hb = filt(ac, 'bandpass', 620, 1.4), hg = gain(ac, 0);
+      h1.type = h2.type = 'sawtooth';
       h1.frequency.value = 415;
       h2.frequency.value = 523;
-      hg.gain.value = 0;
-      h1.connect(hg);
-      h2.connect(hg);
-      hg.connect(master);
+      h1.connect(hb);
+      h2.connect(hb);
+      hb.connect(hg).connect(master);
       h1.start();
       h2.start();
-      A = { ac, master, o1, o2, lp, eg, sg, nb, hg, horn: false };
+      // сирена полиции: тон с плавающей частотой
+      const sr = ac.createOscillator(), srg = gain(ac, 0), srl = filt(ac, 'lowpass', 2400, 0.8);
+      sr.type = 'triangle';
+      sr.connect(srl).connect(srg).connect(master);
+      sr.start();
+      A = { ac, master, eng, traffic, sq, rg, wg, hg, h1, h2, sr, srg, nb, horn: false, rpm: 0.12, gear: 1, shiftT: 0 };
     } catch (e) {
       A = null;
     }
@@ -1032,38 +1151,121 @@
   window.addEventListener('keydown', resume, { passive: true });
   window.addEventListener('mousedown', resume, { passive: true });
   window.addEventListener('touchstart', resume, { passive: true });
+  // характер мотора по типу: частота вспышек на холостых и на отсечке, громкость
+  const ENG = {
+    sports: [30, 310, 1.25], truck: [17, 105, 1.3], bus: [16, 98, 1.25], van: [22, 170, 1], pickup: [24, 190, 1.15], kei: [30, 260, 0.75], compact: [27, 230, 0.85],
+  };
+  const engOf = (vt) => ENG[vt.id] || ENG[vt.shape] || [25, 215, 1];
+  // передачи: доли максимальной скорости
+  const GEARS = [0, 0.15, 0.29, 0.45, 0.63, 0.83, 1.05];
+  // обороты 0..1 и передача по скорости; газ на месте / в пробуксовке — обороты вверх
+  function rpmOf(v, thr) {
+    const sp = Math.abs(v.vf), vm = v.vt.vmax;
+    if (v.reverse || v.vf < -0.3) return { r: 0.2 + Math.min(0.6, (sp / (vm * 0.26)) * 0.6), g: -1 };
+    let g = 1;
+    while (g < GEARS.length - 1 && sp > GEARS[g] * vm) g++;
+    const k = J.clamp((sp - GEARS[g - 1] * vm) / ((GEARS[g] - GEARS[g - 1]) * vm), 0, 1);
+    let r = 0.22 + 0.74 * k;
+    if (g === 1) r = 0.14 + 0.82 * k;
+    if (thr > 0.5 && (v.skid > 0.5 || sp < 1)) r = Math.max(r, 0.55 + (v.skid || 0) * 0.35);
+    return { r, g };
+  }
   Veh.sound = function (v, on) {
     const a = A || (on ? audio() : null);
     if (!a) return;
-    const t = a.ac.currentTime;
+    const t = a.ac.currentTime, e = a.eng;
     if (!on || !v || v.hp <= 0 || !J.UI.sound) {
-      a.eg.gain.setTargetAtTime(0, t, 0.08);
-      a.sg.gain.setTargetAtTime(0, t, 0.05);
+      e.eg.gain.setTargetAtTime(0, t, 0.08);
+      e.ig.gain.setTargetAtTime(0, t, 0.08);
+      e.lg.gain.setTargetAtTime(0, t, 0.08);
+      a.sq.gain.setTargetAtTime(0, t, 0.05);
+      a.rg.gain.setTargetAtTime(0, t, 0.1);
+      a.wg.gain.setTargetAtTime(0, t, 0.1);
       return;
     }
-    // «передачи»: обороты растут и сбрасываются
+    const thr = J.Input && J.Input.keys ? ((J.Input.keys.KeyW || J.Input.keys.ArrowUp) ? 1 : 0) || (J.Input.touch && J.Input.tmy < -0.2 ? 1 : 0) : 0;
+    const R = rpmOf(v, thr);
+    // переключение вверх: короткий провал оборотов и тяги
+    if (R.g > a.gear && R.g > 1) a.shiftT = 0.18;
+    a.gear = R.g;
+    v.gear = R.g;
+    a.shiftT = Math.max(0, a.shiftT - 1 / 60);
+    const load = J.clamp(thr * (a.shiftT > 0 ? 0.3 : 1), 0, 1);
+    const want = a.shiftT > 0 ? R.r * 0.72 : R.r;
+    a.rpm += (want - a.rpm) * (want > a.rpm ? 0.16 : 0.1);
+    const [f0, f1, vol] = engOf(v.vt);
+    const f = f0 + (f1 - f0) * a.rpm;
+    e.o1.frequency.setTargetAtTime(f, t, 0.03);
+    e.o2.frequency.setTargetAtTime(f * 0.5, t, 0.03);
+    e.o3.frequency.setTargetAtTime(f * 1.503, t, 0.03);
+    e.lfo.frequency.setTargetAtTime(f * 0.25, t, 0.05);
+    e.lg.gain.setTargetAtTime((0.012 + 0.01 * (1 - a.rpm)) * vol, t, 0.1);
+    e.lp.frequency.setTargetAtTime(260 + a.rpm * 1300 + load * 900, t, 0.06);
+    e.eg.gain.setTargetAtTime((0.04 + 0.035 * load + 0.025 * a.rpm) * vol, t, 0.06);
+    e.bp.frequency.setTargetAtTime(350 + a.rpm * 1400, t, 0.08);
+    e.ig.gain.setTargetAtTime((0.004 + 0.02 * load * a.rpm) * vol, t, 0.08);
+    // шины, протектор, ветер
     const sp = Math.abs(v.vf);
-    const gears = [0, 7, 14, 22, 31, 44, 70];
-    let gI = 1;
-    while (gI < gears.length - 1 && sp > gears[gI]) gI++;
-    const k = (sp - gears[gI - 1]) / (gears[gI] - gears[gI - 1]);
-    const thr = Math.abs(v.accel) > 0.5 ? 1 : 0;
-    const rpm = 0.18 + 0.82 * J.clamp(k, 0, 1) * (gI === 1 ? 0.9 : 1);
-    const base = v.vt.m > 3000 ? 32 : v.type === 'sports' ? 58 : 44;
-    a.o1.frequency.setTargetAtTime(base + rpm * base * 2.6, t, 0.05);
-    a.o2.frequency.setTargetAtTime((base + rpm * base * 2.6) * 0.5, t, 0.05);
-    a.lp.frequency.setTargetAtTime(300 + rpm * 900 + thr * 300, t, 0.08);
-    a.eg.gain.setTargetAtTime(0.035 + 0.03 * thr + 0.02 * rpm, t, 0.08);
-    const skid = J.clamp((Math.abs(v.vl) - 2.5) / 6, 0, 1);
-    a.sg.gain.setTargetAtTime(skid * 0.07, t, 0.05);
+    const skid = J.clamp((v.skid || 0) * Math.min(1, sp / 4), 0, 1);
+    a.sq.gain.setTargetAtTime(skid * 0.085, t, 0.04);
+    a.rg.gain.setTargetAtTime(Math.min(0.06, sp * 0.0022), t, 0.1);
+    a.wg.gain.setTargetAtTime(Math.min(0.05, sp * sp * 0.000022), t, 0.1);
+  };
+  // звук окружающего потока: ближайшая едущая машина и сирены (вызывается каждый кадр)
+  Veh.ambient = function () {
+    const a = A;
+    if (!a || !J.UI.sound) return;
+    const t = a.ac.currentTime, cx = J.R3.cam.tx, cz = J.R3.cam.tz, p = G().player;
+    let best = null, bd = 26, sir = null, sd = 90;
+    for (const v of G().vehs) {
+      if (v.hp <= 0 || !v.driver || (p && v === p.inCar)) continue;
+      const d = Math.hypot(v.x - cx, v.y - cz);
+      if (d < bd && Math.abs(v.vf) > 0.5) {
+        bd = d;
+        best = v;
+      }
+      if (v.siren && d < sd) {
+        sd = d;
+        sir = v;
+      }
+    }
+    const e = a.traffic;
+    if (best) {
+      const sp = Math.abs(best.vf), [f0, f1, vol] = engOf(best.vt);
+      const r = 0.2 + Math.min(0.7, (sp / best.vt.vmax) * 1.6) * (0.6 + 0.4 * ((sp * 0.37) % 1));
+      const f = f0 + (f1 - f0) * r;
+      e.o1.frequency.setTargetAtTime(f, t, 0.08);
+      e.o2.frequency.setTargetAtTime(f * 0.5, t, 0.08);
+      e.o3.frequency.setTargetAtTime(f * 1.5, t, 0.08);
+      e.lfo.frequency.setTargetAtTime(f * 0.25, t, 0.1);
+      e.lp.frequency.setTargetAtTime(240 + r * 700, t, 0.1);
+      const k = (1 - bd / 26) ** 2;
+      e.eg.gain.setTargetAtTime(0.045 * k * vol, t, 0.12);
+      e.lg.gain.setTargetAtTime(0.008 * k, t, 0.12);
+      e.ig.gain.setTargetAtTime(0.004 * k, t, 0.12);
+    } else {
+      e.eg.gain.setTargetAtTime(0, t, 0.2);
+      e.lg.gain.setTargetAtTime(0, t, 0.2);
+      e.ig.gain.setTargetAtTime(0, t, 0.2);
+    }
+    // сирена: «вой» (плавно вверх-вниз) или «йелп» вблизи
+    if (sir) {
+      const k = (1 - sd / 90) ** 1.5, ph = G().t;
+      const yelp = sd < 25;
+      const f = yelp ? 900 + 500 * Math.abs(((ph * 3) % 2) - 1) : 700 + 650 * (0.5 - 0.5 * Math.cos(ph * 1.6));
+      a.sr.frequency.setTargetAtTime(f, t, 0.03);
+      a.srg.gain.setTargetAtTime(0.05 * k, t, 0.1);
+    } else a.srg.gain.setTargetAtTime(0, t, 0.15);
   };
   Veh.horn = function (on) {
     const a = A || (on ? audio() : null);
     if (!a || a.horn === on) return;
     a.horn = on;
-    a.hg.gain.setTargetAtTime(on ? 0.05 : 0, a.ac.currentTime, 0.02);
+    const p = G().player, big = p && p.inCar && p.inCar.vt.m > 3000;
+    a.h1.frequency.value = big ? 233 : 415;
+    a.h2.frequency.value = big ? 294 : 523;
+    a.hg.gain.setTargetAtTime(on ? 0.07 : 0, a.ac.currentTime, 0.015);
     if (on) {
-      const p = G().player;
       if (p && p.inCar) J.scare(p.inCar.x + Math.cos(p.inCar.ang) * 8, p.inCar.y + Math.sin(p.inCar.ang) * 8, 6, p.inCar.x, p.inCar.y, Math.cos(p.inCar.ang), Math.sin(p.inCar.ang));
     }
   };
@@ -1075,48 +1277,87 @@
     if (!a) return;
     try {
       const ac = a.ac, t = ac.currentTime;
-      const o = ac.createOscillator(), o2 = ac.createOscillator(), g = ac.createGain();
-      o.type = o2.type = 'square';
-      const f = v.vt.m > 3000 ? 280 : 380 + (v.id % 5) * 20;
+      const o = ac.createOscillator(), o2 = ac.createOscillator(), bp = filt(ac, 'bandpass', 600, 1.3), g = ac.createGain();
+      o.type = o2.type = 'sawtooth';
+      const f = v.vt.m > 3000 ? 240 : 380 + (v.id % 5) * 20;
       o.frequency.value = f;
       o2.frequency.value = f * 1.26;
-      o.connect(g);
-      o2.connect(g);
-      g.connect(a.master);
-      const gv = 0.045 * vol * (1 - d / 55);
+      o.connect(bp);
+      o2.connect(bp);
+      bp.connect(g).connect(a.master);
+      const gv = 0.07 * vol * (1 - d / 55);
+      const len = 0.18 + (v.id % 3) * 0.14;
       g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(gv, t + 0.02);
-      g.gain.setValueAtTime(gv, t + 0.32);
-      g.gain.linearRampToValueAtTime(0, t + 0.38);
+      g.gain.linearRampToValueAtTime(gv, t + 0.015);
+      g.gain.setValueAtTime(gv, t + len);
+      g.gain.linearRampToValueAtTime(0, t + len + 0.05);
+      // иногда — двойной сигнал
+      if (v.id % 2) {
+        g.gain.setValueAtTime(0, t + len + 0.12);
+        g.gain.linearRampToValueAtTime(gv, t + len + 0.135);
+        g.gain.setValueAtTime(gv, t + len + 0.3);
+        g.gain.linearRampToValueAtTime(0, t + len + 0.35);
+      }
       o.start(t);
       o2.start(t);
-      o.stop(t + 0.4);
-      o2.stop(t + 0.4);
+      o.stop(t + len + 0.4);
+      o2.stop(t + len + 0.4);
     } catch (e) {}
   };
-  function noiseHit(gain, f, dur) {
+  function noiseHit(gainV, f, dur, type) {
     const a = audio();
     if (!a) return;
     try {
       const ac = a.ac, t = ac.currentTime;
-      const s = ac.createBufferSource(), fl = ac.createBiquadFilter(), g = ac.createGain();
+      const s = ac.createBufferSource(), fl = filt(ac, type || 'lowpass', f), g = ac.createGain();
       s.buffer = a.nb;
-      fl.type = 'lowpass';
-      fl.frequency.value = f;
-      s.connect(fl);
-      fl.connect(g);
-      g.connect(a.master);
-      g.gain.setValueAtTime(gain, t);
+      s.connect(fl).connect(g).connect(a.master);
+      g.gain.setValueAtTime(gainV, t);
       g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      s.start(t, Math.random() * 0.5);
+      s.start(t, Math.random() * 1.5);
       s.stop(t + dur + 0.02);
     } catch (e) {}
   }
-  Veh.crashSound = (imp, d) => noiseHit(Math.min(0.3, imp * 0.02) * (1 - d / 50), 700 + imp * 60, 0.25 + Math.min(0.4, imp * 0.02));
-  Veh.thump = (d) => d < 40 && noiseHit(0.12 * (1 - d / 45), 300, 0.18);
+  // металл: несколько негармонических тонов с быстрым затуханием (звон и скрежет кузова)
+  function metal(gainV, base, dur) {
+    const a = audio();
+    if (!a) return;
+    try {
+      const ac = a.ac, t = ac.currentTime;
+      for (const m of [1, 1.62, 2.24, 3.48, 5.4]) {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = m < 2 ? 'triangle' : 'square';
+        const f = base * m * (0.95 + Math.random() * 0.1);
+        o.frequency.setValueAtTime(f, t);
+        o.frequency.exponentialRampToValueAtTime(f * 0.92, t + dur);
+        const pk = (gainV / m) * (m > 3 ? 0.35 : 1);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(pk, t + 0.004);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur * (1.2 - m * 0.12));
+        o.connect(g).connect(a.master);
+        o.start(t);
+        o.stop(t + dur + 0.05);
+      }
+    } catch (e) {}
+  }
+  Veh.crashSound = (imp, d) => {
+    const k = Math.max(0, 1 - d / 50);
+    noiseHit(Math.min(0.32, imp * 0.022) * k, 500 + imp * 50, 0.22 + Math.min(0.45, imp * 0.022));
+    metal(Math.min(0.09, imp * 0.006) * k, 150 + Math.random() * 120, 0.25 + Math.min(0.5, imp * 0.025));
+    if (imp > 8) noiseHit(0.08 * k, 2500, 0.35, 'highpass'); // скрежет и осколки
+  };
+  Veh.glassSound = (d) => {
+    const k = Math.max(0, 1 - d / 45);
+    noiseHit(0.12 * k, 3500, 0.5, 'highpass');
+    if (J.Sfx && J.Sfx.glass && k > 0.3) J.Sfx.glass();
+  };
+  Veh.thump = (d) => d < 40 && noiseHit(0.14 * (1 - d / 45), 300, 0.18);
   Veh.boom = (v) => {
     const d = Math.hypot(v.x - J.R3.cam.tx, v.y - J.R3.cam.tz);
-    if (d < 80) noiseHit(0.45 * (1 - d / 85), 260, 1.2);
+    if (d < 80) {
+      noiseHit(0.5 * (1 - d / 85), 240, 1.6);
+      metal(0.06 * (1 - d / 85), 90, 0.9);
+    }
   };
 
   // ---------- Спидометр и звёзды розыска ----------
@@ -1154,7 +1395,7 @@
       Veh._lastKmh = kmh;
       Veh._hudB.textContent = kmh;
     }
-    const gear = v.reverse ? 'R' : Math.abs(v.vf) < 0.3 ? 'N' : 'D';
+    const gear = v.reverse ? 'R' : Math.abs(v.vf) < 0.3 ? 'N' : v.gear > 0 ? String(v.gear) : 'D';
     if (Veh._lastGear !== gear) {
       Veh._lastGear = gear;
       Veh._hudG.textContent = gear;
