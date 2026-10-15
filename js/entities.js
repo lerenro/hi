@@ -857,7 +857,7 @@
           alive = false;
           break;
         }
-        J.hurt(o, p.dmg, p.owner, { fx: p.fx, kind: p.kind, knock: 1.2, ang: Math.atan2(p.vy, p.vx) });
+        J.hurt(o, p.dmg, p.owner, { fx: p.fx, kind: p.kind, knock: p.knock || 1.2, ang: Math.atan2(p.vy, p.vx), unblockable: p.unblockable, stun: p.stun });
         if (J.Pw && J.Pw.ready) J.Pw.onProjHit(p, o);
         if (o.reflectDmg && p.owner && !p.owner.dead) J.hurt(p.owner, p.dmg * 0.5, null, { dot: true });
         if (p.cloud) J.addField(p.owner, { x: p.x, y: p.y, radius: p.cloud.radius, dur: p.cloud.dur, dps: p.cloud.dps, color: p.color, fx: { poison: 3 } });

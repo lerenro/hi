@@ -1259,6 +1259,8 @@
           Pw.box(x, h, z, s * 0.12, s * 0.45, L, '#e9edf5', 0, Math.PI / 2 - a, 0);
           Pw.box(x - ca * L * 0.55, h, z - sa * L * 0.55, s * 0.3, s * 0.3, s * 0.6, p.shape === 'blade' ? '#c7ccd8' : '#4a3a2a', 0, Math.PI / 2 - a, 0);
           if (emitK > 0) Pw.gseg(x - ca * L * 1.2, h, z - sa * L * 1.2, x - ca * L * 0.5, h, z - sa * L * 0.5, s * 0.12, '#9ab0d0');
+          // зависший в остановленном времени нож поблёскивает остриём
+          if (p.held || p.thaw > 0) Pw.orb(x + ca * L * 0.5, h, z + sa * L * 0.5, s * (0.25 + 0.2 * Math.abs(Math.sin(Pw.simT * 6 + p.x * 3))), '#ffffff');
           break;
         }
         case 'nail':
@@ -1281,6 +1283,18 @@
           if (emitK > 0 && rnd() < 0.4) Pw.shards(x, h, z, 1, p.color, 0.8, s * 0.4, 1, a + Math.PI, 0.5, 2, 0.4);
           break;
         case 'spiral': {
+          if (p.beyond) {
+            // Go Beyond: «несуществующий» пузырь — тугая спираль-веретено, кольца крутятся поперёк полёта
+            const t0 = p.age * 18;
+            for (let i = 0; i < 3; i++) Pw.hoop(x - ca * i * s * 0.6, h, z - sa * i * s * 0.6, s * (1.3 - i * 0.3), s * 0.07, i ? '#ff7ab8' : '#ffffff', true, 16, Math.sin(t0 + i * 2) * s);
+            Pw.orb(x, h, z, s * 0.7, '#ffe6f2');
+            for (let i = 0; i < 6; i++) {
+              const b0 = t0 + i * 1.05, b1 = b0 + 1.05, d0 = i * s * 0.5, d1 = d0 + s * 0.5, r0 = s * (1 - i * 0.12), r1 = s * (1 - (i + 1) * 0.12);
+              Pw.gseg(x - ca * d0 - sa * Math.cos(b0) * r0, h + Math.sin(b0) * r0, z - sa * d0 + ca * Math.cos(b0) * r0, x - ca * d1 - sa * Math.cos(b1) * r1, h + Math.sin(b1) * r1, z - sa * d1 + ca * Math.cos(b1) * r1, s * 0.08, '#ff9ad0');
+            }
+            if (projLight++ < 1) Pw.light(x, h, z, '#ff7ab8', 1.2, 5, 0.08);
+            break;
+          }
           // золотое вращение: вращающийся обруч и спираль искр
           const r = s * 1.2;
           Pw.hoop(x, h, z, r, s * 0.18, p.color, true, 14, Math.sin(p.age * 20) * r);
@@ -3940,4 +3954,238 @@
     }
   };
 
+
+  // ---------- 34. Фирменные силы: Финальный ОРА, ножи Мира, песчаная волна Шута, радуга Прогноза Погоды, Go Beyond, револьвер Императора ----------
+  // Звёздная Платина: стенд хватает цель взглядом, короткий бешеный шквал и сокрушительный последний удар
+  POW.finalOra = {
+    use(u, ab, aim, c) {
+      const sd = sdOf(u);
+      const cry = (sd && sd.cry) || 'ОРА';
+      const a0 = fireAng(u, aim, 3);
+      u.face = a0;
+      Pw.charge(u, 0.32, c1Of(u));
+      Pw.surge(u, 1.6);
+      say(u, null, 'ゴゴゴゴ', 'big', '#c7b6ff', '#1a0a3a');
+      snd(u, 'menace', 1.2, 0.3);
+      if (u.isPlayer && fxOn()) J.Fx.linesAt(u.x, u.y, gy(u.x, u.y) + 1.2, 0.6, 0.35, false);
+      if (J.Cb) J.Cb.threat(u, 0.32, 'rush');
+      u.anim = { type: 'pose', t: 0.3, max: 0.3, stand: true };
+      Pw.add({
+        u, ab, c, cry, a0, go: false,
+        update() {
+          if (u.dead || !u.canAct()) return false;
+          if (this.t < 0.3) return true;
+          const fin = this.ab.knock || 9;
+          // короткий раш без продления: добивание в 8 раз сильнее обычного и с огромным отбросом
+          u.channel = {
+            type: 'rush', t: 0.7, max: 0.7, tick: 0, dmg: this.ab.dmg * this.c.pw * 0.07, range: this.ab.range || 1.8, ang: u.isPlayer ? J.P.aim(u, 3).ang : this.a0, cry: this.cry, kind: this.c.kind, key: null, ext: 0, maxExt: 0, mag: 0.4, fin: 0, n: 0,
+            finMul: 8.5, finKnock: fin * 1.5, finStun: this.ab.stun || 1.2, onFin: Pw.finalOraHit,
+          };
+          u.anim = { type: 'rush', t: 0.7, max: 0.7, stand: true };
+          if (J.Fx) J.Fx.rushStart(u, this.cry);
+          return false;
+        },
+      });
+      return true;
+    },
+  };
+  // последний удар Финального ОРА: воронка, ударная волна конусом, пыль, тряска
+  Pw.finalOraHit = function (e, c, n) {
+    const a = c.ang;
+    const x = e.x + Math.cos(a) * 1.7, y = e.y + Math.sin(a) * 1.7, h = gy(x, y);
+    Pw.surge(e, 2);
+    if (!n) return;
+    Pw.decal('crater', x, y, 2.6, 10);
+    for (let i = 0; i < 16; i++) {
+      const b = a + (rnd() - 0.5) * 1.1, v = 4 + rnd() * 5;
+      Pw.puff(x, h + 0.3 + rnd() * 0.8, y, Math.cos(b) * v, 0.5 + rnd(), Math.sin(b) * v, 0.6 + rnd() * 0.4, 0.4, 1.3, '#b8ab98', '#8a7e70', -0.5, 0.55, false);
+    }
+    Pw.glow(x, h + 1.2, y, 20, c1Of(e), 7, 0.12, 0.35, 0, 0.3);
+    Pw.light(x, h + 1.2, y, c2Of(e), 3, 9, 0.25);
+    if (fxOn() && near(e, null, 30)) {
+      J.Fx.shock(x, y, 1.5);
+      J.Fx.debris(x, h + 0.3, y, Math.cos(a), Math.sin(a), 22, '#7a6e60');
+      J.Fx.word('ドゴォォン!!', x, y, h + 2, 'fin', '#ffffff', '#2a0a5a');
+    }
+    R3.cam.shake = Math.max(R3.cam.shake || 0, 0.5);
+    snd(e, 'boom', 0.8);
+  };
+
+  // Мир: ножи. В своём остановленном времени — кольцо ножей вокруг цели, висят, пока время не пойдёт
+  POW.knives = {
+    use(u, ab, aim, c) {
+      const g = G();
+      const ts = g.timestop && g.timestop.by === u;
+      const tg = pickTarget(u, aim, (ab.range || 10) + 2, 1.3);
+      return windup(u, aim, ts ? 0.2 : 0.1, '#e9edf5', () => {
+        const a = fireAng(u, aim, ab.range || 10);
+        u.face = a;
+        u.anim = { type: 'punch', t: 0.3, max: 0.3, stand: true };
+        const h = Pw.hand(u);
+        Pw.glow(h.x, h.h, h.z, 8, '#ffffff', 3, 0.07, 0.25);
+        snd(u, 'whoosh', 0.14, false, 0.12);
+        if (ts && tg && !tg.dead) {
+          // «Ты окружён»: ножи со всех сторон, остриём к цели
+          const N = (ab.n || 5) + 5;
+          const w = g.world;
+          let k = 0;
+          for (let i = 0; i < N; i++) {
+            const b = (i / N) * TAU + rnd() * 0.2;
+            const R = 2.2 + (i % 2) * 0.5;
+            const x = tg.x + Math.cos(b) * R, y = tg.y + Math.sin(b) * R;
+            if (w.solid(x, y)) continue;
+            const p = J.spawnProj(u, { ang: b + Math.PI, speed: ab.speed || 13, dmg: ab.dmg * c.pw, range: R + 2.5, shape: 'knife', color: ab.color, size: (ab.size || 0.22) * 1.5, kind: c.kind, stand: true, x, y });
+            p.tsAge = 1;
+            p.held = true;
+            p.h = 0.7 + (i % 3) * 0.35;
+            if (k++ < 6) Pw.glow(x, gy(x, y) + p.h, y, 3, '#ffffff', 1, 0.06, 0.3, 0);
+          }
+          say(u, tg, 'ザ・ワールド', 'big', '#f2c230', '#1a3a10');
+          if (u.isPlayer) J.UI.toast('Ножи повисли кольцом — сорвутся, когда время пойдёт.', 'gold');
+        } else fan(u, ab, a, c, { shape: 'knife' }, (p) => (p.glint = 1));
+      });
+    },
+  };
+
+  // Шут: песок поднимается стеной и катится вперёд волной, сбивая с ног и засыпая глаза
+  POW.sandWave = {
+    use(u, ab, aim, c) {
+      return windup(u, aim, 0.18, '#d9b77a', () => {
+        const a = fireAng(u, aim, 6);
+        u.face = a;
+        u.anim = { type: 'heavy', t: 0.35, max: 0.35, stand: true };
+        snd(u, 'whoosh', 0.5, true, 0.2);
+        say(u, null, 'ザザザァッ', 'big', '#e8cf9a', '#3a2a10');
+        const L = Math.max(2, freeLen(u.x, u.y, a, 7));
+        Pw.add({
+          u, a, L, x0: u.x, y0: u.y, hit: new Set(), dur: 0.55, dmg: ab.dmg * c.pw, ab,
+          update() {
+            const r = (this.t / this.dur) * this.L;
+            for (const o of G().ents) {
+              if (o.dead || this.hit.has(o.id) || !J.hostile(u, o)) continue;
+              const dx = o.x - this.x0, dy = o.y - this.y0, d = Math.hypot(dx, dy);
+              if (d > r + o.r || d < r - 1.4 || Math.abs(J.angDiff(this.a, Math.atan2(dy, dx))) > 0.75) continue;
+              this.hit.add(o.id);
+              J.hurt(o, this.dmg, u, { knock: 6, stun: 0.6, ang: Math.atan2(dy, dx), fx: { slow: 3 }, kind: 'phys' });
+              const b = Pw.body(o, 1.4);
+              Pw.smoke(b.x, b.h, b.z, 6, '#d9b77a', 0.4, 0.8, 0.3, 0.3, 0.7);
+            }
+            return this.t < this.dur;
+          },
+          draw(dt) {
+            const k = this.t / this.dur, r = k * this.L;
+            if (dt <= 0) return;
+            // гребень волны: песок вздымается по дуге и осыпается
+            for (let i = 0; i < 11; i++) {
+              const b = this.a + (i / 10 - 0.5) * 1.4;
+              const x = this.x0 + Math.cos(b) * r, y = this.y0 + Math.sin(b) * r, h = gy(x, y);
+              const up = 5 * (1 - k * 0.5);
+              Pw.puff(x, h + 0.1, y, Math.cos(b) * 2.5, up * (0.7 + rnd() * 0.6), Math.sin(b) * 2.5, 0.6 + rnd() * 0.35, 0.45, 1.2, '#e2c48e', '#a8875a', 8, 0.85, false);
+              Pw.puff(x, h + 0.6 + rnd() * 0.8, y, Math.cos(b) * 3, up * 0.4, Math.sin(b) * 3, 0.5, 0.7, 1.4, '#d6b780', '#9a7a50', 4, 0.6, false);
+              if (i % 2 === 0) Pw.puff(x, h + 0.05, y, Math.cos(b) * 0.6, 0.2, Math.sin(b) * 0.6, 1.1, 0.6, 1.6, '#cfae78', null, -0.1, 0.45, false);
+            }
+            if (!this.dec || this.t - this.dec > 0.12) {
+              this.dec = this.t;
+              Pw.decal('sand', this.x0 + Math.cos(this.a) * r, this.y0 + Math.sin(this.a) * r, 2.4, 8);
+            }
+          },
+        });
+      });
+    },
+  };
+
+  // Прогноз Погоды: радуга через небо — кто её видит, видит улиток и бросается на своих
+  POW.rainbow = {
+    use(u, ab, aim, c) {
+      const tg = pickTarget(u, aim, ab.range || 8, 1.2);
+      if (!tg) return false;
+      return windup(u, aim, 0.3, '#bfe0ff', () => {
+        const vs = G().ents.filter((o) => !o.dead && J.hostile(u, o) && J.dist(o.x, o.y, tg.x, tg.y) <= (ab.aoe || 5));
+        for (const v of vs) {
+          J.Abil.applyHex(u, v, ab.status || 'charm', ab.dur, c.pw);
+          if (!v.dead && v.st.charm > 0) v._snail = 1;
+        }
+        shout(u, 'ヘビー・ウェザー', '#e8f2ff', '#1a2a4a');
+        snd(u, 'life');
+        if (u.isPlayer && fxOn()) J.Fx.flash('#e8f2ff', 0.06, 0.4);
+        Pw.add({
+          u, x: tg.x, y: tg.y, a: Math.atan2(tg.y - u.y, tg.x - u.x) + Math.PI / 2, vs, dur: Math.min(8, ab.dur || 8),
+          update() {
+            return this.t < this.dur;
+          },
+          draw(dt) {
+            const f = Math.min(1, this.t / 0.6) * Math.min(1, (this.dur - this.t) / 1);
+            const R = 7, ca = Math.cos(this.a), sa = Math.sin(this.a), h0 = gy(this.x, this.y) - 0.5;
+            const RC = ['#ff3a3a', '#ff9a2a', '#ffe14a', '#5adf6a', '#3aa8ff', '#5a5aff', '#b05aff'];
+            for (let j = 0; j < 7; j++) {
+              const rr = R - j * 0.32;
+              C.set(RC[j]).multiplyScalar(0.55 * f);
+              let px = this.x - ca * rr, ph = h0, pz = this.y - sa * rr;
+              for (let i = 1; i <= 14; i++) {
+                const b = (i / 14) * Math.PI;
+                const nx = this.x - Math.cos(b) * ca * rr, nh = h0 + Math.sin(b) * rr * 0.75, nz = this.y - Math.cos(b) * sa * rr;
+                Pw.gseg(px, ph, pz, nx, nh, nz, 0.14, C);
+                px = nx;
+                ph = nh;
+                pz = nz;
+              }
+            }
+            // улитки на одурманенных
+            for (const v of this.vs) {
+              if (v.dead || !(v.st.charm > 0)) continue;
+              const b = Pw.body(v, 1.75);
+              Pw.sph(b.x, b.h, b.z, 0.13, '#c9a46b', 0.9);
+              Pw.hoop(b.x, b.h, b.z, 0.09, 0.02, '#7a5a2a', false, 10, 0);
+              if (dt > 0 && rnd() < 0.1) Pw.puff(b.x, b.h - 0.1, b.z, 0, -0.3, 0, 0.8, 0.05, 0.03, '#d9f2c8', null, 2, 0.6, false);
+            }
+          },
+        });
+      });
+    },
+  };
+
+  // Мягкий и Влажный: Go Beyond — «несуществующий» вращающийся пузырь: насквозь через стены и блок
+  POW.goBeyond = {
+    use(u, ab, aim, c) {
+      return windup(u, aim, 0.35, '#ff7ab8', () => {
+        const a = fireAng(u, aim, ab.range || 14);
+        u.face = a;
+        u.anim = { type: 'punch', t: 0.35, max: 0.35, stand: true };
+        shout(u, 'ゴー・ビヨンド', '#ffd6ec', '#3a0a2a');
+        snd(u, 'whoosh', 0.4, true, 0.14);
+        fan(u, ab, a, c, { shape: 'spiral', ghost: true, unblockable: true, beyond: 1, size: 0.42, stun: 0.8, knock: 5 });
+      });
+    },
+  };
+
+  // Император: револьвер появляется в руке, пули сами доворачивают к цели
+  POW.emperor = {
+    use(u, ab, aim, c) {
+      return windup(u, aim, ab.n > 2 ? 0.2 : 0.08, '#ffd166', () => {
+        const a = fireAng(u, aim, ab.range || 12);
+        u.face = a;
+        u.anim = { type: 'punch', t: 0.3, max: 0.3, stand: false };
+        Pw.add({
+          u, dur: 0.6,
+          update() {
+            return this.t < this.dur;
+          },
+          draw() {
+            const h = Pw.hand(u);
+            const f = u.face, ca = Math.cos(f), sa = Math.sin(f);
+            const k = Math.min(1, this.t / 0.08) * Math.min(1, (this.dur - this.t) / 0.15);
+            Pw.box(h.x + ca * 0.12, h.h + 0.03, h.z + sa * 0.12, 0.05 * k, 0.07 * k, 0.3 * k, '#c9a04a', 0, Math.PI / 2 - f, 0);
+            Pw.box(h.x - ca * 0.02, h.h - 0.05, h.z - sa * 0.02, 0.045 * k, 0.12 * k, 0.07 * k, '#7c5a2a', 0.3, Math.PI / 2 - f, 0);
+          },
+        });
+        const h = Pw.hand(u);
+        Pw.puff(h.x + Math.cos(a) * 0.4, h.h, h.z + Math.sin(a) * 0.4, Math.cos(a) * 2, 0.2, Math.sin(a) * 2, 0.08, 0.4, 0.12, '#ffe6a0', '#ff8a2a', 0, 1);
+        Pw.smoke(h.x, h.h, h.z, 3, '#9a9490', 0.15, 0.7, 0.3, 0.05, 0.4);
+        Pw.light(h.x, h.h, h.z, '#ffd08a', 1.6, 6, 0.06);
+        snd(u, 'shot', ab.dmg > 40 ? 1.2 : 0.8);
+        say(u, null, ab.n > 2 ? 'バババン!' : 'バン!', 'mid', '#ffd166', '#3a2a00');
+        fan(u, ab, a, c, { shape: 'bullet' });
+      });
+    },
+  };
 })();

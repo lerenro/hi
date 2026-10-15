@@ -14,7 +14,7 @@
     abil: [
       { name: 'ОРА-раш', kind: 'rush', dmg: 4, dur: 1.4, range: 1.6, cd: 6, cost: 14, lvl: 1 },
       { name: 'Звёздный палец', pw: 'starFinger', kind: 'beam', dmg: 26, range: 6, width: 0.45, color: '#c7b6ff', cd: 5, cost: 12, lvl: 3 },
-      { name: 'Финальный ОРА', kind: 'strike', dmg: 60, range: 1.8, knock: 9, stun: 1.2, cd: 14, cost: 25, lvl: 6 },
+      { name: 'Финальный ОРА', pw: 'finalOra', kind: 'strike', dmg: 60, range: 1.8, knock: 9, stun: 1.2, cd: 14, cost: 25, lvl: 6 },
     ],
     evo: { to: 'star_platinum_tw', how: 'witness', note: 'Пережить остановку времени врагом (ур. 5+)' },
   });
@@ -76,7 +76,7 @@
     stats: 'BCD CDC', c1: '#c9a46b', c2: '#3b3b46', head: 'mask', cry: 'ГАВ', type: 'Песок',
     desc: 'Стенд из песка. Принимает любую форму, может летать.',
     abil: [
-      { name: 'Песчаный удар', kind: 'nova', radius: 2.6, dmg: 16, color: '#d9b77a', fx: { slow: 2 }, cd: 5, cost: 10, lvl: 1 },
+      { name: 'Песчаный удар', pw: 'sandWave', kind: 'nova', radius: 2.6, dmg: 16, color: '#d9b77a', fx: { slow: 2 }, cd: 5, cost: 10, lvl: 1 },
       { name: 'Песчаные крылья', kind: 'buff', buff: 'fly', dur: 12, cd: 20, cost: 25, lvl: 2 },
       { name: 'Песчаный двойник', kind: 'summon', unit: 'decoy', n: 1, life: 12, cd: 18, cost: 20, lvl: 5 },
     ],
@@ -87,7 +87,7 @@
     desc: 'Стенд ДИО. Останавливает время. ZA WARUDO!',
     abil: [
       { name: 'МУДА-раш', kind: 'rush', dmg: 4.5, dur: 1.4, range: 1.6, cd: 6, cost: 14, lvl: 1 },
-      { name: 'Ножи', kind: 'shoot', n: 5, spread: 30, dmg: 10, speed: 13, range: 10, proj: 'knife', color: '#e9edf5', size: 0.22, cd: 4, cost: 12, lvl: 3 },
+      { name: 'Ножи', pw: 'knives', kind: 'shoot', n: 5, spread: 30, dmg: 10, speed: 13, range: 10, proj: 'knife', color: '#e9edf5', size: 0.22, cd: 4, cost: 12, lvl: 3 },
       { name: 'ZA WARUDO!', kind: 'timestop', dur: 4, cd: 45, cost: 60, lvl: 6 },
     ],
   });
@@ -97,9 +97,9 @@
     desc: 'Стенд-револьвер Хол Хорса. Пули поворачивают в полёте.',
     ranged: true,
     abil: [
-      { name: 'Пули Императора', kind: 'shoot', n: 2, spread: 14, dmg: 14, speed: 15, range: 12, proj: 'bullet', color: '#ffd166', size: 0.14, homing: 3, cd: 1.6, cost: 6, lvl: 1 },
-      { name: 'Шквал выстрелов', kind: 'shoot', n: 6, spread: 50, dmg: 12, speed: 15, range: 12, proj: 'bullet', color: '#ffd166', size: 0.14, homing: 4, cd: 7, cost: 16, lvl: 3 },
-      { name: 'Пуля в лоб', kind: 'shoot', n: 1, dmg: 70, speed: 20, range: 14, proj: 'bullet', color: '#fff2a8', size: 0.18, homing: 6, cd: 15, cost: 25, lvl: 6 },
+      { name: 'Пули Императора', pw: 'emperor', kind: 'shoot', n: 2, spread: 14, dmg: 14, speed: 15, range: 12, proj: 'bullet', color: '#ffd166', size: 0.14, homing: 3, cd: 1.6, cost: 6, lvl: 1 },
+      { name: 'Шквал выстрелов', pw: 'emperor', kind: 'shoot', n: 6, spread: 50, dmg: 12, speed: 15, range: 12, proj: 'bullet', color: '#ffd166', size: 0.14, homing: 4, cd: 7, cost: 16, lvl: 3 },
+      { name: 'Пуля в лоб', pw: 'emperor', kind: 'shoot', n: 1, dmg: 70, speed: 20, range: 14, proj: 'bullet', color: '#fff2a8', size: 0.18, homing: 6, cd: 15, cost: 25, lvl: 6 },
     ],
   });
   add({
@@ -593,7 +593,7 @@
     abil: [
       { name: 'Молния', pw: 'lightning', kind: 'nova', at: 'aim', range: 7, radius: 1.8, dmg: 34, color: '#fff27a', fx: { stun: 0.8 }, cd: 3, cost: 10, lvl: 1 },
       { name: 'Ливень', kind: 'field', radius: 6, dur: 10, dps: 5, color: '#7fb8ff', fx: { slow: 2 }, follow: true, cd: 18, cost: 24, lvl: 3 },
-      { name: 'Тяжёлая погода', kind: 'hex', status: 'charm', dur: 10, range: 8, aoe: 5, cd: 30, cost: 45, lvl: 7 },
+      { name: 'Тяжёлая погода', pw: 'rainbow', kind: 'hex', status: 'charm', dur: 10, range: 8, aoe: 5, cd: 30, cost: 45, lvl: 7 },
     ],
   });
   add({
@@ -796,7 +796,7 @@
     abil: [
       { name: 'Пузыри-воры', kind: 'shoot', n: 3, spread: 30, dmg: 10, speed: 6, range: 10, proj: 'bubble', color: '#e6f3ff', size: 0.3, fx: { silence: 3, slow: 2 }, cd: 2.5, cost: 8, lvl: 1 },
       { name: 'ОРА-раш', kind: 'rush', dmg: 4, dur: 1.3, range: 1.5, cd: 6, cost: 14, lvl: 2 },
-      { name: 'Go Beyond', kind: 'shoot', n: 1, dmg: 70, speed: 7, range: 14, proj: 'spiral', color: '#ff7ab8', size: 0.3, homing: 4, pierce: 99, cd: 18, cost: 32, lvl: 7 },
+      { name: 'Go Beyond', pw: 'goBeyond', kind: 'shoot', n: 1, dmg: 70, speed: 7, range: 14, proj: 'spiral', color: '#ff7ab8', size: 0.3, homing: 4, pierce: 99, cd: 18, cost: 32, lvl: 7 },
     ],
   });
   add({

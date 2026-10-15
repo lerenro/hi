@@ -585,7 +585,8 @@
     }
   };
   function rushFinisher(e, c, sf) {
-    const n = J.hitArc(e, c.ang, c.range + sf + 0.3, 1.5, c.dmg * 3.5, { knock: 8, stun: 0.5, kind: c.kind, finisher: true, melee: true, gdmg: 60 });
+    const n = J.hitArc(e, c.ang, c.range + sf + 0.3, 1.5, c.dmg * (c.finMul || 3.5), { knock: c.finKnock || 8, stun: c.finStun || 0.5, kind: c.kind, finisher: true, melee: true, gdmg: c.finMul ? 120 : 60, launch: !!c.finMul });
+    if (c.onFin) c.onFin(e, c, n);
     J.R3.flash(e.x + Math.cos(c.ang) * 1.3, e.y + Math.sin(c.ang) * 1.3, 1.1, e.stand ? J.STANDS[e.stand.id].c2 : '#ffd84a', 0.25);
     e.channel = null;
     const so = J.Cb && J.Cb.standOn(e);
