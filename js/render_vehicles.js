@@ -7,109 +7,10 @@
 (function () {
   const R3 = J.R3;
   const col = (h) => new THREE.Color(h);
-  const V = (x, y, z) => new THREE.Vector3(x, y, z);
-  const tA = new THREE.Vector3(), tB = new THREE.Vector3(), tN = new THREE.Vector3();
-
-  // выпуклый плоский многоугольник веером; нормаль разворачиваем по nExp
-  function face(gb, pts, nExp, c) {
-    tA.subVectors(pts[1], pts[0]);
-    tB.subVectors(pts[2], pts[0]);
-    tN.crossVectors(tA, tB);
-    if (tN.dot(nExp) < 0) pts = pts.slice().reverse();
-    for (let i = 1; i < pts.length - 1; i++) gb.tri(pts[0].toArray(), pts[i].toArray(), pts[i + 1].toArray(), c);
-  }
-  // призма по боковому профилю (z, y) с полушириной hw(z, y); colEdge(i) — цвет грани i (null — не рисовать)
-  function prism(gb, prof, hwFn, capCol, colEdge) {
-    const n = prof.length;
-    const L = prof.map(([z, y]) => V(hwFn(z, y), y, z));
-    const Rr = prof.map(([z, y]) => V(-hwFn(z, y), y, z));
-    if (capCol) {
-      face(gb, L, V(1, 0, 0), capCol);
-      face(gb, Rr, V(-1, 0, 0), capCol);
-    }
-    let cz = 0, cy = 0;
-    prof.forEach(([z, y]) => { cz += z / n; cy += y / n; });
-    for (let i = 0; i < n; i++) {
-      const j = (i + 1) % n;
-      const mz = (prof[i][0] + prof[j][0]) / 2 - cz, my = (prof[i][1] + prof[j][1]) / 2 - cy;
-      const c = colEdge(i);
-      if (!c) continue;
-      face(gb, [L[i], L[j], Rr[j], Rr[i]], V(0, my, mz), c);
-    }
-  }
-  const boxC = (gb, x0, y0, z0, x1, y1, z1, c) => gb.box(Math.min(x0, x1), Math.min(y0, y1), Math.min(z0, z1), Math.max(x0, x1), Math.max(y0, y1), Math.max(z0, z1), c, false);
-  // тёмная арка над колесом с обеих сторон
-  function wheelWells(gb, hw, zc, r, c) {
-    for (const s of [1, -1]) {
-      const pts = [V(s * (hw + 0.004), r * 0.3, zc)];
-      for (let k = 0; k <= 8; k++) {
-        const a = (k / 8) * Math.PI;
-        pts.push(V(s * (hw + 0.004), r * 0.3 + Math.sin(a) * r * 1.2, zc + Math.cos(a) * r * 1.2));
-      }
-      for (let k = 1; k < pts.length - 1; k++) face(gb, [pts[0], pts[k], pts[k + 1]], V(s, 0, 0), c);
-    }
-  }
-
-  const GLASS = col('#141a22'), TRIM = col('#1d1e22'), CHROME = col('#b8bcc4'), PLATE = col('#e9e6d6'), UNDER = col('#121214');
-  const HEAD = col('#fff4dc'), TAIL = col('#ff2418'), AMBER = col('#ffae2a'), SIGN = col('#ffd84a'), REV = col('#f4f4f4');
-
-  // ---------- Автобус ----------
-  function buildBus(t, paint) {
-    const gb = new J.GB(2048), lb = new J.GB(128), bb = new J.GB(64);
-    const { L, W, H, wr, wb } = t;
-    const zF = L / 2, zR = -L / 2, c = wr * 0.5, hw = W / 2;
-    const yBelt = H * 0.42, yTop = H - 0.28;
-    const P2 = paint.clone().multiplyScalar(0.8);
-    prism(gb, [[zR, c], [zF, c], [zF, yBelt], [zR, yBelt]], () => hw, paint, (i) => (i === 0 ? UNDER : paint));
-    prism(gb, [[zR, yBelt], [zF, yBelt], [zF - 0.12, yTop], [zR, yTop]], () => hw - 0.02, GLASS, (i) => (i === 0 ? null : GLASS));
-    prism(gb, [[zR, yTop], [zF - 0.12, yTop], [zF - 0.3, H], [zR + 0.1, H]], () => hw - 0.02, paint, (i) => (i === 0 ? null : P2));
-    for (let z = zR + 0.2; z < zF - 0.4; z += 1.25) for (const s of [1, -1]) boxC(gb, s * (hw - 0.02), yBelt, z - 0.06, s * (hw + 0.006), yTop, z + 0.06, paint);
-    for (const s of [1, -1]) boxC(gb, s * (hw - 0.02), yBelt - 0.02, zR, s * (hw + 0.008), yBelt + 0.05, zF, TRIM);
-    boxC(gb, -hw + 0.05, c, zF - 0.02, hw - 0.05, c + 0.3, zF + 0.06, TRIM);
-    boxC(gb, -hw + 0.05, c, zR - 0.06, hw - 0.05, c + 0.3, zR + 0.02, TRIM);
-    for (const zc of [zF - 1.2, 0]) for (const s of [1, -1]) boxC(gb, s * hw, c + 0.15, zc - 0.55, s * (hw + 0.01), yTop - 0.1, zc + 0.55, GLASS);
-    for (const zc of [wb / 2, -wb / 2]) wheelWells(gb, hw, zc, wr, UNDER);
-    for (const s of [1, -1]) {
-      boxC(lb, s * (hw - 0.1), c + 0.35, zF - 0.01, s * (hw - 0.45), c + 0.55, zF + 0.02, HEAD);
-      boxC(lb, s * (hw - 0.06), c + 0.4, zR - 0.02, s * (hw - 0.3), c + 0.75, zR + 0.01, TAIL);
-      boxC(bb, s * (hw - 0.05), c + 0.39, zR - 0.03, s * (hw - 0.31), c + 0.76, zR, TAIL);
-    }
-    boxC(lb, -hw + 0.3, yTop - 0.05, zF - 0.1, hw - 0.3, yTop + 0.2, zF - 0.07, AMBER); // табло маршрута
-    return { body: gb, lights: lb, brake: bb, siren: null, seat: { x: 0.6, y: yBelt - 0.3, z: zF - 1.0 } };
-  }
-
-  // ---------- Грузовик ----------
-  function buildTruck(t, paint) {
-    const gb = new J.GB(1024), lb = new J.GB(128), bb = new J.GB(64);
-    const { L, W, H, wr, wb } = t;
-    const zF = L / 2, zR = -L / 2, c = wr * 0.62, hw = W / 2;
-    const cabL = 2.1, yCabBelt = 1.75, yCabTop = 2.65;
-    const P2 = paint.clone().multiplyScalar(0.8);
-    const CAB = col('#e8e8ea');
-    prism(gb, [[zF - cabL, c + 0.2], [zF - 0.1, c + 0.2], [zF, c + 0.4], [zF, yCabBelt], [zF - cabL, yCabBelt]], () => hw - 0.05, CAB, (i) => (i === 0 ? UNDER : CAB));
-    prism(gb, [[zF - cabL, yCabBelt], [zF - 0.05, yCabBelt], [zF - 0.3, yCabTop], [zF - cabL, yCabTop]], () => hw - 0.1, GLASS, (i) => (i === 0 ? null : i === 2 ? CAB : GLASS));
-    boxC(gb, -hw + 0.15, yCabTop, zF - cabL + 0.1, hw - 0.15, yCabTop + 0.06, zF - 0.4, CAB);
-    for (const s of [1, -1]) boxC(gb, s * (hw - 0.1), yCabBelt, zF - cabL + 0.05, s * (hw - 0.04), yCabTop, zF - cabL + 0.35, CAB);
-    boxC(gb, -hw, c + 0.45, zR, hw, H, zF - cabL - 0.15, paint);
-    boxC(gb, -hw - 0.01, H - 0.12, zR - 0.01, hw + 0.01, H + 0.01, zF - cabL - 0.14, P2);
-    boxC(gb, -hw + 0.08, c + 0.55, zR - 0.02, hw - 0.08, H - 0.15, zR, P2);
-    boxC(gb, -0.02, c + 0.55, zR - 0.03, 0.02, H - 0.15, zR, TRIM);
-    boxC(gb, -hw + 0.35, c, zR + 0.2, hw - 0.35, c + 0.45, zF - cabL, UNDER);
-    boxC(gb, -hw + 0.08, c + 0.1, zF - 0.06, hw - 0.08, c + 0.42, zF + 0.06, TRIM);
-    boxC(gb, -0.5, c + 0.5, zF - 0.01, 0.5, yCabBelt - 0.25, zF + 0.01, TRIM);
-    for (const zc of [wb / 2 + 0.4, -wb / 2 + 0.4]) wheelWells(gb, hw - 0.02, zc, wr, UNDER);
-    for (const s of [1, -1]) {
-      boxC(gb, s * (hw - 0.05), yCabBelt + 0.05, zF - 0.35, s * (hw + 0.22), yCabBelt + 0.45, zF - 0.42, TRIM);
-      boxC(lb, s * (hw - 0.12), c + 0.5, zF - 0.01, s * (hw - 0.42), c + 0.72, zF + 0.02, HEAD);
-      boxC(lb, s * (hw - 0.08), c + 0.5, zR - 0.03, s * (hw - 0.32), c + 0.72, zR, TAIL);
-      boxC(bb, s * (hw - 0.07), c + 0.49, zR - 0.04, s * (hw - 0.33), c + 0.73, zR - 0.01, TAIL);
-    }
-    return { body: gb, lights: lb, brake: bb, siren: null, seat: { x: 0.5, y: yCabBelt - 0.3, z: zF - 1.0 }, zoff: 0.4 };
-  }
 
   // ---------- Кэш геометрии ----------
   // Легковые и фургоны — подробные модели car_models.js (ближний план: кузов + прозрачные стёкла + салон;
-  // дальний: всё одной геометрией). Автобус и грузовик — прежние призмы.
+  // дальний: всё одной геометрией). Автобус и грузовик — car_big.js в том же формате.
   // Записи кэша считают пользователей; неиспользуемые освобождаются, когда кэш переполнен.
   const CM = J.CarModels;
   const geoCache = new Map();
@@ -137,64 +38,30 @@
     J.fastBounds(g, P, n * 3);
     return g;
   }
-  // автобус/грузовик: кузов и фары (J.GB) → одна геометрия с отражением и свечением по цвету вершины
-  const GLASS_L = col('#141a22'), CHROME_L = col('#b8bcc4'), TRIM_L = col('#1d1e22'), UNDER_L = col('#121214');
-  function mergeBig(a, b) {
-    const n = a.v + b.v, g = new THREE.BufferGeometry();
-    const P = new Float32Array(n * 3), N = new Float32Array(n * 3), C = new Float32Array(n * 3), GL = new Float32Array(n), RF = new Float32Array(n);
-    P.set(a.p.subarray(0, a.v * 3));
-    P.set(b.p.subarray(0, b.v * 3), a.v * 3);
-    N.set(a.n.subarray(0, a.v * 3));
-    N.set(b.n.subarray(0, b.v * 3), a.v * 3);
-    C.set(a.c.subarray(0, a.v * 3));
-    C.set(b.c.subarray(0, b.v * 3), a.v * 3);
-    const near = (i, c) => Math.abs(C[i * 3] - c.r) + Math.abs(C[i * 3 + 1] - c.g) + Math.abs(C[i * 3 + 2] - c.b) < 0.01;
-    for (let i = 0; i < a.v; i++) RF[i] = near(i, GLASS_L) ? 1 : near(i, CHROME_L) ? 2 : near(i, TRIM_L) ? 0.15 : near(i, UNDER_L) ? 0 : 0.5;
-    // красные фонари светятся слабее белых фар — после тональной кривой остаются красными, а не оранжевыми
-    for (let i = a.v; i < n; i++) {
-      GL[i] = C[i * 3] > 0.5 && C[i * 3 + 1] < 0.2 ? 0.42 : 1;
-      RF[i] = 0.8;
-    }
-    g.setAttribute('position', new THREE.BufferAttribute(P, 3));
-    g.setAttribute('normal', new THREE.BufferAttribute(N, 3));
-    g.setAttribute('color', new THREE.BufferAttribute(C, 3));
-    g.setAttribute('aRef', new THREE.BufferAttribute(RF, 1));
-    g.setAttribute('aGlow', new THREE.BufferAttribute(GL, 1));
-    J.fastBounds(g, P, n * 3);
-    return g;
-  }
-  const keyOf = (typeId, paintHex, livery, region) => typeId + paintHex + (livery ? livery.join() : '') + (isBig(J.vtypeOf(typeId)) && typeId !== 'bus' ? '' : region);
+  const keyOf = (typeId, paintHex, livery, region) => typeId + paintHex + (livery ? livery.join() : '') + region;
   R3.carGeo = function (typeId, paintHex, livery, region) {
     const k = keyOf(typeId, paintHex, livery, region);
     let g = geoCache.get(k);
     if (g) return g;
     const t = J.vtypeOf(typeId);
     const paint = col(paintHex);
-    if (isBig(t)) {
-      const parts = t.shape === 'bus' ? buildBus(t, paint) : buildTruck(t, paint);
-      const hw = t.W / 2, zf = t.L / 2;
-      const body = shared(mergeBig(parts.body, parts.lights));
-      g = {
-        k, users: 0, big: true, hi: body, lo: body, glass: null, brake: shared(parts.brake.build()), siren: null, seat: parts.seat, zoff: parts.zoff || 0,
-        fx: { front: [[hw - 0.27, t.wr * 0.62 + 0.6], [-(hw - 0.27), t.wr * 0.62 + 0.6]], zf, zr: -zf, indF: [hw - 0.1, t.wr * 0.62 + 0.4, zf + 0.02], indR: [hw - 0.1, t.wr * 0.62 + 0.9, -zf - 0.02] },
-      };
-    } else {
-      // ближний план собирается лениво (машины появляются вдали) — сначала только дальний
-      const lo = CM.buildCar(t, paint, livery, region, 1);
-      g = {
-        k, users: 0, big: false, hi: null, glass: null, lo: shared(mergeCB(lo.body, lo.glass)), brake: shared(lo.brake.build()),
-        siren: lo.siren ? lo.siren.map((s) => shared(s.build())) : null, seat: lo.seat, zoff: lo.zoff || 0, fx: lo.fx, bumper: lo.bumper,
-        t, paint, livery, region,
-      };
-    }
+    // ближний план собирается лениво (машины появляются вдали) — сначала только дальний
+    const lo = buildParts(t, paint, livery, region, 1);
+    g = {
+      k, users: 0, hi: null, glass: null, lo: shared(mergeCB(lo.body, lo.glass)), brake: shared(lo.brake.build()),
+      siren: lo.siren ? lo.siren.map((s) => shared(s.build())) : null, seat: lo.seat, zoff: lo.zoff || 0, fx: lo.fx, bumper: lo.bumper,
+      t, paint, livery, region,
+    };
     geoCache.set(k, g);
     if (geoCache.size > CACHE_MAX) evict();
     return g;
   };
+  // легковые — car_models.js, автобус и грузовик — car_big.js (тот же формат частей)
+  const buildParts = (t, paint, livery, region, lod) => (t.shape === 'bus' ? CM.buildBus : t.shape === 'truck' ? CM.buildTruck : CM.buildCar)(t, paint, livery, region, lod);
   // подробная модель ближнего плана (кузов с салоном и отдельные стёкла)
   function buildHi(g) {
     if (g.hi) return;
-    const P = CM.buildCar(g.t, g.paint, g.livery, g.region, 0);
+    const P = buildParts(g.t, g.paint, g.livery, g.region, 0);
     g.hi = shared(P.body.build());
     g.glass = shared(P.glass.build());
     g.seat = P.seat;
@@ -514,7 +381,7 @@ vec2 cVor(vec2 p) {
   // ближний / дальний план
   function setHi(v, vw, on) {
     const g = vw.geo;
-    if (on && !g.big) {
+    if (on) {
       buildHi(g);
       if (!vw.glass) {
         vw.glass = new THREE.Mesh(g.glass, R3.carGlassMat);
@@ -526,7 +393,7 @@ vec2 cVor(vec2 p) {
       vw.body.geometry = vw.own || g.hi;
     } else {
       if (vw.glass) vw.glass.visible = false;
-      vw.body.geometry = g.hi && g.big ? g.hi : g.lo;
+      vw.body.geometry = g.lo;
     }
     vw.hi = on;
   }
@@ -536,7 +403,7 @@ vec2 cVor(vec2 p) {
   const NRM = new THREE.Vector3();
   function applyDents(v, vw) {
     const g = vw.geo;
-    if (!g.hi || g.big) return;
+    if (!g.hi) return;
     if (!vw.own) vw.own = g.hi.clone();
     const src = g.hi.attributes, P = vw.own.attributes.position.array, N = vw.own.attributes.normal.array;
     P.set(src.position.array);
@@ -586,7 +453,6 @@ vec2 cVor(vec2 p) {
   }
   // удар в точку карты (x, y) силой imp: записываем вмятину и обновляем вид
   R3.carDent = function (v, x, y, imp, h) {
-    if (v.vt.shape === 'bus' || v.vt.shape === 'truck') return;
     const ca = Math.cos(v.ang), sa = Math.sin(v.ang);
     const dx = x - v.x, dy = y - v.y;
     const hl = v.vt.L / 2, hw = v.vt.W / 2;
@@ -664,7 +530,7 @@ vec2 cVor(vec2 p) {
       const gr = vw.group;
       gr.visible = true;
       // ближний план: подробная модель (собирается не больше одной за кадр)
-      const wantHi = !g.big && (v.d2 < lod2 || v === playerCar);
+      const wantHi = v.d2 < lod2 * (isBig(vt) ? 1.6 : 1) || v === playerCar;
       if (wantHi !== vw.hi && (!wantHi || g.hi || hiBudget-- > 0 || v === playerCar)) setHi(v, vw, wantHi);
       else if (vw.hi && v.dents && vw.nDent !== v.dents.length) {
         applyDents(v, vw);
@@ -690,14 +556,17 @@ vec2 cVor(vec2 p) {
       // колёса: матрица машины × T(локально) × Ry(-руль, передние) × Rx(вращение) × S(ширина, r, r)
       const hwT = vt.tr / 2, hz = vt.wb / 2, r = vt.wr, zoff = g.zoff;
       const tw = (r * 0.62 + 0.04) / 1.04;
-      const im = vw.hi || g.big && v.d2 < lod2 ? R3.wheelIM : R3.wheelIMlo;
+      const big = isBig(vt);
+      const im = vw.hi ? R3.wheelIM : R3.wheelIMlo;
       for (let k = 0; k < 4; k++) {
         const front = k < 2, sx = k % 2 ? -1 : 1;
         // подвеска: колесо чуть ниже кузова при крене (кузов «висит» на пружинах)
         const sus = -((v.roll || 0) * sx * hwT * 0.6) + (front ? 1 : -1) * (v.pitch || 0) * hz * 0.5;
-        pp.set(sx * hwT, r + J.clamp(sus, -0.06, 0.06), (front ? hz : -hz) + zoff);
+        // сдвоенные задние колёса у автобуса и грузовика — одно широкое
+        const dual = !front && big;
+        pp.set(sx * (dual ? hwT - tw * 0.45 : hwT), r + J.clamp(sus, -0.06, 0.06), (front ? hz : -hz) + zoff);
         qq.setFromEuler(e3.set(v.spin || 0, front ? v.steer || 0 : 0, wreck ? sx * 0.12 : 0, 'YXZ'));
-        ss.set(tw, r, r);
+        ss.set(dual ? tw * 1.9 : tw, r, r);
         mL.compose(pp, qq, ss);
         mW.multiplyMatrices(gr.matrixWorld, mL);
         if (im === R3.wheelIM) R3.wheelIM.setMatrixAt(wi++, mW);

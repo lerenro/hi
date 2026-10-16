@@ -273,6 +273,44 @@
     return d() + d() + d() + l() + l() + d();
   }
 
+  // номерной знак на плоскости z (s: +1 — нос, -1 — корма), центр по высоте y
+  function drawPlate(body, tid, seed, region, hi, z, s, y, rear) {
+    const pst = PLATES[region] || PLATES.usa;
+    const pw = region === 'usa' || region === 'mexico' || region === 'western' || region === 'japan' ? 0.16 : 0.24;
+    const ph = region === 'usa' || region === 'mexico' || region === 'western' || region === 'japan' ? 0.075 : 0.055;
+    const bg = tid === 'kei' && region === 'japan' ? C.PLATEY : rear && pst.rear ? col(pst.rear) : col(pst.bg);
+    const fg = tid === 'kei' && region === 'japan' ? C.PLATEB : col(pst.fg);
+    plate(body, -pw - 0.01, pw + 0.01, y - ph - 0.01, y + ph + 0.01, z, s, C.TRIM, 0.1);
+    plate(body, -pw, pw, y - ph, y + ph, z + s * 0.002, s, bg, 0.2);
+    if (pst.eu) plate(body, s * -pw, s * (-pw + 0.035), y - ph, y + ph, z + s * 0.003, s, C.EU, 0.1);
+    if (pst.band) plate(body, -pw, pw, y + ph - 0.016, y + ph - 0.004, z + s * 0.003, s, col(pst.band), 0.1);
+    if (pst.top) plate(body, -pw, pw, y + ph - 0.03, y + ph, z + s * 0.003, s, col(pst.top), 0.1);
+    // надпись номера: буквы и цифры шрифтом 3×5 (вблизи), вдали — просто полоса
+    const txt = plateText(region, seed);
+    if (!hi) {
+      plate(body, -pw * 0.8, pw * 0.8, y - ph * 0.4, y + ph * 0.3, z + s * 0.004, s, fg, 0);
+      return;
+    }
+    const gh = (pst.top || pst.band ? 1.25 : 1.45) * ph, gw = Math.min((pw * 1.7) / (txt.length * 1.25), gh * 0.62);
+    const x0 = -(txt.length * gw * 1.25 - gw * 0.25) / 2 + (pst.eu ? 0.018 : 0), yb = y - gh / 2 - (pst.top || pst.band ? 0.012 : 0);
+    for (let k = 0; k < txt.length; k++) {
+      const gl = FONT[txt[k]];
+      if (!gl) continue;
+      const cx = x0 + k * gw * 1.25, px = gw / 3, py = gh / 5;
+      for (let r = 0; r < 5; r++) {
+        const row = gl[r];
+        for (let c = 0; c < 3; c++) {
+          if (row[c] !== '1') continue;
+          let e = c;
+          while (e < 2 && row[e + 1] === '1') e++;
+          const xa = cx + c * px, xb = cx + (e + 1) * px, ya = yb + (4 - r) * py;
+          plate(body, s * xa, s * xb, ya, ya + py * 1.02, z + s * 0.004, s, fg, 0);
+          c = e;
+        }
+      }
+    }
+  }
+
   // ---------- Легковой кузов (седан, хэтчбек, такси, полиция, спорткар, кей-кар, малолитражка, пикап, фургон) ----------
   CM.buildCar = function (t, paint, livery, region, lod) {
     const lk = LOOK[t.id + '_' + region] || LOOK[t.id] || {};
@@ -609,42 +647,7 @@
     // нижний воздухозаборник
     plate(body, -hwF * 0.55, hwF * 0.55, ybF + fh * 0.08, ybF + fh * 0.2, fz + 0.002, 1, C.GRILLE, 0.1);
     // номерные знаки
-    const pst = PLATES[region] || PLATES.usa;
-    const plateAt = (z, s, y, rear) => {
-      const pw = region === 'usa' || region === 'mexico' || region === 'western' || region === 'japan' ? 0.16 : 0.24;
-      const ph = region === 'usa' || region === 'mexico' || region === 'western' || region === 'japan' ? 0.075 : 0.055;
-      const bg = t.id === 'kei' && region === 'japan' ? C.PLATEY : rear && pst.rear ? col(pst.rear) : col(pst.bg);
-      const fg = t.id === 'kei' && region === 'japan' ? C.PLATEB : col(pst.fg);
-      plate(body, -pw - 0.01, pw + 0.01, y - ph - 0.01, y + ph + 0.01, z, s, C.TRIM, 0.1);
-      plate(body, -pw, pw, y - ph, y + ph, z + s * 0.002, s, bg, 0.2);
-      if (pst.eu) plate(body, s * -pw, s * (-pw + 0.035), y - ph, y + ph, z + s * 0.003, s, C.EU, 0.1);
-      if (pst.band) plate(body, -pw, pw, y + ph - 0.016, y + ph - 0.004, z + s * 0.003, s, col(pst.band), 0.1);
-      if (pst.top) plate(body, -pw, pw, y + ph - 0.03, y + ph, z + s * 0.003, s, col(pst.top), 0.1);
-      // надпись номера: буквы и цифры шрифтом 3×5 (вблизи), вдали — просто полоса
-      const txt = plateText(region, t.id + paint.getHexString());
-      if (!hi) {
-        plate(body, -pw * 0.8, pw * 0.8, y - ph * 0.4, y + ph * 0.3, z + s * 0.004, s, fg, 0);
-        return;
-      }
-      const gh = (pst.top || pst.band ? 1.25 : 1.45) * ph, gw = Math.min((pw * 1.7) / (txt.length * 1.25), gh * 0.62);
-      const x0 = -(txt.length * gw * 1.25 - gw * 0.25) / 2 + (pst.eu ? 0.018 : 0), yb = y - gh / 2 - (pst.top || pst.band ? 0.012 : 0);
-      for (let k = 0; k < txt.length; k++) {
-        const gl = FONT[txt[k]];
-        if (!gl) continue;
-        const cx = x0 + k * gw * 1.25, px = gw / 3, py = gh / 5;
-        for (let r = 0; r < 5; r++) {
-          const row = gl[r];
-          for (let c = 0; c < 3; c++) {
-            if (row[c] !== '1') continue;
-            let e = c;
-            while (e < 2 && row[e + 1] === '1') e++;
-            const xa = cx + c * px, xb = cx + (e + 1) * px, ya = yb + (4 - r) * py;
-            plate(body, s * xa, s * xb, ya, ya + py * 1.02, z + s * 0.004, s, fg, 0);
-            c = e;
-          }
-        }
-      }
-    };
+    const plateAt = (z, s, y, rear) => drawPlate(body, t.id, t.id + paint.getHexString(), region, hi, z, s, y, rear);
     plateAt(fz + 0.001, 1, ybF + fh * 0.3, false);
     // ---------- Корма ----------
     const hwT = sT[2][0], ybT = sT[0][1], ytT = sT[7][1] - crown;
@@ -757,6 +760,12 @@
       bumper: { yf: ybF + fh * 0.2, yr: ybT + th * 0.2, hw: hwM },
     };
   };
+
+  CM.plate = plate;
+  CM.disc = disc;
+  CM.drawPlate = drawPlate;
+  CM.refOf = refOf;
+  CM.DRIVE_L = DRIVE_L;
 
   // ---------- Колёса: шина с профилем, диск со спицами, тормозной диск (обе стороны симметричны) ----------
   CM.buildWheel = function (lod) {
