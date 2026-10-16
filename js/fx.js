@@ -1316,6 +1316,14 @@
   Fx.onHit = function (t, src, dmg, opt, crit, killed, kind) {
     if (!Fx.ready) return;
     opt = opt || {};
+    // пуля — без стоп-кадра, надписей и звёзд (кровь, звук и дырки — в js/guns.js); по игроку — встряска и красная вспышка
+    if (opt.bullet && (!kind || kind === 'hit')) {
+      if (t.isPlayer && !opt.dot) {
+        Fx.trauma(Math.min(0.5, 0.12 + (0.7 * dmg) / Math.max(1, t.maxHp)));
+        Fx.flash('#ff1a3a', 0.1, 0.16);
+      }
+      return;
+    }
     const tier = kind && kind !== 'hit' ? 'mid' : Fx.tierOf(t, dmg, opt, crit);
     if (!tier) return;
     if (nHits >= HITS.length) return;

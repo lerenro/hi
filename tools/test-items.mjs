@@ -48,9 +48,9 @@ await page.evaluate(() => {
   // открытое место в городе: 12 м во все стороны без стен и воды (для стрельбы — прямая видимость)
   const open = () => {
     const clear = (x, y, R) => { for (let dx = -R; dx <= R; dx++) for (let dy = -R; dy <= R; dy++) if (w.solid(x + dx, y + dy) || w.isWater(x + dx, y + dy)) return false; return true; };
-    for (const R of [12, 9]) {
+    for (const [R, S] of [[12, 240], [12, 600], [9, 600], [7, 600]]) {
       for (let k = 0; k < 30000; k++) {
-        const x = p.x + (Math.random() - 0.5) * 240, y = p.y + (Math.random() - 0.5) * 240;
+        const x = p.x + (Math.random() - 0.5) * S, y = p.y + (Math.random() - 0.5) * S;
         if (w.cityAt(x, y) && clear(x, y, R)) return { x: Math.floor(x) + 0.5, y: Math.floor(y) + 0.5 };
       }
     }
@@ -128,7 +128,7 @@ check('панель быстрого доступа в HUD', await ev(() => docu
     window._clear();
     const p = J.G.player;
     const gi = J.Hand.spawnGround(p.x + 0.6, p.y, 'kitchen_knife', 1);
-    window._step(0.1);
+    window._step(0.2);
     const tgt = J.Game.interactTarget();
     const prompt = document.getElementById('prompt').textContent;
     J.Game.interact();
@@ -569,9 +569,11 @@ await ev(() => {
   window._plaza = () => {
     const p = J.G.player, w = J.G.world;
     const ok = (x, y, R) => { for (let dx = -R; dx <= R; dx++) for (let dy = -R; dy <= R; dy++) if (w.solid(x + dx, y + dy) || w.isWater(x + dx, y + dy)) return false; return true; };
-    for (let k = 0; k < 30000; k++) {
-      const x = window._home.x + (Math.random() - 0.5) * 240, y = window._home.y + (Math.random() - 0.5) * 240;
-      if (w.cityAt(x, y) && ok(x, y, 12)) { p.x = Math.floor(x) + 0.5; p.y = Math.floor(y) + 0.5; J.R3.updateChunks(p.x, p.y, true); return true; }
+    for (const [R, S] of [[12, 240], [12, 600], [9, 600]]) {
+      for (let k = 0; k < 30000; k++) {
+        const x = window._home.x + (Math.random() - 0.5) * S, y = window._home.y + (Math.random() - 0.5) * S;
+        if (w.cityAt(x, y) && ok(x, y, R)) { p.x = Math.floor(x) + 0.5; p.y = Math.floor(y) + 0.5; J.R3.updateChunks(p.x, p.y, true); return true; }
+      }
     }
     return false;
   };

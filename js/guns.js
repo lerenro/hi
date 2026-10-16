@@ -1268,7 +1268,6 @@
         }
         gsnd('hitflesh', r.x, r.z, { k: u.isPlayer ? 1 : 0.7 });
       }
-      if (head && u.isPlayer && !pell) J.R3.text(o.x, o.y, 'В ГОЛОВУ!', 'tcrit', 0.9, 2.4);
       if (u.isPlayer) Gn.hitMark(head, o.dead);
       return;
     }
