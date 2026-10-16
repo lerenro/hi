@@ -920,6 +920,7 @@
   // результат: kind — ent/veh/wall/ground/none, точка, нормаль, часть тела
   const HIT = { kind: 'none', d: 0, x: 0, h: 0, z: 0, nx: 0, ny: 1, nz: 0, o: null, part: '', v: null, tyre: -1, glass: false };
   const SKIP = new Set();
+  const NOOPT = {};
   // высота препятствия в клетке (здание, стена, скала); -99 — пусто
   function topAt(w, ix, iz) {
     if (!w.inb(ix, iz)) return 999;
@@ -934,56 +935,79 @@
   // луч из (x,h,z) по (dx,dh,dz) — единичный; skip — кого не задевать; team — чьи пули (своих не бьёт)
   Gn.trace = function (x, h, z, dx, dh, dz, maxD, shooter, o) {
     const g = G(), w = g.world;
-    o = o || {};
+    o = o || NOOPT;
     HIT.kind = 'none';
     HIT.o = HIT.v = null;
     HIT.tyre = -1;
     HIT.glass = false;
     HIT.part = '';
-    // стены и земля: шаг 0.2 м, уточнение до границы клетки
+    // стены и земля: по клеткам (DDA) — граница клетки с препятствием выше луча — стена;
+    // земля — по концам отрезка в клетке, у самой земли — мелкими шагами
     let wallD = maxD, nx = 0, ny = 1, nzz = 0, ground = false;
-    const step = 0.2;
-    let px = x, ph = h, pz = z;
-    let pix = Math.floor(x), piz = Math.floor(z);
-    for (let s = step; s <= maxD; s += step) {
-      const cx = x + dx * s, ch = h + dh * s, cz = z + dz * s;
-      const ix = Math.floor(cx), iz = Math.floor(cz);
-      if (ix !== pix || iz !== piz) {
-        const top = topAt(w, ix, iz);
-        if (ch < top) {
-          // граница клетки: по какой оси вошли
-          let t;
-          if (ix !== pix) {
-            const bx = dx > 0 ? ix : ix + 1;
-            t = (bx - x) / dx;
-            nx = dx > 0 ? -1 : 1;
-            nzz = 0;
-          } else {
-            const bz = dz > 0 ? iz : iz + 1;
-            t = (bz - z) / dz;
-            nzz = dz > 0 ? -1 : 1;
-            nx = 0;
+    let ix = Math.floor(x), iz = Math.floor(z);
+    const sx = dx > 0 ? 1 : -1, sz = dz > 0 ? 1 : -1;
+    const tdx = Math.abs(dx) > 1e-9 ? Math.abs(1 / dx) : 1e9, tdz = Math.abs(dz) > 1e-9 ? Math.abs(1 / dz) : 1e9;
+    let tmx = Math.abs(dx) > 1e-9 ? (dx > 0 ? ix + 1 - x : x - ix) * tdx : 1e9;
+    let tmz = Math.abs(dz) > 1e-9 ? (dz > 0 ? iz + 1 - z : z - iz) * tdz : 1e9;
+    let tA = 0, gA = w.groundY(x, z), roof = topAt(w, ix, iz);
+    // начало внутри препятствия (камера у стены) — свою клетку не считаем
+    if (roof > h) roof = -99;
+    for (let guard = 0; guard < 2000; guard++) {
+      const tB = Math.min(tmx, tmz, maxD);
+      const bx = x + dx * tB, bz = z + dz * tB;
+      const gB = w.groundY(bx - dx * 1e-4, bz - dz * 1e-4);
+      const hA = h + dh * tA, hB = h + dh * tB;
+      // крыша или земля внутри клетки
+      if (Math.min(hA - gA, hB - gB) < 0.35 || hB < roof) {
+        const n = Math.max(1, Math.ceil((tB - tA) / 0.1));
+        let pt = tA, pgap = hA - gA;
+        let hit = false;
+        for (let i = 1; i <= n; i++) {
+          const t = tA + ((tB - tA) * i) / n;
+          const ch = h + dh * t;
+          if (ch < roof) {
+            wallD = Math.max(0.05, dh < -1e-6 ? J.clamp((h - roof) / -dh, pt, t) : t);
+            nx = nzz = 0;
+            ny = 1;
+            hit = true;
+            break;
           }
-          ny = 0;
-          wallD = Math.max(0.05, Math.min(s, t));
-          break;
+          const gap = ch - w.groundY(x + dx * t, z + dz * t);
+          if (gap < 0) {
+            wallD = pt + (t - pt) * J.clamp(pgap / Math.max(1e-4, pgap - gap), 0, 1);
+            nx = nzz = 0;
+            ny = 1;
+            ground = true;
+            hit = true;
+            break;
+          }
+          pt = t;
+          pgap = gap;
         }
-        pix = ix;
-        piz = iz;
+        if (hit) break;
       }
-      const g0 = w.groundY(cx, cz);
-      if (ch < g0) {
-        // уточнение по высоте
-        const k = (ph - w.groundY(px, pz)) / Math.max(1e-4, ph - w.groundY(px, pz) - (ch - g0));
-        wallD = s - step + step * J.clamp(k, 0, 1);
-        nx = nzz = 0;
-        ny = 1;
-        ground = true;
+      if (tB >= maxD) break;
+      // в следующую клетку
+      let xAxis;
+      if (tmx < tmz) {
+        ix += sx;
+        tmx += tdx;
+        xAxis = true;
+      } else {
+        iz += sz;
+        tmz += tdz;
+        xAxis = false;
+      }
+      const top = topAt(w, ix, iz);
+      if (hB < top) {
+        if (xAxis) { nx = -sx; nzz = 0; } else { nzz = -sz; nx = 0; }
+        ny = 0;
+        wallD = Math.max(0.05, tB);
         break;
       }
-      px = cx;
-      ph = ch;
-      pz = cz;
+      roof = top;
+      tA = tB;
+      gA = gB;
     }
     let bd = wallD, best = null, part = '';
     // люди: вертикальные цилиндры (голова — верхние 28 см)
@@ -1022,13 +1046,50 @@
     }
     // машины
     let veh = null;
-    if (g.vehs && g.vehs.length && J.Pw && J.Pw.vehAt) {
-      for (let s = 0.4; s < bd; s += 0.25) {
+    if (g.vehs && g.vehs.length) {
+      // луч против прямоугольника каждой машины (в её осях), затем по высоте — несколько проб от входа до выхода
+      const own = shooter && shooter.inCar;
+      let vs = 0;
+      const vl = g.vehs;
+      for (let k = 0; k < vl.length; k++) {
+        const v = vl[k];
+        if (v.hp <= 0 || v === own) continue;
+        const L = v.vt.L / 2 + 0.02, W = v.vt.W / 2 + 0.02;
+        const ox = x - v.x, oz = z - v.y;
+        // отсечение по кругу
+        const bb = ox * dx + oz * dz, cc = ox * ox + oz * oz - (L + W) * (L + W);
+        if (cc > 0 && bb > 0) continue;
+        const ca = Math.cos(v.ang), sa = Math.sin(v.ang);
+        const lx = ox * ca + oz * sa, ly = -ox * sa + oz * ca;
+        const ldx = dx * ca + dz * sa, ldy = -dx * sa + dz * ca;
+        let t0 = 0.4, t1 = bd;
+        if (Math.abs(ldx) < 1e-6) { if (Math.abs(lx) > L) continue; } else {
+          let a = (-L - lx) / ldx, b = (L - lx) / ldx;
+          if (a > b) { const q = a; a = b; b = q; }
+          if (a > t0) t0 = a;
+          if (b < t1) t1 = b;
+        }
+        if (Math.abs(ldy) < 1e-6) { if (Math.abs(ly) > W) continue; } else {
+          let a = (-W - ly) / ldy, b = (W - ly) / ldy;
+          if (a > b) { const q = a; a = b; b = q; }
+          if (a > t0) t0 = a;
+          if (b < t1) t1 = b;
+        }
+        if (t0 > t1) continue;
+        const lo = v.gy + 0.08, hi = v.gy + v.vt.H * 0.98;
+        const n = Math.max(1, Math.ceil((t1 - t0) / 0.25));
+        for (let i = 0; i <= n; i++) {
+          const sv = t0 + ((t1 - t0) * i) / n;
+          const chh = h + dh * sv;
+          if (chh <= hi && chh >= lo) {
+            if (!veh || sv < vs) { veh = v; vs = sv; }
+            break;
+          }
+        }
+      }
+      if (veh) {
+        const v = veh, s = vs;
         const cx = x + dx * s, cz = z + dz * s, ch = h + dh * s;
-        const v = J.Pw.vehAt(cx, cz, 0.02, shooter && shooter.inCar);
-        if (!v) continue;
-        if (ch > v.gy + v.vt.H * 0.98 || ch < v.gy + 0.08) continue;
-        veh = v;
         bd = s;
         best = null;
         // где попали: шина, стекло
@@ -1043,7 +1104,6 @@
         if (ch > v.gy + v.vt.H * 0.9) { nx = 0; ny = 1; nzz = 0; }
         else if (ex < ey) { const sg = Math.sign(lx) || 1; nx = ca * sg; nzz = sa * sg; ny = 0; }
         else { const sg = Math.sign(ly) || 1; nx = -sa * sg; nzz = ca * sg; ny = 0; }
-        break;
       }
     }
     HIT.d = bd;
