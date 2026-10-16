@@ -278,8 +278,9 @@
     const gy = v.gy;
     R3.burst(v.x, v.y, gy + 1, '#ffb030', 36, 9, 0.9, 4);
     R3.burst(v.x, v.y, gy + 1.4, '#3a3a3a', 26, 4, 1.6, 3);
-    R3.flash && R3.flash(v.x, v.y, 4, '#ffcf6a', 0.5, 2);
-    R3.ring && R3.ring(v.x, v.y, 5, '#ffb030', 0.5);
+    // огненный шар, дым и пыль — без светящихся колец
+    if (J.Pw && J.Pw.ready) J.Pw.explosion(v.x, v.y, 3.2, '#ffc070', true);
+    else if (R3.flash) R3.flash(v.x, v.y, 4, '#ffcf6a', 0.5, 2);
     if (Math.hypot(v.x - R3.cam.tx, v.y - R3.cam.tz) < 30) R3.cam.shake = 0.6;
     Veh.boom(v);
     // взрывная волна
@@ -292,7 +293,7 @@
       if (d > 5.5) continue;
       const dmg = 70 * (1 - d / 5.5);
       if (e.kind === 'civ') Veh.knockDown(e, dmg, Math.atan2(e.y - v.y, e.x - v.x), 6, p);
-      else J.hurt(e, dmg, src || null, { knock: 7, ang: Math.atan2(e.y - v.y, e.x - v.x), kind: 'fire' });
+      else J.hurt(e, dmg, src || null, { knock: 7, ang: Math.atan2(e.y - v.y, e.x - v.x), kind: 'fire', explosion: true });
     }
     for (const o of g.vehs) if (o !== v && o.hp > 0 && Math.hypot(o.x - v.x, o.y - v.y) < 6) Veh.damage(o, 60, src);
     J.scare(v.x, v.y, 30);

@@ -664,7 +664,7 @@ await ev(() => {
     const p = J.G.player;
     window._give('ammo_308', 10, false);
     window._give('sniper', 1);
-    const f = window._foe('thug', 20, { noai: true, hp: 3000 });
+    const f = window._foe('thug', 11, { noai: true, hp: 3000 });
     window._step(0.3);
     p.ads = true;
     window._step(0.3);

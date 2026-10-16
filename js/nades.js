@@ -36,7 +36,7 @@
     const x = o.x, y = o.y, h = Math.max(o.h, gy(x, y) + 0.1);
     const R = 6.5;
     if (pwOk()) {
-      J.Pw.explosion(x, y, 2.4, '#ffd08a');
+      J.Pw.explosion(x, y, 2.4, '#ffd08a', true);
       J.Pw.smoke(x, h + 0.4, y, 10, '#3a3430', 1.1, 2.6, 1.4, 1.2, 0.6);
     } else J.R3.burst(x, y, 1, '#ffb030', 30, 6, 0.6, 3);
     if (fxOk()) J.Fx.debris(x, h + 0.3, y, 0, 0, 14, '#5a5048');

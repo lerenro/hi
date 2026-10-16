@@ -1058,20 +1058,27 @@
     }
   };
   // Большой реалистичный взрыв: огненный шар, дым столбом, ударная волна, обломки, свет, подпалина
-  Pw.explosion = function (x, y, r, color) {
+  // real — «настоящий» взрыв (граната): без светящихся колец и сферы ударной волны, больше дыма и пыли
+  Pw.explosion = function (x, y, r, color, real) {
     const h = gy(x, y);
     r = r || 2;
     Pw.fire(x, h + 0.3, y, 26 * Math.min(2, r / 1.5), r * 0.45, 3.5, 0.8 * Math.min(1.6, r / 1.6));
     Pw.smoke(x, h + 0.6, y, 12, '#2a2422', 0.9 * Math.min(1.5, r / 1.6), 2.2, 1.8, r * 0.3, 0.6);
-    Pw.glow(x, h + 0.8, y, 22, color || '#ffd08a', 7, 0.1, 0.6, 7);
-    R3.flash(x, y, r * 1.1, '#ffb070', 0.35, 1);
-    R3.ring(x, y, r * 1.6, '#ffd8a0', 0.45);
+    Pw.glow(x, h + 0.8, y, real ? 10 : 22, color || '#ffd08a', real ? 4 : 7, 0.1, real ? 0.35 : 0.6, 7);
+    if (real) {
+      // пылевое кольцо по земле и столб тёмного дыма
+      Pw.smoke(x, h + 0.25, y, 14, '#8a7c6a', 0.7, 1.6, 0.5, r * 0.9, 0.5);
+      Pw.smoke(x, h + 1.4, y, 8, '#1e1a18', 1.3, 4.5, 2.6, r * 0.25, 0.4);
+    } else {
+      R3.flash(x, y, r * 1.1, '#ffb070', 0.35, 1);
+      R3.ring(x, y, r * 1.6, '#ffd8a0', 0.45);
+    }
     Pw.light(x, h + 1.2, y, '#ff9a4a', 4.5, 14, 0.6);
     Pw.decal('scorch', x, y, r * 1.7, 14);
     if (fxOn()) {
       J.Fx.debris(x, h + 0.5, y, 0, 0, 16, '#6a5a4a');
       if (near(null, { x, y }, 30)) {
-        J.Fx.shock(x, y, Math.min(1.6, r / 2));
+        if (!real) J.Fx.shock(x, y, Math.min(1.6, r / 2));
         J.Fx.trauma(Math.min(0.6, 0.2 + r * 0.12));
         J.Sfx && J.Sfx.boom(Math.min(1.3, 0.6 + r * 0.2));
       }
