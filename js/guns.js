@@ -1261,8 +1261,10 @@
       const kn = (d.knock || 1.4) * (pell ? 1.6 / d.pellets : 1) * (head ? 1.3 : 1);
       J.hurt(o, dmg * k * fall, u, { ang, knock: kn, stun: (d.stun || 0.2) * (pell ? 0.4 : 1), crit: head, kind: 'phys', fxColor: '#ffd27a', gdmg: 18 + d.dmg * 0.3, unblockable: !(o.stand && o.standOut), bullet: true, head });
       if (nr) {
-        if (pwOk()) {
-          J.Pw.blood(r.x, r.h, r.z, head ? 14 : 8, ang, head ? 4 : 3);
+        // по игроку в прицеле камера у самого плеча — брызги не лепим в объектив
+        const camNear = o.isPlayer && R3.cam && R3.cam.arm < 2.6;
+        if (pwOk() && !camNear) {
+          J.Pw.blood(r.x, r.h, r.z, o.isPlayer ? 4 : head ? 14 : 8, ang, head ? 4 : 3);
           // брызги за спину на землю
           if (!pell || rnd() < 0.3) J.Pw.decal('blood', o.x + dx * (0.8 + rnd()), o.y + dz * (0.8 + rnd()), 0.6 + rnd() * 0.5, 14);
         }

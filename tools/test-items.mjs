@@ -697,11 +697,11 @@ await ev(() => {
       const a = (i / 32) * Math.PI * 2;
       const h = w.groundY(p.x, p.y) + 1.4;
       const t = J.Guns.trace(p.x, h, p.y, Math.cos(a), 0, Math.sin(a), 40, p);
-      if (t.kind === 'wall') wall = { x: t.x, h: t.h, z: t.z };
+      if (t.kind === 'wall' && t.d < 25 && t.d > 3) wall = { x: t.x, h: t.h, z: t.z };
     }
     const P0 = J.Guns.pools();
     const n0 = P0.HO.filter((o) => o.on && !o.veh).length;
-    if (wall) { window._aimAt(wall.x, wall.h, wall.z); for (let i = 0; i < 3; i++) { p.cds.item = 0; p.trigUp = true; J.Hand.fire(p); } }
+    if (wall) { window._aimAt(wall.x, wall.h, wall.z); p.ads = true; for (let i = 0; i < 3; i++) { p.cds.item = 0; p.trigUp = true; p.bloom = 0; J.Hand.fire(p); } p.ads = false; }
     const n1 = P0.HO.filter((o) => o.on && !o.veh).length;
     // машина боком к игроку
     const c = J.R3.cam;
@@ -762,6 +762,57 @@ await ev(() => {
   const r2 = await ev(() => { J.Game.onKeyUp('Tab'); window._step(0.1); return { held: J.Hand.heldId(J.G.player), open: J.Guns.wheelOpen }; });
   check('«Калибр»: разделы и покупка ствола с патронами', r.tabs === 8 && r.bought.carbine === 1 && r.bought.ammo === 60 && r.bought.mag === 30 && r.bought.hp === 1 && r.bought.nade === 1, r);
   check('колесо оружия: Tab, раздел мышью, взять', r.open && r2.held === 'carbine' && !r2.open, r2);
+}
+// 22.65 «Калибр»: пополнить патроны ко всем стволам; тир; револьвер Мисты — четвёртый патрон даёт осечку
+{
+  const r = await ev(() => {
+    window._clear();
+    const p = J.G.player, w = J.G.world;
+    p.money = 40000;
+    window._give('carbine', 1, false); window._give('heavy_pistol', 1, false);
+    p.inv.ammo_rifle = 5;
+    const b = w.buildings.find((q) => q.type === 'gunshop' && q.region === w.regionAt(p.x, p.y).id) || w.buildings.find((q) => q.type === 'gunshop');
+    J.UI.openBuilding(b);
+    const need = J.Guns.refillNeed(p);
+    const m0 = p.money;
+    document.querySelector('#bbody [data-gs="refill"]').click();
+    const after = { rifle: p.inv.ammo_rifle, a50: p.inv.ammo_50, paid: m0 - p.money, cost: need.cost, full: document.querySelector('#bbody [data-gs="refill"]').disabled };
+    const agi0 = p.stats.agi, xp0 = p.statXp.agi, t0 = J.G.time;
+    document.querySelector('#bbody [data-gs="range"]').click();
+    after.agi = p.stats.agi > agi0 || p.statXp.agi > xp0;
+    after.mins = Math.round(J.G.time - t0);
+    return after;
+  });
+  await shot('g045_gunshop');
+  await ev(() => J.UI.closeBuilding());
+  check('«Калибр»: пополнить патроны (4 магазина на калибр) и тир', r.rifle === 120 && r.a50 === 28 && r.paid > 0 && r.full && r.agi && r.mins >= 59, r);
+  const r2 = await ev(() => {
+    window._clear();
+    const p = J.G.player;
+    window._give('bullets', 30, false);
+    window._give('mista_revolver', 1);
+    const f = window._foe('thug', 7, { noai: true, hp: 5000 });
+    window._step(0.3);
+    window._aimAt(f.x, J.G.world.groundY(f.x, f.y) + 1.2, f.y, f);
+    let shots = 0;
+    for (let i = 0; i < 3; i++) { p.cds.item = 0; p.trigUp = true; if (J.Hand.fire(p)) shots++; }
+    // четвёртый патрон: осечка с вероятностью ~35% — пробуем много раз с полного барабана минус три
+    let mis = 0, ok = 0;
+    for (let k = 0; k < 40; k++) {
+      J.Hand.setMag(p, 'mista_revolver', 3);
+      p.cds.item = 0; p.trigUp = true; p.reloadT = 0;
+      const fired = J.Hand.fire(p);
+      const m = J.Hand.magOf(p, 'mista_revolver');
+      if (!fired && m === 2) mis++;
+      else if (fired && m === 2) ok++;
+    }
+    p.cds.item = 0; p.trigUp = true;
+    const fifth = J.Hand.fire(p);
+    window._aimOff();
+    const fourth = { mis, ok };
+    return { shots, fourth, fifth, hit: f.hp < 5000 };
+  });
+  check('револьвер Мисты: четвёртый — осечка, пятый стреляет', r2.shots === 3 && r2.fourth.mis >= 3 && r2.fourth.ok >= 10 && r2.fifth && r2.hit, r2);
 }
 // 22.7 Граната, Молотов (машина горит), светошумовая, дымовая шашка
 {

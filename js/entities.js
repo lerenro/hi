@@ -317,7 +317,7 @@
       J.scare(t.x, t.y, 12);
     }
     // пуля — без всплывающих цифр (реалистичнее; попадание видно по крови и отметке в прицеле)
-    if (!opt.silent && !blocked && !(opt.bullet && !t.isPlayer)) {
+    if (!opt.silent && !blocked && !opt.bullet) {
       if (J.Fx && J.Fx.ready) J.Fx.dmgNum(t, dmg, crit, opt.rushTick);
       else {
         const near = g.player && J.dist(t.x, t.y, g.player.x, g.player.y) < 30;
