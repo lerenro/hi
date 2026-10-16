@@ -74,11 +74,15 @@
           return;
         }
         Input.mouse.l = true;
+        // граната в руке: ЛКМ — прицел с дугой (guns_ui.js)
+        if (J.Guns && J.Guns.lmb(true)) return;
         if (mashing()) J.Cb.mash(G.player);
         else if (G.player) G.player.buf = G.t;
       }
       if (e.button === 2) {
         Input.mouse.r = true;
+        // с оружием в руке ПКМ — прицел (guns_ui.js)
+        if (J.Guns && !mashing() && J.Guns.rmb(true)) return;
         // с захватом мыши ПКМ — блок; без захвата — заряд тяжёлого удара (или поворот камеры перетаскиванием)
         if (Input.locked) Input.guardM = true;
         else {
@@ -88,9 +92,13 @@
       }
     });
     window.addEventListener('mouseup', (e) => {
-      if (e.button === 0) Input.mouse.l = false;
+      if (e.button === 0) {
+        Input.mouse.l = false;
+        if (J.Guns) J.Guns.lmb(false);
+      }
       if (e.button === 2) {
         Input.mouse.r = false;
+        if (J.Guns) J.Guns.rmb(false);
         Input.guardM = false;
         const p = G.player;
         if (Input.rDrag && p) {
@@ -118,6 +126,8 @@
     });
     cv.addEventListener('wheel', (e) => {
       e.preventDefault();
+      // колёсико листает вещи в руке (если они есть); с Shift/Ctrl/Alt — приближение камеры
+      if (!e.shiftKey && J.Hand && J.Hand.wheel(e)) return;
       J.R3.zoomCam(e.deltaY > 0 ? 1.1 : 0.9);
     }, { passive: false });
     document.addEventListener('pointerlockchange', () => {
@@ -469,7 +479,7 @@
   };
 
   // ---------- Сохранение ----------
-  const PF = ['name', 'look', 'origin', 'stats', 'statXp', 'points', 'lvl', 'xp', 'money', 'inv', 'discs', 'corpse', 'hunger', 'energy', 'blood', 'stamina', 'hp', 'stand', 'se', 'hamon', 'spin', 'vampire', 'ultimate', 'style', 'breath', 'flags', 'codex', 'rep', 'kills', 'mount', 'maxHpPenalty', 'x', 'y', 'face', 'homeId', 'homeRegion'];
+  const PF = ['name', 'look', 'origin', 'stats', 'statXp', 'points', 'lvl', 'xp', 'money', 'inv', 'discs', 'corpse', 'hunger', 'energy', 'blood', 'stamina', 'hp', 'stand', 'se', 'hamon', 'spin', 'vampire', 'ultimate', 'style', 'breath', 'flags', 'codex', 'rep', 'kills', 'mount', 'maxHpPenalty', 'x', 'y', 'face', 'homeId', 'homeRegion', 'hotbar', 'hsel', 'dur', 'mag'];
   Game.save = function (manual) {
     if (!G.player || G.player.dead) return;
     const p = G.player;

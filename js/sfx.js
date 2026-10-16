@@ -8,6 +8,7 @@
   const ends = []; // время окончания активных голосов
   const MAXV = 24;
 
+  Sfx.out = () => master; // общий выход (громкость и компрессор) для звуков оружия
   Sfx.init = function () {
     const unlock = () => {
       Sfx.ensure();

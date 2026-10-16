@@ -149,8 +149,11 @@
         drive = -thr;
       }
     }
+    // пробитые шины (guns.js): тянет хуже, катится тяжелее, уводит к спущенному колесу
+    const fl = v.flat || 0;
+    if (fl && a > 0 && !braking) a *= Math.max(0.35, 1 - fl * 0.17);
     // сопротивление качению и воздуха
-    const res = (0.25 + 0.45 * surf) + 0.0011 * vf * vf;
+    const res = (0.25 + 0.45 * surf + fl * 0.5) + 0.0011 * vf * vf;
     let aW = a; // для переноса веса — только тяга и тормоза (сопротивление и трение заноса не входят)
     if (Math.abs(vf) > 0.05) a -= Math.sign(vf) * res;
     if (hb) {
@@ -177,7 +180,9 @@
     const m = vt.m, hcg = vt.H * 0.36, lf = vt.wb / 2, lr = vt.wb / 2;
     const dN = J.clamp((m * v.axS * hcg) / vt.wb, -m * GRAV * 0.08, m * GRAV * 0.08);
     const Nf = m * GRAV * 0.5 - dN, Nr = m * GRAV - Nf;
-    const mu = (vt.grip / 9) * 1.3 * gk * (surf > 2 ? 0.85 : 1);
+    // пробитые шины держат хуже и уводят машину в сторону спущенного колеса
+    const mu = (vt.grip / 9) * 1.3 * gk * (surf > 2 ? 0.85 : 1) * (fl ? Math.max(0.45, 1 - fl * 0.14) : 1);
+    const pull = fl && v.flatPull ? v.flatPull * 0.05 * Math.min(1, Math.abs(vf) / 8) * Math.sign(vf) : 0;
     // устойчивый баланс (зад держит чуть лучше перёда — машина недоворачивает, а не крутится сама)
     let muF = mu, muR = mu * 1.18;
     // полный газ: заднеприводная срывается в занос (на малой и средней скорости), переднеприводная недоворачивает
@@ -195,7 +200,7 @@
     let r = v.yawRate;
     if (sp < 3) {
       // кинематика на малой скорости
-      const yawT = (vf * Math.tan(v.steer)) / vt.wb;
+      const yawT = (vf * Math.tan(v.steer)) / vt.wb + pull;
       r += (yawT - r) * Math.min(1, dt * 10);
       vl *= Math.exp(-vt.grip * gk * dt);
       v.ay = vf * r;
@@ -217,6 +222,8 @@
         const k = (5 - sp) / 2, yawT = (vf * Math.tan(v.steer)) / vt.wb;
         r += (yawT - r) * k * Math.min(1, dt * 10);
       }
+      // спущенное колесо тянет в сторону (момент рыскания)
+      if (pull) r += pull * Math.min(1, dt * 3);
       v.ay = ay;
     }
     if (!Number.isFinite(r) || !Number.isFinite(vl)) {
@@ -359,16 +366,16 @@
     v.siren = false;
     const g = G(), R3 = J.R3;
     const gy = v.gy;
-    if (J.Pw && J.Pw.explosion) {
-      J.Pw.explosion(v.x, v.y, 3.2, '#ffc070');
+    // огненный шар, дым и пыль — без светящихся колец
+    if (J.Pw && J.Pw.ready && J.Pw.explosion) {
+      J.Pw.explosion(v.x, v.y, 3.2, '#ffc070', true);
       J.Pw.smoke(v.x, gy + 1.5, v.y, 10, '#1a1614', 1.6, 3.2, 2.2, 1, 0.65);
       if (J.Pw.shards) J.Pw.shards(v.x, gy + 1, v.y, 12, '#3a3a3e', 7, 0.14, 1, undefined, 4, 12, 1.4);
     } else {
       R3.burst(v.x, v.y, gy + 1, '#ffb030', 36, 9, 0.9, 4);
       R3.burst(v.x, v.y, gy + 1.4, '#3a3a3a', 26, 4, 1.6, 3);
+      if (R3.flash) R3.flash(v.x, v.y, 4, '#ffcf6a', 0.5, 2);
     }
-    R3.flash && R3.flash(v.x, v.y, 4, '#ffcf6a', 0.5, 2);
-    R3.ring && R3.ring(v.x, v.y, 5, '#ffb030', 0.5);
     // кузов подбрасывает и мнёт со всех сторон, стёкла вылетают
     v.glassBroken = true;
     v.wreckT = 0;
@@ -387,7 +394,7 @@
       if (d > 5.5) continue;
       const dmg = 70 * (1 - d / 5.5);
       if (e.kind === 'civ') Veh.knockDown(e, dmg, Math.atan2(e.y - v.y, e.x - v.x), 6, p);
-      else J.hurt(e, dmg, src || null, { knock: 7, ang: Math.atan2(e.y - v.y, e.x - v.x), kind: 'fire' });
+      else J.hurt(e, dmg, src || null, { knock: 7, ang: Math.atan2(e.y - v.y, e.x - v.x), kind: 'fire', explosion: true });
     }
     for (const o of g.vehs) if (o !== v && o.hp > 0 && Math.hypot(o.x - v.x, o.y - v.y) < 6) Veh.damage(o, 60, src);
     J.scare(v.x, v.y, 30);

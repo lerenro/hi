@@ -303,7 +303,7 @@
     t.hp -= dmg;
     if (!blocked) {
       // сила вспышки: от яда и горения — лёгкий отсвет, от тиков раша — вполсилы, от удара — белым
-      const hk = opt.dot ? 0.2 : opt.rushTick ? 0.45 : 1;
+      const hk = opt.dot ? 0.2 : opt.bullet || opt.explosion ? 0.15 : opt.rushTick ? 0.45 : 1;
       if (!(t.hitFlash > 0) || hk >= (t.hitK || 0)) {
         t.hitK = hk;
         t.hitFlash = 0.12;
@@ -317,7 +317,8 @@
       J._scareT = g.t;
       J.scare(t.x, t.y, 12);
     }
-    if (!opt.silent && !blocked) {
+    // пуля — без всплывающих цифр (реалистичнее; попадание видно по крови и отметке в прицеле)
+    if (!opt.silent && !blocked && !opt.bullet && !opt.explosion) {
       if (J.Fx && J.Fx.ready) J.Fx.dmgNum(t, dmg, crit, opt.rushTick);
       else {
         const near = g.player && J.dist(t.x, t.y, g.player.x, g.player.y) < 30;

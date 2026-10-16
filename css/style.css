@@ -437,3 +437,101 @@ body.driving #ttop { top: auto; bottom: calc(128px + var(--sab)); flex-direction
 body.driving #ttop .tb[data-k="run"] { display: none; }
 body.is-touch #speedo { width: 150px; padding: 4px 8px 6px; }
 body.is-touch #speedo .sp-v b { font-size: 30px; min-width: 58px; }
+
+/* ---------- Вещи в руках: панель быстрого доступа ---------- */
+#hotwrap { position: absolute; left: 50%; bottom: calc(96px + var(--sab)); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+#hand-name { background: rgba(15,10,24,0.78); border: 1px solid var(--line); padding: 2px 10px; font-size: 12px; white-space: nowrap; text-shadow: 0 1px 2px #000; }
+#hand-name b { color: #fff; }
+#hand-name span { color: var(--muted); margin-left: 4px; }
+#hand-name span.w { color: #f2a040; }
+#hotbar { display: flex; gap: 4px; pointer-events: auto; }
+.hs { position: relative; width: 48px; height: 48px; background: rgba(15,10,24,0.72); border: 1px solid var(--line); border-radius: 4px; cursor: pointer; user-select: none; touch-action: none; }
+.hs.empty { opacity: 0.55; }
+.hs.on { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold), 0 0 12px rgba(242,194,48,0.45); background: rgba(48,36,12,0.85); }
+.hs .hk { position: absolute; left: 3px; top: 1px; font-family: var(--font-display); font-size: 11px; color: var(--gold); text-shadow: 0 1px 1px #000; }
+.hs .hi { position: absolute; inset: 7px 6px 8px; display: flex; align-items: center; justify-content: center; }
+.hs .hi svg, .iico svg { width: 100%; height: 100%; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.7)); }
+.hs .hn { position: absolute; right: 3px; bottom: 6px; font-size: 10px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px #000; }
+.hs .hd { position: absolute; left: 4px; right: 4px; bottom: 2px; height: 3px; background: rgba(255,255,255,0.15); }
+.hs .hd s { display: block; height: 100%; width: 100%; text-decoration: none; }
+#hotact { display: none; gap: 4px; pointer-events: auto; }
+#hotact .tb { width: 64px; }
+body.is-touch #hotact { display: flex; }
+body.is-touch #hotwrap { bottom: calc(10px + var(--sab)); left: calc(162px + var(--sal)); transform: none; align-items: flex-start; }
+body.is-touch .hs { width: 42px; height: 42px; }
+body.driving #hotwrap { display: none; }
+#prompt { bottom: calc(176px + var(--sab)); }
+.hbedit { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.hbedit h3 { margin: 0 0 4px; }
+.hbrow { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.item .iico { float: left; width: 30px; height: 30px; margin: 2px 10px 0 0; }
+.item[draggable="true"] { cursor: grab; }
+.item .ibtns { display: flex; gap: 6px; flex: none; }
+@media (max-width: 760px) {
+  .hs { width: 40px; height: 40px; }
+  #hotwrap { bottom: calc(84px + var(--sab)); }
+}
+
+/* ---------- Арсенал: перекрестие, оптика, патроны, колесо оружия, «Калибр» ---------- */
+#xhair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; z-index: 3; }
+#xhair i { position: absolute; display: block; background: rgba(255,255,255,0.92); box-shadow: 0 0 0 1px rgba(0,0,0,0.55); }
+#xhair .xd { width: 3px; height: 3px; left: -1.5px; top: -1.5px; border-radius: 50%; }
+#xhair .xt.t, #xhair .xt.b { width: 2px; height: 9px; left: 0; top: 0; }
+#xhair .xt.l, #xhair .xt.r { width: 9px; height: 2px; left: 0; top: 0; }
+#xhair.foe i { background: #ff4a5a; }
+#xhair:not(.ads) .xt { opacity: 0.55; }
+#xhair .xm { position: absolute; left: 0; top: 0; opacity: 0; }
+#xhair .xm.on { opacity: 1; }
+#xhair .xm i { width: 10px; height: 2px; background: #fff; box-shadow: 0 0 2px #000; }
+#xhair .xm i:nth-child(1) { transform: translate(4px, 4px) rotate(45deg); }
+#xhair .xm i:nth-child(2) { transform: translate(-14px, 4px) rotate(-45deg); }
+#xhair .xm i:nth-child(3) { transform: translate(4px, -6px) rotate(-45deg); }
+#xhair .xm i:nth-child(4) { transform: translate(-14px, -6px) rotate(45deg); }
+#xhair .xm.head i { background: #ffd84a; }
+#xhair .xm.kill i { background: #ff3a4a; }
+#scope { position: absolute; inset: 0; pointer-events: none; z-index: 3; background: radial-gradient(circle at 50% 50%, transparent 0 min(38vh, 38vw), rgba(0,0,0,0.97) calc(min(38vh, 38vw) + 2px)); }
+#scope .sc-ring { position: absolute; left: 50%; top: 50%; width: min(76vh, 76vw); height: min(76vh, 76vw); transform: translate(-50%, -50%); border-radius: 50%; box-shadow: inset 0 0 40px 10px rgba(0,0,0,0.75); }
+#scope .sc-h { position: absolute; left: calc(50% - min(38vh, 38vw)); width: min(76vh, 76vw); top: 50%; height: 1px; background: rgba(0,0,0,0.9); }
+#scope .sc-v { position: absolute; top: calc(50% - min(38vh, 38vw)); height: min(76vh, 76vw); left: 50%; width: 1px; background: rgba(0,0,0,0.9); }
+#scope .sc-d { position: absolute; left: calc(50% - 2px); top: calc(50% - 2px); width: 4px; height: 4px; border-radius: 50%; background: #e8203a; }
+#ammohud { position: absolute; right: calc(18px + var(--sar)); bottom: calc(150px + var(--sab)); font: 700 26px/1 system-ui, sans-serif; color: #fff; text-shadow: 0 2px 3px #000, 0 0 1px #000; pointer-events: none; text-align: right; }
+#ammohud span { font-size: 16px; color: #d8d0e8; margin-left: 4px; }
+#ammohud em { display: block; font: 600 12px/1.4 system-ui, sans-serif; color: #f2c230; font-style: normal; }
+/* на телефоне патроны — в подписи над панелью; кнопки под панелью — по предмету в руке */
+body.is-touch #ammohud { display: none; }
+body.is-touch.gun-held #hotact [data-ha="thr"], body.is-touch.gun-held #hotact [data-ha="give"] { display: none; }
+body.is-touch:not(.gun-held) #hotact [data-ga="ads"], body.is-touch:not(.gun-held) #hotact [data-ga="rel"] { display: none; }
+body.wheel-open #touch { visibility: hidden; }
+body.scoped #hotwrap, body.scoped #abilities, body.scoped #prompt, body.scoped #labels, body.scoped #hint { visibility: hidden; }
+#blindfx { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 6; }
+#wwheel { position: absolute; left: 50%; top: 50%; width: min(86vmin, 520px); height: min(86vmin, 520px); transform: translate(-50%, -50%); z-index: 7; pointer-events: auto; user-select: none; }
+#wwheel .ww-ring { position: absolute; inset: 0; width: 100%; height: 100%; }
+#wwheel path { fill: rgba(14,12,20,0.72); stroke: rgba(255,255,255,0.22); stroke-width: 1.5; transition: fill 0.08s; }
+#wwheel path.empty { fill: rgba(14,12,20,0.45); }
+#wwheel path.on { fill: rgba(242,194,48,0.32); stroke: #f2c230; stroke-width: 2.5; }
+#wwheel .ww-c { fill: rgba(10,8,16,0.82); stroke: rgba(255,255,255,0.25); }
+#wwheel .ww-it { position: absolute; transform: translate(-50%, -50%); width: 25%; text-align: center; color: #fff; text-shadow: 0 1px 2px #000; pointer-events: auto; }
+#wwheel .ww-it.empty { opacity: 0.35; }
+#wwheel .ww-ic svg { width: 64px; height: 64px; filter: drop-shadow(0 2px 2px #000); }
+#wwheel .ww-it b { display: block; font-size: 13px; min-height: 16px; }
+#wwheel .ww-it em { display: block; font-style: normal; font-size: 10px; color: #cfc6dc; text-transform: uppercase; letter-spacing: 0.04em; }
+#wwheel .ww-it.on em { color: #f2c230; }
+#wwheel .ww-mid { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 30%; text-align: center; color: #fff; pointer-events: auto; }
+#wwheel .ww-mid b { display: block; font-size: 14px; line-height: 1.2; }
+#wwheel .ww-mid span { display: block; font-size: 11px; color: #d8d0e8; margin-top: 3px; }
+#wwheel .ww-mid em { display: block; font-size: 10px; color: #f2c230; font-style: normal; margin-top: 2px; }
+#wwheel .ww-hint { position: absolute; left: 50%; top: -24px; transform: translateX(-50%); white-space: nowrap; font-size: 12px; color: #cfc6dc; text-shadow: 0 1px 2px #000; }
+body.is-touch #wwheel .ww-hint { display: none; }
+.gs-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+.gs-tab { background: var(--panel2); border: 1px solid var(--line); color: var(--muted); padding: 5px 9px; font-size: 12px; }
+.gs-tab.on { color: #fff; border-color: #e0483a; background: #3a1d24; }
+.gs-list { display: flex; flex-direction: column; gap: 6px; max-height: 58vh; overflow-y: auto; }
+.gs-item { display: grid; grid-template-columns: 56px 1fr auto; gap: 10px; align-items: center; background: var(--panel2); border-left: 3px solid #e0483a; padding: 8px 10px; }
+.gs-item.own { border-left-color: var(--green); }
+.gs-ic svg { width: 56px; height: 56px; }
+.gs-info b { display: block; color: #fff; margin-bottom: 3px; }
+.gs-info .small { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.gs-st { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; font-size: 11px; color: var(--muted); align-items: center; }
+.gs-bar { display: block; height: 5px; background: rgba(255,255,255,0.1); }
+.gs-bar s { display: block; height: 100%; background: linear-gradient(90deg, #e0483a, #f2c230); text-decoration: none; }
+@media (max-width: 560px) { .gs-item { grid-template-columns: 40px 1fr; } .gs-item .btn { grid-column: 1 / -1; } .gs-ic svg { width: 40px; height: 40px; } }

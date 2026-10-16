@@ -492,6 +492,12 @@
   function aiTarget(v, tr, t, dt) {
     const P = v.path, vt = v.vt;
     let vT = P.vmax * v.cruise;
+    // пробитые шины (guns.js) — ползёт; водитель под обстрелом — давит на газ
+    if (v.flat) vT *= Math.max(0.3, 1 - v.flat * 0.22);
+    if (v.scared > 0) {
+      v.scared -= dt;
+      vT *= 1.45;
+    }
     const halfL = vt.L / 2;
     v.waitWhy = 0;
     v.stopD = 1e9;

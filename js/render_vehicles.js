@@ -544,7 +544,11 @@ vec2 cVor(vec2 p) {
         vw.body.geometry = vw.own;
       }
       gr.position.set(v.x, v.gy + (v.bob || 0), v.y);
-      e3.set(v.pitch || 0, Math.PI / 2 - v.ang, v.roll || 0, 'YXZ');
+      // кузов кренится на спущенные колёса
+      const fm = v.flatMask || 0;
+      const fRoll = fm ? ((fm & 2 ? 1 : 0) + (fm & 8 ? 1 : 0) - (fm & 1 ? 1 : 0) - (fm & 4 ? 1 : 0)) * 0.035 : 0;
+      const fPitch = fm ? ((fm & 1 ? 1 : 0) + (fm & 2 ? 1 : 0) - (fm & 4 ? 1 : 0) - (fm & 8 ? 1 : 0)) * 0.02 : 0;
+      e3.set((v.pitch || 0) + fPitch, Math.PI / 2 - v.ang, (v.roll || 0) + fRoll, 'YXZ');
       gr.rotation.copy(e3);
       gr.updateMatrix();
       gr.updateMatrixWorld(true);
@@ -571,7 +575,9 @@ vec2 cVor(vec2 p) {
         const sus = -((v.roll || 0) * sx * hwT * 0.6) + (front ? 1 : -1) * (v.pitch || 0) * hz * 0.5;
         // сдвоенные задние колёса у автобуса и грузовика — одно широкое
         const dual = !front && big;
-        pp.set(sx * (dual ? hwT - tw * 0.45 : hwT), r + J.clamp(sus, -0.06, 0.06), (front ? hz : -hz) + zoff);
+        // спущенная шина (guns.js) — диск ниже, колесо проседает
+        const flat = v.flatMask && v.flatMask & (1 << k);
+        pp.set(sx * (dual ? hwT - tw * 0.45 : hwT), (flat ? r * 0.74 : r) + J.clamp(sus, -0.06, 0.06), (front ? hz : -hz) + zoff);
         qq.setFromEuler(e3.set(v.spin || 0, front ? v.steer || 0 : 0, wreck ? sx * 0.12 : 0, 'YXZ'));
         ss.set(dual ? tw * 1.9 : tw, r, r);
         mL.compose(pp, qq, ss);

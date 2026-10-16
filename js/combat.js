@@ -484,7 +484,7 @@
       return true;
     }
     // без стенда: кулаки, револьвер, хамон, вампир
-    if (u.isPlayer && J.P.hasItem(u, 'revolver') && !u.style) {
+    if (u.isPlayer && J.P.hasItem(u, 'revolver') && !u.style && !J.Hand) {
       Cb.attack(u, { clip: 'jab', type: 'cast', dur: 0.25, at: 0.06, fn: () => J.spawnProj(u, { ang: aimFor(u, 3).ang, speed: 18, dmg: 16 + u.stats.agi * 1.5, range: 12, shape: 'bullet', color: '#ffd166', size: 0.1 }), kind: 'light', threat: false });
       u.cds.basic = 0.55;
       u.combo = 0;
