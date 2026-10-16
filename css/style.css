@@ -497,7 +497,11 @@ body.driving #hotwrap { display: none; }
 #ammohud { position: absolute; right: calc(18px + var(--sar)); bottom: calc(150px + var(--sab)); font: 700 26px/1 system-ui, sans-serif; color: #fff; text-shadow: 0 2px 3px #000, 0 0 1px #000; pointer-events: none; text-align: right; }
 #ammohud span { font-size: 16px; color: #d8d0e8; margin-left: 4px; }
 #ammohud em { display: block; font: 600 12px/1.4 system-ui, sans-serif; color: #f2c230; font-style: normal; }
-body.is-touch #ammohud { bottom: auto; top: calc(72px + var(--sat)); font-size: 20px; }
+/* на телефоне патроны — в подписи над панелью; кнопки под панелью — по предмету в руке */
+body.is-touch #ammohud { display: none; }
+body.is-touch.gun-held #hotact [data-ha="thr"], body.is-touch.gun-held #hotact [data-ha="give"] { display: none; }
+body.is-touch:not(.gun-held) #hotact [data-ga="ads"], body.is-touch:not(.gun-held) #hotact [data-ga="rel"] { display: none; }
+body.wheel-open #touch { visibility: hidden; }
 body.scoped #hotwrap, body.scoped #abilities, body.scoped #prompt, body.scoped #labels, body.scoped #hint { visibility: hidden; }
 #blindfx { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 6; }
 #wwheel { position: absolute; left: 50%; top: 50%; width: min(86vmin, 520px); height: min(86vmin, 520px); transform: translate(-50%, -50%); z-index: 7; pointer-events: auto; user-select: none; }

@@ -178,6 +178,16 @@
       XH.scoped = !!scope;
       document.body.classList.toggle('scoped', XH.scoped);
     }
+    // на телефоне кнопки под панелью — по тому, что в руке (оружие: прицел и перезарядка; иначе — бросок и «стенду»)
+    const gh = !!(d && d.cls === 'gun');
+    if (XH.gunHeld !== gh) {
+      XH.gunHeld = gh;
+      document.body.classList.toggle('gun-held', gh);
+    }
+    if (XH.wheel !== !!Gn.wheelOpen) {
+      XH.wheel = !!Gn.wheelOpen;
+      document.body.classList.toggle('wheel-open', XH.wheel);
+    }
     // патроны: магазин / запас
     const am = show ? `<b>${H.magOf(p, H.heldId(p))}</b><span>/ ${cnt(p, d.ammo)}</span>${p.reloadT > 0 ? '<em>перезарядка</em>' : ''}` : '';
     if (am !== XH.lastAm) {
