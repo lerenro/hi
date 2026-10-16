@@ -653,30 +653,46 @@
     const hwT = sT[2][0], ybT = sT[0][1], ytT = sT[7][1] - crown;
     const th = ytT - ybT;
     plate(body, -hwT + 0.06, hwT - 0.06, ybT + 0.01, ybT + th * 0.18, rz, -1, C.TRIM, 0.1);
-    const tY0 = van ? ybT + th * 0.45 : ybT + th * 0.58, tY1 = van ? ybT + th * 0.95 : ytT - 0.03;
-    const tX0 = hwT - 0.03, tX1 = van ? hwT - 0.2 : hwT * (t.id === 'kei' ? 0.66 : 0.5);
+    const vert = van || t.id === 'kei' || t.id === 'pickup';
+    const tY1 = van ? ybT + th * 0.95 : ytT - 0.03;
+    const tY0 = van ? ybT + th * 0.45 : vert ? ybT + th * 0.58 : Math.max(ybT + th * 0.6, tY1 - (hatch ? 0.2 : 0.15));
+    const tX0 = hwT - 0.03, tX1 = van ? hwT - 0.2 : hwT * (t.id === 'kei' ? 0.66 : vert ? 0.5 : 0.4);
     const rearLamps = [];
+    let ambR = [hwT - 0.1, tY0 + 0.05];
     const sR = lowSec(L - 0.16);
     for (const sg of [1, -1]) {
-      // фонарь: тёмная рамка, красное стекло, полоса-разделитель, белый фонарь заднего хода и янтарный поворотник внизу
-      const ym = tY0 + (tY1 - tY0) * 0.42, xm = tX1 + (tX0 - tX1) * 0.45;
       plate(body, sg * (tX0 + 0.012), sg * (tX1 - 0.018), tY0 - 0.018, tY1 + 0.016, rz, -1, C.TRIM, 0.4);
-      plate(body, sg * tX0, sg * tX1, ym, tY1, rz - 0.002, -1, C.TAIL, 0.8, 0.42);
-      plate(body, sg * tX0, sg * xm, tY0, ym - 0.012, rz - 0.002, -1, C.AMBER, 0.8, 0.2);
-      plate(body, sg * xm - sg * 0.012, sg * tX1, tY0, ym - 0.012, rz - 0.002, -1, hi ? C.REV : C.TAIL, 0.8, 0);
+      // красная часть фонаря (горит стоп-сигналом) и её граница на боковине
+      let rx0, rx1, ry0, ry1;
+      if (vert) {
+        // вертикальный фонарь: красное стекло сверху, янтарный поворотник и белый задний ход внизу
+        const ym = tY0 + (tY1 - tY0) * 0.42, xm = tX1 + (tX0 - tX1) * 0.45;
+        plate(body, sg * tX0, sg * xm, tY0, ym - 0.012, rz - 0.002, -1, C.AMBER, 0.8, 0.2);
+        plate(body, sg * xm - sg * 0.012, sg * tX1, tY0, ym - 0.012, rz - 0.002, -1, hi ? C.REV : C.TAIL, 0.8, 0);
+        rx0 = tX0; rx1 = tX1; ry0 = ym; ry1 = tY1;
+        ambR = [(tX0 + xm) / 2, (tY0 + ym) / 2];
+      } else {
+        // горизонтальный фонарь: снаружи — красный, у середины — янтарный поворотник над белым задним ходом
+        const xm = tX1 + (tX0 - tX1) * 0.38, yh = (tY0 + tY1) / 2;
+        plate(body, sg * xm - sg * 0.012, sg * tX1, yh + 0.006, tY1, rz - 0.002, -1, C.AMBER, 0.8, 0.2);
+        plate(body, sg * xm - sg * 0.012, sg * tX1, tY0, yh - 0.006, rz - 0.002, -1, hi ? C.REV : C.TAIL, 0.8, 0);
+        rx0 = tX0; rx1 = xm; ry0 = tY0; ry1 = tY1;
+        ambR = [(xm + tX1) / 2, (yh + tY1) / 2];
+      }
+      plate(body, sg * rx0, sg * rx1, ry0, ry1, rz - 0.002, -1, C.TAIL, 0.8, 0.42);
       if (hi) for (let k = 1; k < 3; k++) {
-        const yy = ym + ((tY1 - ym) * k) / 3;
-        plate(body, sg * tX0, sg * tX1, yy - 0.005, yy + 0.005, rz - 0.004, -1, C.TAILD, 0.6, 0.2);
+        const yy = ry0 + ((ry1 - ry0) * k) / 3;
+        plate(body, sg * rx0, sg * rx1, yy - 0.004, yy + 0.004, rz - 0.004, -1, C.TAILD, 0.6, 0.2);
       }
       // загиб фонаря на боковину
-      const wy1 = Math.min(tY1, sR[3][1] - 0.01);
-      if (!van && wy1 - ym > 0.05) {
-        const x = sg * (sR[3][0] + 0.003), z0 = rz + 0.03, z1 = rz + 0.2;
-        const a = [x, ym, z0], b = [x, wy1, z0], c = [x, wy1 - 0.01, z1], d = [x, ym + 0.01, z1];
+      const wy1 = Math.min(ry1, sR[3][1] - 0.01);
+      if (!van && wy1 - ry0 > 0.05) {
+        const x = sg * (sR[3][0] + 0.003), z0 = rz + 0.03, z1 = rz + 0.13;
+        const a = [x, ry0, z0], b = [x, wy1, z0], c = [x, wy1 - 0.01, z1], d = [x, ry0 + 0.01, z1];
         if (sg > 0) body.quad(a, b, c, d, C.TAIL, 0.8, 0.42);
         else body.quad(a, d, c, b, C.TAIL, 0.8, 0.42);
       }
-      plate(brake, sg * (tX0 + 0.005), sg * (tX1 - 0.005), ym - 0.005, tY1 + 0.005, rz - 0.012, -1, col('#ff2a1a'), 0, 0);
+      plate(brake, sg * (rx0 + 0.005), sg * (rx1 - 0.005), ry0 - 0.005, ry1 + 0.005, rz - 0.012, -1, col('#ff2a1a'), 0, 0);
       rearLamps.push([sg * (tX0 + tX1) / 2, (tY0 + tY1) / 2]);
     }
     // задний бампер, номер, глушитель
@@ -753,7 +769,7 @@
     }
     // ---------- Точки для эффектов ----------
     const seatZ = zF - (dR0 + dR1) / 2 + (hatch || van ? 0.2 : 0.2);
-    const fx = { front: frontLamps, rear: rearLamps, zf: zF, zr: zR, indF: [hwF - 0.1, lightY0 - 0.055, zF + 0.01], indR: [hwT - 0.1, tY0 + 0.05, zR - 0.01], exhaust: [-drL * hwT * 0.55, ybT + 0.04, zR - 0.06] };
+    const fx = { front: frontLamps, rear: rearLamps, zf: zF, zr: zR, indF: [hwF - 0.1, lightY0 - 0.055, zF + 0.01], indR: [ambR[0], ambR[1], zR - 0.01], exhaust: [-drL * hwT * 0.55, ybT + 0.04, zR - 0.06] };
     return {
       body, glass, brake, siren, zoff,
       seat: { x: drL * Math.min(0.38, hwM * 0.42), y: floorY + 0.24, z: van ? zF - dWs - 0.9 : seatZ + 0.15 }, fx,
