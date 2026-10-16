@@ -784,7 +784,8 @@
   CM.DRIVE_L = DRIVE_L;
 
   // ---------- Колёса: шина с профилем, диск со спицами, тормозной диск (обе стороны симметричны) ----------
-  CM.buildWheel = function (lod) {
+  // steel — стальной диск грузовика/автобуса: плоский, с отверстиями и гайками на ступице
+  CM.buildWheel = function (lod, steel) {
     const hi = lod !== 1;
     const b = new CB(hi ? 3000 : 600);
     const seg = hi ? 22 : 12;
@@ -817,6 +818,39 @@
       for (let k = 0; k < seg; k++) {
         if (side > 0) b.quad(A[k], B[k], B[k + 1], A[k + 1], RIM, 2);
         else b.quad(A[k], A[k + 1], B[k + 1], B[k], RIM, 2);
+      }
+      if (steel) {
+        // неглубокая чаша диска, плоский лист с вентиляционными отверстиями, крупная ступица с гайками
+        const ST = col('#aeb2b8'), xd = side * 0.36;
+        const Dd = ring(0.55, xd);
+        for (let k = 0; k < seg; k++) {
+          if (side > 0) b.quad(B[k], Dd[k], Dd[k + 1], B[k + 1], ST, 0.5);
+          else b.quad(B[k], B[k + 1], Dd[k + 1], Dd[k], ST, 0.5);
+        }
+        const cen = [xd, 0, 0];
+        for (let k = 0; k < seg; k++) {
+          if (side > 0) b.tri(cen, Dd[k], Dd[k + 1], ST, 0.5);
+          else b.tri(cen, Dd[k + 1], Dd[k], ST, 0.5);
+        }
+        const nh = hi ? 8 : 6;
+        for (let s = 0; s < nh; s++) {
+          const a = (s / nh) * Math.PI * 2 + 0.2;
+          const m = new THREE.Matrix4().makeRotationX(a);
+          const hb = new THREE.BoxGeometry(0.02, 0.1, 0.07);
+          hb.translate(xd + side * 0.006, 0.4, 0);
+          b.geo(hb, m, RIMD, 0);
+        }
+        const hub = new THREE.CylinderGeometry(0.2, 0.22, 0.1, hi ? 10 : 6, 1);
+        hub.rotateZ(Math.PI / 2);
+        hub.translate(xd + side * 0.05, 0, 0);
+        b.geo(hub, new THREE.Matrix4(), HUB, 1.2);
+        if (hi) for (let s = 0; s < 8; s++) {
+          const m = new THREE.Matrix4().makeRotationX((s / 8) * Math.PI * 2);
+          const nut = new THREE.BoxGeometry(0.05, 0.045, 0.045);
+          nut.translate(xd + side * 0.11, 0.14, 0);
+          b.geo(nut, m, C.CHROME, 2);
+        }
+        continue;
       }
       // тёмная «глубина» диска и тормозной диск
       const Dd = ring(0.55, side * 0.2);

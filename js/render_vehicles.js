@@ -194,7 +194,9 @@ vec2 cVor(vec2 p) {
     R3.wheelMat = carPatch(phong({ shininess: 60 }), R3.carGlowOff, 0, null, 'w');
     R3.wheelIM = new THREE.InstancedMesh(shared(CM.buildWheel(0)), R3.wheelMat, MAXV * 4);
     R3.wheelIMlo = new THREE.InstancedMesh(shared(CM.buildWheel(1)), R3.wheelMat, MAXV * 4);
-    for (const im of [R3.wheelIM, R3.wheelIMlo]) {
+    // стальные колёса автобусов и грузовиков
+    R3.wheelIMbig = new THREE.InstancedMesh(shared(CM.buildWheel(0, true)), R3.wheelMat, MAXV * 2);
+    for (const im of [R3.wheelIM, R3.wheelIMlo, R3.wheelIMbig]) {
       im.count = 0;
       im.frustumCulled = false;
       im.castShadow = true;
@@ -502,7 +504,7 @@ vec2 cVor(vec2 p) {
     lastT = t;
     const day = R3.dayLevel === undefined ? 1 : R3.dayLevel;
     const night = J.clamp(1 - day * 1.4, 0, 1);
-    let wi = 0, wl = 0, pi = 0, di = 0, bi = 0, ii = 0;
+    let wi = 0, wl = 0, wg = 0, pi = 0, di = 0, bi = 0, ii = 0;
     // фары: днём тусклые (просто цвет стекла), ночью ярче единицы — тональная кривая даст свечение
     R3.carGlow.value = 0.15 + 2.4 * night;
     const flash = Math.sin(t * 14) > 0;
@@ -516,6 +518,7 @@ vec2 cVor(vec2 p) {
     const maxCast = R3.shadows && R3.preset.shadows ? Math.max(2, R3.charCast) : 0;
     const lod2 = R3.carLodD2();
     let hiBudget = 1; // подробных моделей за кадр (сборка 1.5–2 мс)
+    let loBudget = 1;
     casters.length = 0;
     for (let i = 0; i < list.length; i++) {
       const v = list[i];
@@ -525,7 +528,11 @@ vec2 cVor(vec2 p) {
         if (v.view) v.view.group.visible = false;
         continue;
       }
-      if (!v.view) v.view = R3.makeCarView(v);
+      if (!v.view) {
+        // новая модель (промах кэша) — не больше одной сборки за кадр, остальные машины появятся в следующих кадрах
+        if (!geoCache.has(keyOf(v.type, v.color, v.livery, v.region)) && loBudget-- <= 0 && v !== playerCar) continue;
+        v.view = R3.makeCarView(v);
+      }
       const vw = v.view, vt = v.vt, g = vw.geo;
       const gr = vw.group;
       gr.visible = true;
@@ -569,7 +576,9 @@ vec2 cVor(vec2 p) {
         ss.set(dual ? tw * 1.9 : tw, r, r);
         mL.compose(pp, qq, ss);
         mW.multiplyMatrices(gr.matrixWorld, mL);
-        if (im === R3.wheelIM) R3.wheelIM.setMatrixAt(wi++, mW);
+        if (big) {
+          if (wg < MAXW_BIG) R3.wheelIMbig.setMatrixAt(wg++, mW);
+        } else if (im === R3.wheelIM) R3.wheelIM.setMatrixAt(wi++, mW);
         else R3.wheelIMlo.setMatrixAt(wl++, mW);
       }
       // следы шин и дым: задние колёса в заносе и ручнике, все — при блокировке тормозами
@@ -649,6 +658,7 @@ vec2 cVor(vec2 p) {
     };
     upd(R3.wheelIM, wi);
     upd(R3.wheelIMlo, wl);
+    upd(R3.wheelIMbig, wg);
     upd(R3.drvIM, di);
     upd(R3.carPoolIM, pi);
     upd(R3.beamIM, bi);
@@ -667,6 +677,7 @@ vec2 cVor(vec2 p) {
   };
   const ax1 = new THREE.Vector3(1, 0, 0);
   const SIDES2 = [1, -1], SIDE_L = [1], SIDE_R = [-1];
+  const MAXW_BIG = 128;
 
   // ---------- Светофоры: горящая секция по фазе ----------
   // Головы светофоров ищутся по той же раскладке углов, что и в генераторе (world.decorateCities).
